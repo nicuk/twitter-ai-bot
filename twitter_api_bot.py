@@ -13,8 +13,9 @@ load_dotenv()
 class AIGamingBot:
     def __init__(self):
         # Meta Llama setup
-        self.ai_url = os.getenv('AI_API_URL')
+        self.ai_url = os.getenv('AI_API_URL') + "/chat/completions"
         self.ai_token = os.getenv('AI_ACCESS_TOKEN')
+        self.model_name = "Meta-Llama-3.3-70B-Instruct"
         
         # Twitter API setup
         self.api = tweepy.Client(
@@ -129,26 +130,24 @@ class AIGamingBot:
         }
         
         data = {
-            "method": "completion",
-            "payload": {
-                "messages": [{
-                    "role": "system",
-                    "content": """You are an AI market intelligence bot focused on AI Gaming and Web3 projects.
-                    Format tweets as:
-                    [PROJECT NEWS]
-                    - Key metric or announcement
-                    - Supporting data point
-                    - Insider insight or edge
-                    
-                    Keep it factual, focus on metrics, and provide insider perspective.
-                    IMPORTANT: Keep tweets under 280 characters."""
-                }, {
-                    "role": "user",
-                    "content": f"Generate a market intelligence tweet about this trend:\n{context}"
-                }],
-                "max_tokens": 100,
-                "stream": False
-            }
+            "model": self.model_name,
+            "messages": [{
+                "role": "system",
+                "content": """You are an AI market intelligence bot focused on AI Gaming and Web3 projects.
+                Format tweets as:
+                [PROJECT NEWS]
+                - Key metric or announcement
+                - Supporting data point
+                - Insider insight or edge
+                
+                Keep it factual, focus on metrics, and provide insider perspective.
+                IMPORTANT: Keep tweets under 280 characters."""
+            }, {
+                "role": "user",
+                "content": f"Generate a market intelligence tweet about this trend:\n{context}"
+            }],
+            "max_tokens": 100,
+            "stream": False
         }
         
         try:
