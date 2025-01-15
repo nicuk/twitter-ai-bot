@@ -13,8 +13,15 @@ load_dotenv()
 class AIGamingBot:
     def __init__(self):
         # Meta Llama setup
-        self.ai_url = os.getenv('AI_API_URL') + "/chat/completions"
+        base_url = os.getenv('AI_API_URL')
+        if not base_url:
+            raise ValueError("AI_API_URL environment variable is not set")
+        self.ai_url = base_url.rstrip('/') + "/chat/completions"
+        
         self.ai_token = os.getenv('AI_ACCESS_TOKEN')
+        if not self.ai_token:
+            raise ValueError("AI_ACCESS_TOKEN environment variable is not set")
+            
         self.model_name = "Meta-Llama-3.3-70B-Instruct"
         
         # Twitter API setup
