@@ -133,12 +133,10 @@ class AIGamingBot:
         
         headers = {
             'Authorization': f'Bearer {self.ai_token}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Content-Type': 'application/json'
         }
         
         data = {
-            "model": self.model_name,
             "messages": [{
                 "role": "system",
                 "content": """You are an AI market intelligence bot focused on AI Gaming and Web3 projects.
@@ -154,16 +152,29 @@ class AIGamingBot:
                 "role": "user",
                 "content": f"Generate a market intelligence tweet about this trend:\n{context}"
             }],
-            "max_tokens": 100,
-            "temperature": 0.7,
-            "stream": False
+            "model": self.model_name,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "stop": ["<|eot_id|>"]
         }
         
         try:
-            response = requests.post(self.ai_url, headers=headers, json=data)
+            response = requests.post(self.ai_url, headers=headers, json=data, stream=True)
             response.raise_for_status()
-            tweet = response.json()['choices'][0]['message']['content'].strip()
-            return tweet[:280]  # Ensure tweet length compliance
+            
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8')
+                    if 'content' in decoded_line:
+                        try:
+                            content = json.loads(decoded_line)
+                            if 'choices' in content and len(content['choices']) > 0:
+                                full_response += content['choices'][0].get('delta', {}).get('content', '')
+                        except json.JSONDecodeError:
+                            continue
+            
+            return full_response[:280]  # Ensure tweet length compliance
         except Exception as e:
             print(f"Error generating tweet: {e}")
             return None
