@@ -198,18 +198,36 @@ class AIGamingBot:
                 print(f"Error posting tweet: {e}")
 
 def main():
-    bot = AIGamingBot()
-    
-    # Schedule tweets every 90 minutes
-    schedule.every(90).minutes.do(bot.post_tweet)
-    
-    # Initial tweet
-    bot.post_tweet()
-    
-    # Keep running
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    """Main function to run the bot"""
+    try:
+        # Debug: Print all environment variables
+        print("Checking environment variables...")
+        print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
+        print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
+        print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
+        
+        # Load environment variables
+        load_dotenv()
+        
+        # Debug: Print again after loading
+        print("\nAfter loading .env:")
+        print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
+        print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
+        print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
+        
+        bot = AIGamingBot()
+        schedule.every(90).minutes.do(bot.post_tweet)
+        
+        # Initial tweet
+        bot.post_tweet()
+        
+        # Keep running
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except Exception as e:
+        print(f"Error in main: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     main()
