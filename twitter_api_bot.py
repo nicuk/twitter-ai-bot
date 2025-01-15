@@ -17,15 +17,12 @@ class AIGamingBot:
         self.ai_token = os.getenv('AI_ACCESS_TOKEN')
         
         # Twitter API setup
-        auth = tweepy.OAuthHandler(
-            os.getenv('TWITTER_API_KEY'),
-            os.getenv('TWITTER_API_SECRET')
+        self.api = tweepy.Client(
+            consumer_key=os.getenv('TWITTER_API_KEY'),
+            consumer_secret=os.getenv('TWITTER_API_SECRET'),
+            access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
         )
-        auth.set_access_token(
-            os.getenv('TWITTER_ACCESS_TOKEN'),
-            os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-        )
-        self.api = tweepy.Client(auth)
         
         # Rate limiting setup
         self.daily_tweet_limit = 16  # Keep 1 tweet buffer for errors
