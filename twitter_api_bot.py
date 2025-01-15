@@ -16,7 +16,7 @@ class AIGamingBot:
         base_url = os.getenv('AI_API_URL')
         if not base_url:
             raise ValueError("AI_API_URL environment variable is not set")
-        self.ai_url = base_url.rstrip('/') + "/chat/completions"
+        self.ai_url = base_url.rstrip('/') + "/use/chat/completions"
         
         self.ai_token = os.getenv('AI_ACCESS_TOKEN')
         if not self.ai_token:
@@ -152,10 +152,10 @@ class AIGamingBot:
                 "role": "user",
                 "content": f"Generate a market intelligence tweet about this trend:\n{context}"
             }],
+            "stop": ["<|eot_id|>"],
             "model": self.model_name,
             "stream": True,
-            "stream_options": {"include_usage": True},
-            "stop": ["<|eot_id|>"]
+            "stream_options": {"include_usage": True}
         }
         
         try:
@@ -166,6 +166,7 @@ class AIGamingBot:
             for line in response.iter_lines():
                 if line:
                     decoded_line = line.decode('utf-8')
+                    print(f"Debug - Received line: {decoded_line}")  # Debug line
                     if 'content' in decoded_line:
                         try:
                             content = json.loads(decoded_line)
