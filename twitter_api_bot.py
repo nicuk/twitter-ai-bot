@@ -22,7 +22,7 @@ class AIGamingBot:
         if not self.ai_token:
             raise ValueError("AI_ACCESS_TOKEN environment variable is not set")
             
-        self.model_name = "Meta-Llama-3.3-70B-Instruct"
+        self.model_name = "meta-llama-3.3-70b-instruct"
         
         # Twitter API setup
         self.api = tweepy.Client(
@@ -133,7 +133,8 @@ class AIGamingBot:
         
         headers = {
             'Authorization': f'Bearer {self.ai_token}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         }
         
         data = {
@@ -154,6 +155,7 @@ class AIGamingBot:
                 "content": f"Generate a market intelligence tweet about this trend:\n{context}"
             }],
             "max_tokens": 100,
+            "temperature": 0.7,
             "stream": False
         }
         
