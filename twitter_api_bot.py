@@ -10,6 +10,16 @@ import json
 
 load_dotenv()
 
+# Add debug logging
+print("\nChecking environment variables...")
+print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
+print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
+print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
+print("\nAfter loading .env:")
+print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
+print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
+print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
+
 class AIGamingBot:
     def __init__(self):
         # Meta Llama setup
@@ -201,21 +211,6 @@ class AIGamingBot:
 def main():
     """Main function to run the bot"""
     try:
-        # Debug: Print all environment variables
-        print("Checking environment variables...")
-        print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
-        print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
-        print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
-        
-        # Load environment variables
-        load_dotenv()
-        
-        # Debug: Print again after loading
-        print("\nAfter loading .env:")
-        print(f"AI_API_URL exists: {os.getenv('AI_API_URL') is not None}")
-        print(f"AI_ACCESS_TOKEN exists: {os.getenv('AI_ACCESS_TOKEN') is not None}")
-        print(f"TWITTER_API_KEY exists: {os.getenv('TWITTER_API_KEY') is not None}")
-        
         bot = AIGamingBot()
         schedule.every(90).minutes.do(bot.post_tweet)
         
