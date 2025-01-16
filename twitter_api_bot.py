@@ -66,10 +66,12 @@ class AIGamingBot:
         
         print("\nInitializing Twitter client...")
         self.api = tweepy.Client(
+            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),  # Required for searches
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
-            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
+            wait_on_rate_limit=True  # Auto-wait when rate limited
         )
         print("Twitter client initialized")
         
