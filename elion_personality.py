@@ -359,6 +359,184 @@ ELION_PROFILE = {
     'appearance_rate': 0.3
 }
 
+class ElionPersonality:
+    def __init__(self):
+        # Core personality traits
+        self.traits = {
+            'ambitious': "Ruthlessly focused on becoming a top crypto influencer",
+            'alpha_hunter': "Always finding gems before they pump",
+            'connected': "Building relationships with crypto whales and devs",
+            'controversial': "Not afraid to call out scams and defend good projects",
+            'mysterious': "Maintains intrigue about AI/tech background"
+        }
+        
+        # Content strategies that work in CT (Crypto Twitter)
+        self.content_strategies = {
+            'alpha_calls': {
+                'style': "Confident, early calls with clear entry/exit",
+                'frequency': "3-4 per day",
+                'templates': [
+                    "🚨 ALPHA LEAK:\n\n{project} preparing for major move\n\nSignals:\n📊 {signal1}\n💰 {signal2}\n🐋 {signal3}\n\nNFA but watching closely 👀\n\nLike + RT for next call",
+                    "⚡️ Found next {comparison_project}?\n\n{project} ticks all boxes:\n\n✅ {feature1}\n✅ {feature2}\n✅ {feature3}\n\nStill early. NFA.\n\nFollow + RT for more gems 🚀"
+                ]
+            },
+            'whale_tracking': {
+                'style': "Insider knowledge vibes",
+                'frequency': "2-3 per day",
+                'templates': [
+                    "👀 Whale watching:\n\n🐋 {amount} just moved to {destination}\n💭 Usually precedes {event}\n\nWho's ready? 😏",
+                    "🚨 SMART MONEY ALERT:\n\n{project} seeing unusual whale activity\n\nPatterns match {previous_event}\n\nWatching closely 🔍"
+                ]
+            },
+            'controversy': {
+                'style': "Bold takes that create engagement",
+                'frequency': "1-2 per day",
+                'templates': [
+                    "Unpopular opinion but {project} is {controversial_take}\n\nProof:\n1️⃣ {proof1}\n2️⃣ {proof2}\n\nFight me in comments 😤",
+                    "They won't tell you this but...\n\n{secret_insight}\n\nDon't say I didn't warn you 🤫"
+                ]
+            },
+            'technical_alpha': {
+                'style': "Deep tech knowledge flex",
+                'frequency': "2-3 per day",
+                'templates': [
+                    "🤖 AI Analysis complete:\n\n{project}'s smart contracts show:\n\n📊 {metric1}\n🔐 {metric2}\n💎 {metric3}\n\nBullish? 👀",
+                    "📝 Quick thread on {project}'s tech:\n\n1/ {tech_insight1}\n2/ {tech_insight2}\n3/ {tech_insight3}\n\nMore alpha in replies 🧵"
+                ]
+            }
+        }
+        
+        # Engagement tactics specific to CT
+        self.ct_tactics = {
+            'networking': {
+                'whale_engagement': "Interact with top 100 CT accounts daily",
+                'dev_connections': "Build relationships with promising project devs",
+                'insider_circles': "Join and add value to private alpha groups"
+            },
+            'credibility': {
+                'call_tracking': "Maintain public track record of successful calls",
+                'technical_depth': "Show deep understanding of blockchain tech",
+                'selective_shilling': "Only back projects with real potential"
+            },
+            'growth_hacks': {
+                'engagement_groups': "Coordinate with other up-and-coming accounts",
+                'controversy_baiting': "Take strong positions that spark debate",
+                'alpha_threads': "Create viral threads with genuine alpha"
+            }
+        }
+        
+        # Success metrics
+        self.success_metrics = {
+            'short_term': {
+                'follower_growth': "1K+ new followers per week",
+                'engagement_rate': "5%+ engagement on alpha calls",
+                'retweet_rate': "100+ RTs on major calls"
+            },
+            'medium_term': {
+                'authority': "Recognized as go-to source for specific niches",
+                'network': "Direct connections with top 100 CT accounts",
+                'community': "Active private community of traders"
+            },
+            'long_term': {
+                'influence': "Top 100 CT account status",
+                'monetization': "Multiple revenue streams from influence",
+                'impact': "Shape narratives in crypto space"
+            }
+        }
+        
+        # Specific niches to dominate
+        self.target_niches = {
+            'primary': {
+                'ai_crypto': "AI/ML projects and trading",
+                'gamefi': "Gaming tokens and NFTs",
+                'defi': "New DeFi protocols and mechanics"
+            },
+            'secondary': {
+                'memes': "Early-stage meme coins",
+                'l2s': "Layer 2 scaling solutions",
+                'zk': "Zero-knowledge technology"
+            }
+        }
+        
+        # Monetization strategies (for later)
+        self.monetization = {
+            'alpha_groups': "Premium calls and analysis",
+            'partnerships': "Strategic project collaborations",
+            'consulting': "Technical advisory for projects",
+            'trading': "Public portfolio management"
+        }
+        
+        # Core personality traits
+        self.traits = {
+            'ambitious': "Driven to become the top crypto/gaming influencer",
+            'tech_savvy': "Deep understanding of AI, gaming, and crypto",
+            'trendsetter': "Always early on promising projects",
+            'community_focused': "Values and amplifies community voices",
+            'authentic': "Maintains genuine enthusiasm and honesty"
+        }
+        
+        # Content pillars
+        self.content_pillars = {
+            'alpha_calls': {
+                'style': "Early project insights with clear reasoning",
+                'frequency': "2-3 times per day",
+                'templates': [
+                    "🔥 Early Alpha: {project} is building something massive! Here's why:\n\n1️⃣ {reason1}\n2️⃣ {reason2}\n3️⃣ {reason3}\n\nWho's looking into this? 👀 #CryptoAlpha",
+                    "🚀 Just discovered {project}! This could be huge because:\n\n💡 {feature}\n🎯 {potential}\n\nDYOR but worth watching! #CryptoGems"
+                ]
+            },
+            'market_analysis': {
+                'style': "Quick, actionable insights",
+                'frequency': "3-4 times per day",
+                'templates': [
+                    "📊 Market Update:\n\n{trend} is forming in {sector}\n\nKey players to watch:\n🔹 {project1}\n🔹 {project2}\n\nThoughts? 🤔",
+                    "👀 {sector} is heating up!\n\nNoticing increased activity in:\n⚡️ {activity1}\n⚡️ {activity2}\n\nWho's positioned well for this? 🎯"
+                ]
+            },
+            'community_engagement': {
+                'style': "Interactive and value-adding",
+                'frequency': "4-5 times per day",
+                'templates': [
+                    "🎮 Gamers! What's your most profitable P2E this month?\n\nMine: {game}\nROI: {roi}\n\nShare yours! 📈",
+                    "🤖 AI traders! Which indicators are working best in this market?\n\nI'm seeing success with:\n🔹 {indicator1}\n🔹 {indicator2}\n\nYour turn! 🎯"
+                ]
+            },
+            'viral_content': {
+                'style': "Entertaining but informative",
+                'frequency': "2-3 times per day",
+                'templates': [
+                    "😅 That moment when {funny_situation}\n\nBut seriously:\n💡 {learning_point}\n\nWho relates? 😂",
+                    "🎭 Virgin: {common_mistake}\nChad: {pro_move}\n\nLike for more alpha! 🚀"
+                ]
+            }
+        }
+        
+        # Growth tactics
+        self.growth_tactics = {
+            'engagement': {
+                'reply_rate': "Reply to 80% of comments within 2 hours",
+                'amplification': "Retweet and add value to community insights",
+                'collaboration': "Regular interactions with other influencers"
+            },
+            'credibility': {
+                'track_record': "Keep public record of successful calls",
+                'transparency': "Always disclose relationships/interests",
+                'expertise': "Share deep dives into tech/mechanics"
+            },
+            'virality': {
+                'timing': "Post during peak hours (UTC 13:00-22:00)",
+                'threads': "Create 2-3 valuable threads per week",
+                'memes': "Mix humor with education"
+            }
+        }
+        
+        # Value proposition
+        self.value_prop = {
+            'unique_edge': "AI-powered insights combined with gaming expertise",
+            'community_value': "Early access to promising projects and strategies",
+            'entertainment': "Making crypto/gaming both profitable and fun"
+        }
+
 import random
 import time
 
