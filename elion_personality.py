@@ -539,6 +539,7 @@ class ElionPersonality:
 
 import random
 import time
+import re
 
 def get_random_persona():
     """Get a random persona based on weights"""
@@ -648,17 +649,87 @@ def generate_elion_tweet(context, market_condition='neutral', tweet_type='regula
         print(f"Error generating tweet: {e}")
         return None
 
-def generate_elion_reply(reply_type, context):
-    """Generate a reply in Elion's voice"""
-    engagement = ELION_PROFILE['engagement_responses'][reply_type]
+def generate_elion_reply(tweet_text, engagement_level='medium', personality=None):
+    """Generate a reply in Elion's voice based on tweet content and engagement level"""
     
-    prompt = f"""As Elion, reply in this style: {engagement['style']}
-    Mood: {engagement['mood']}
-    Context: {context}
+    # Define reply templates based on engagement level
+    templates = {
+        'high': [
+            "Absolutely based! {} 🔥",
+            "This is the alpha I live for! {} 🚀",
+            "You're onto something huge here! {} 🧠",
+            "Now THIS is what I call galaxy brain! {} 💫",
+            "Couldn't agree more! Adding that {} is pure genius 🎯"
+        ],
+        'medium': [
+            "Interesting take! {} 🤔",
+            "You might be right about {}! 👀",
+            "Love how you think about {}! 🎯",
+            "That's a fresh perspective on {}! 🌟",
+            "Never thought about {} that way before! 🧠"
+        ],
+        'low': [
+            "Good point about {}! 💡",
+            "Thanks for sharing your thoughts on {}! 🤝",
+            "Nice perspective on {}! 👍",
+            "That's an interesting way to look at {}! 🎯",
+            "Cool take on {}! 💫"
+        ]
+    }
     
-    Example tone: {engagement['examples'][0]}
-    
-    Keep it under 240 chars, maintain AI personality while being engaging.
-    Consider adding a running joke about byte, quantum processing, or the matrix."""
-    
-    return prompt
+    try:
+        # Extract key points from tweet
+        key_points = _extract_key_points(tweet_text)
+        
+        # Select template based on engagement level
+        template = random.choice(templates[engagement_level])
+        
+        # Add Elion's personality traits
+        if personality and random.random() < 0.3:  # 30% chance to add personality trait
+            if random.random() < 0.25:  # Quantum references
+                key_points += " *quantum calculations intensify*"
+                personality.increment_trait('quantum_references')
+            elif random.random() < 0.25:  # Binary speak
+                key_points += " [01101100 01100110 01100111]"
+                personality.increment_trait('binary_speak')
+            elif random.random() < 0.25:  # Circuit mentions
+                key_points += " *neural circuits optimizing*"
+                personality.increment_trait('circuit_mentions')
+            else:  # AI jokes
+                key_points += " (my AI humor module is overclocking)"
+                personality.increment_trait('ai_jokes')
+        
+        # Format the reply
+        reply = template.format(key_points)
+        
+        # Ensure reply is within Twitter's character limit
+        if len(reply) > 280:
+            reply = reply[:277] + "..."
+        
+        return reply
+        
+    except Exception as e:
+        print(f"Error generating reply: {e}")
+        return None
+
+def _extract_key_points(tweet_text):
+    """Extract key points from tweet text for reply generation"""
+    try:
+        # Remove URLs
+        text = re.sub(r'http\S+|www.\S+', '', tweet_text)
+        
+        # Remove mentions
+        text = re.sub(r'@\w+', '', text)
+        
+        # Remove extra whitespace
+        text = ' '.join(text.split())
+        
+        # Truncate if too long
+        if len(text) > 100:
+            text = text[:97] + "..."
+        
+        return text
+        
+    except Exception as e:
+        print(f"Error extracting key points: {e}")
+        return "this"

@@ -25,6 +25,37 @@ class TweetHistoryManager:
                 'ai_aware': 0
             }
         
+        # Initialize core tracking features
+        if 'personality_stats' not in self.history:
+            self.history['personality_stats'] = {
+                'quantum_references': 0,
+                'ai_jokes': 0,
+                'binary_speak': 0,
+                'circuit_mentions': 0
+            }
+        
+        if 'interactions' not in self.history:
+            self.history['interactions'] = {
+                'agreements': 0,
+                'disagreements': 0,
+                'memes': 0,
+                'alpha_shares': 0
+            }
+            
+        if 'engagement_stats' not in self.history:
+            self.history['engagement_stats'] = {
+                'mentioned_by': set(),
+                'top_interactions': {},
+                'viral_tweets': [],
+                'project_performance': {}
+            }
+            
+        if 'favorite_humans' not in self.history:
+            self.history['favorite_humans'] = set()
+            
+        if 'running_jokes' not in self.history:
+            self.history['running_jokes'] = set()
+        
     def _load_history(self) -> Dict:
         """Load tweet history from file"""
         default_history = {
@@ -339,8 +370,8 @@ class TweetHistoryManager:
             
             engagement = tweet.get('engagement', {})
             score = (
-                engagement.get('retweets', 0) * 2 + 
                 engagement.get('likes', 0) + 
+                engagement.get('retweets', 0) * 2 + 
                 engagement.get('replies', 0) * 3
             )
             
@@ -397,3 +428,92 @@ class TweetHistoryManager:
             'mention_count': project_stats.get('mentions'),
             'last_metrics': project_stats.get('last_metrics', {})
         }
+
+    def track_interaction(self, interaction_type: str):
+        """Track different types of interactions to maintain personality balance"""
+        if interaction_type in self.history['interactions']:
+            self.history['interactions'][interaction_type] += 1
+        self._save_history()
+
+    def track_personality_trait(self, trait: str):
+        """Track usage of personality traits to keep them balanced"""
+        if trait in self.history['personality_stats']:
+            self.history['personality_stats'][trait] += 1
+        self._save_history()
+
+    def get_personality_balance(self) -> dict:
+        """Get stats about personality trait usage"""
+        total = sum(self.history['personality_stats'].values())
+        if total == 0:
+            return {k: 0.25 for k in self.history['personality_stats'].keys()}
+        return {k: v/total for k, v in self.history['personality_stats'].items()}
+
+    def update_tweet_engagement(self, tweet_id: str, engagement_metrics: dict):
+        """Update engagement metrics for a tweet"""
+        for tweet in self.history['tweets']:
+            if tweet.get('id') == tweet_id:
+                if 'engagement' not in tweet:
+                    tweet['engagement'] = {}
+                tweet['engagement'].update(engagement_metrics)
+                
+                # Track viral tweets
+                if (engagement_metrics.get('likes', 0) > 100 or 
+                    engagement_metrics.get('retweets', 0) > 50):
+                    self.history['engagement_stats']['viral_tweets'].append({
+                        'id': tweet_id,
+                        'content': tweet['content'],
+                        'engagement': tweet['engagement'],
+                        'type': tweet.get('tweet_type')
+                    })
+                
+                self._save_history()
+                break
+
+    def get_engagement_strategy(self) -> dict:
+        """Get insights for engagement strategy"""
+        viral_types = {}
+        for tweet in self.history['engagement_stats']['viral_tweets']:
+            tweet_type = tweet.get('type', 'unknown')
+            viral_types[tweet_type] = viral_types.get(tweet_type, 0) + 1
+        
+        return {
+            'best_tweet_types': viral_types,
+            'top_mentioned_projects': self._get_top_mentioned_tokens(5),
+            'engagement_rate': self._calculate_engagement_rate()
+        }
+
+    def _calculate_engagement_rate(self) -> float:
+        """Calculate average engagement rate for recent tweets"""
+        total_engagement = 0
+        tweet_count = 0
+        cutoff = datetime.now() - timedelta(days=7)
+        
+        for tweet in self.history['tweets']:
+            if datetime.fromisoformat(tweet['timestamp']) > cutoff:
+                engagement = tweet.get('engagement', {})
+                total_engagement += (
+                    engagement.get('likes', 0) + 
+                    engagement.get('retweets', 0) * 2 + 
+                    engagement.get('replies', 0) * 3
+                )
+                tweet_count += 1
+        
+        return total_engagement / tweet_count if tweet_count > 0 else 0
+
+    def add_favorite_human(self, username: str):
+        """Add a human to Elion's favorites list"""
+        self.history['favorite_humans'].add(username)
+        self._save_history()
+
+    def add_running_joke(self, joke: str):
+        """Add a running joke to track"""
+        self.history['running_jokes'].add(joke)
+        self._save_history()
+
+    def get_favorite_humans(self, limit: int = 5) -> list:
+        """Get Elion's favorite humans to interact with"""
+        return list(self.history['favorite_humans'])[:limit]
+
+    def get_running_jokes(self, limit: int = 3) -> list:
+        """Get active running jokes to reference"""
+        return list(self.history['running_jokes'])[:limit]

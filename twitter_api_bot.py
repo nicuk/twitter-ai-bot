@@ -93,6 +93,13 @@ class AIGamingBot:
                 'daily_searches': 0,
                 'daily_reset': datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             },
+            'timeline': {
+                'remaining': None,
+                'reset_time': None,
+                'last_checked': None,
+                'daily_engagement_posts': 0,
+                'max_daily_engagement': 3  # Maximum engagement posts per day
+            },
             'post': {
                 'daily_count': 0,
                 'monthly_count': 0,
@@ -1204,42 +1211,148 @@ class AIGamingBot:
                     return wait_minutes
         return False
 
+    def get_timeline_tweets(self, max_results=20):
+        """Fetch recent tweets from followed accounts"""
+        try:
+            # Get tweets from followed accounts timeline
+            response = self.search_api.get_home_timeline(
+                max_results=max_results,
+                tweet_fields=['created_at', 'public_metrics', 'author_id'],
+                exclude=['retweets', 'replies']
+            )
+            
+            if not response.data:
+                return []
+            
+            # Update rate limits from response headers
+            self._update_rate_limits(response, 'timeline')
+            
+            results = []
+            for tweet in response.data:
+                # Only include tweets from last 6 hours to keep engagement fresh
+                tweet_time = tweet.created_at
+                if (datetime.utcnow() - tweet_time).total_seconds() > 6 * 3600:
+                    continue
+                    
+                results.append({
+                    'id': tweet.id,
+                    'author_id': tweet.author_id,
+                    'text': tweet.text,
+                    'created_at': tweet.created_at.isoformat(),
+                    'metrics': {
+                        'retweet_count': tweet.public_metrics['retweet_count'],
+                        'like_count': tweet.public_metrics['like_count'],
+                        'reply_count': tweet.public_metrics['reply_count']
+                    }
+                })
+            
+            return results
+            
+        except Exception as e:
+            print(f"\nTimeline fetch failed: {e}")
+            return []
+
+    def generate_engagement_reply(self, tweet):
+        """Generate a personality-driven reply to a tweet"""
+        try:
+            # Get tweet context
+            tweet_text = tweet['text']
+            metrics = tweet['metrics']
+            
+            # Determine engagement level
+            engagement_level = self._get_engagement_level(metrics)
+            
+            # Generate reply using Elion's personality
+            reply = generate_elion_reply(
+                tweet_text,
+                engagement_level=engagement_level,
+                personality=self.personality
+            )
+            
+            return reply
+            
+        except Exception as e:
+            print(f"Error generating reply: {e}")
+            return None
+
+    def post_engagement_reply(self):
+        """Post a reply to a followed account's tweet"""
+        try:
+            # Check if we've hit daily engagement limit
+            if self.rate_limits['timeline']['daily_engagement_posts'] >= self.rate_limits['timeline']['max_daily_engagement']:
+                print("Daily engagement post limit reached")
+                return False
+            
+            # Get recent timeline tweets
+            timeline_tweets = self.get_timeline_tweets()
+            if not timeline_tweets:
+                return False
+            
+            # Sort by engagement potential (likes + retweets)
+            timeline_tweets.sort(
+                key=lambda x: x['metrics']['like_count'] + x['metrics']['retweet_count'],
+                reverse=True
+            )
+            
+            # Try to generate replies until we find a good one
+            for tweet in timeline_tweets:
+                reply = self.generate_engagement_reply(tweet)
+                if reply:
+                    # Post the reply
+                    response = self.api.create_tweet(
+                        text=reply,
+                        in_reply_to_tweet_id=tweet['id']
+                    )
+                    
+                    if response:
+                        # Update engagement post count
+                        self.rate_limits['timeline']['daily_engagement_posts'] += 1
+                        print(f"\nPosted engagement reply ({self.rate_limits['timeline']['daily_engagement_posts']}/{self.rate_limits['timeline']['max_daily_engagement']} today)")
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"Error posting engagement reply: {e}")
+            return False
+
+    def _should_reset_engagement_count(self):
+        """Check if we should reset the daily engagement post count"""
+        current_time = datetime.utcnow()
+        last_reset = self.rate_limits['timeline'].get('last_reset')
+        
+        if not last_reset or current_time.date() > last_reset.date():
+            self.rate_limits['timeline']['daily_engagement_posts'] = 0
+            self.rate_limits['timeline']['last_reset'] = current_time
+            return True
+        return False
+
     def run(self):
         """Main bot loop - runs continuously"""
-        print("\nStarting bot operations...")
-        
-        while True:
-            try:
-                # Check if we need to wait for search rate limit
-                wait_minutes = self.should_wait_for_rate_limit('search')
-                if wait_minutes:
-                    print("\nSearch rate limit hit, using backup content")
-                    
-                # Check if we need to wait for post rate limit
-                wait_minutes = self.should_wait_for_rate_limit('post')
-                if wait_minutes:
-                    print(f"\nPost rate limit hit, waiting {wait_minutes:.1f} minutes...")
-                    time.sleep(wait_minutes * 60)
-                    continue
+        try:
+            while True:
+                # Reset counters if needed
+                self._should_reset_daily_count()
+                self._should_reset_monthly_count()
+                self._should_reset_search_count()
+                self._should_reset_engagement_count()
                 
-                # Try to gather market intelligence with retry logic
-                if self.gather_market_intel():
-                    print("\nSuccessfully gathered market intelligence")
-                else:
-                    print("\nUsing backup content generation")
+                # Try to post an engagement reply (20% chance when under daily limit)
+                if (random.random() < 0.2 and 
+                    self.rate_limits['timeline']['daily_engagement_posts'] < self.rate_limits['timeline']['max_daily_engagement']):
+                    self.post_engagement_reply()
                 
-                # Try to post a tweet with retry logic
-                if self.post_tweet():
-                    print("\nWaiting 90 minutes before next tweet...")
-                    time.sleep(90 * 60)  # 90 minutes between tweets
-                else:
-                    print("\nWaiting 5 minutes before retry...")
-                    time.sleep(5 * 60)
+                # Regular posting logic
+                if self._can_post_tweet():
+                    self.post_tweet()
                 
-            except Exception as e:
-                print(f"\nError in main loop: {e}")
-                print("Waiting 5 minutes before retry...")
-                time.sleep(5 * 60)
+                # Sleep for a bit
+                time.sleep(60)
+                
+        except KeyboardInterrupt:
+            print("\nBot stopped by user")
+        except Exception as e:
+            print(f"\nError in main loop: {e}")
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
