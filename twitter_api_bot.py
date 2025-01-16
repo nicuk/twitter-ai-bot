@@ -471,12 +471,57 @@ class AIGamingBot:
             print(f"Error generating tweet: {e}")
             return False
 
+    def check_rate_limits(self):
+        """Check current rate limit status"""
+        try:
+            # Get rate limit status for search endpoint
+            response = self.search_api.get_recent_tweets_count("test")  # Lightweight query
+            
+            # Rate limits are in response headers
+            headers = response.response.headers
+            
+            # Extract rate limit info
+            remaining = headers.get('x-rate-limit-remaining', 'Unknown')
+            reset_time = headers.get('x-rate-limit-reset', 'Unknown')
+            limit = headers.get('x-rate-limit-limit', 'Unknown')
+            
+            if reset_time != 'Unknown':
+                reset_time = datetime.fromtimestamp(int(reset_time))
+                wait_time = (reset_time - datetime.utcnow()).total_seconds()
+                wait_minutes = max(0, wait_time / 60)
+            else:
+                wait_minutes = 'Unknown'
+            
+            print(f"\nRate Limit Status:")
+            print(f"Remaining calls: {remaining}")
+            print(f"Total limit: {limit}")
+            print(f"Reset in: {wait_minutes:.1f} minutes" if wait_minutes != 'Unknown' else "Reset time: Unknown")
+            
+            return {
+                'remaining': remaining,
+                'limit': limit,
+                'reset_minutes': wait_minutes
+            }
+            
+        except Exception as e:
+            print(f"Error checking rate limits: {e}")
+            return None
+
     def run(self):
         """Main bot loop - runs continuously"""
         print("\nStarting bot operations...")
         
         while True:
             try:
+                # Check rate limits first
+                limits = self.check_rate_limits()
+                if limits and limits['remaining'] != 'Unknown' and int(limits['remaining']) < 2:
+                    wait_mins = limits['reset_minutes']
+                    if wait_mins != 'Unknown':
+                        print(f"\nRate limit almost exhausted. Waiting {wait_mins:.1f} minutes...")
+                        time.sleep(wait_mins * 60)
+                        continue
+                
                 # Try to gather market intelligence with retry logic
                 if self.gather_market_intel():
                     print("\nSuccessfully gathered market intelligence")
