@@ -1,15 +1,22 @@
-<<<<<<< HEAD
-.env
-__pycache__/
-*.pyc
-.vscode/
-.idea/
-*.log
-=======
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyc
+
+# Environment files
+.env
+.env.test
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Cache files
+market_intel_cache.json
+elion_tweet_history.json
 
 # C extensions
 *.so
@@ -64,7 +71,6 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -136,7 +142,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -177,4 +182,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
->>>>>>> 77e6ab461b466a88a94fc93838d5ba9595aa3cb1

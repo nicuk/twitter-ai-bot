@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 import random
 import json
-from elion_personality import ELION_PROFILE, generate_elion_tweet, generate_elion_reply
+from elion_personality import ElionPersonality, generate_elion_tweet, generate_elion_reply
 from tweet_history_manager import TweetHistoryManager
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -41,7 +41,7 @@ def check_environment_variables():
             print(f"- {var}")
         return False
     
-    print("✓ All required environment variables are set")
+    print("[OK] All required environment variables are set")
     return True
 
 class AIGamingBot:
@@ -90,8 +90,8 @@ class AIGamingBot:
                 'remaining': None,
                 'reset_time': None,
                 'last_checked': None,
-                'monthly_searches': 0,
-                'monthly_reset': datetime.utcnow().replace(day=15, hour=0, minute=0, second=0, microsecond=0)
+                'daily_searches': 0,
+                'daily_reset': datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             },
             'post': {
                 'daily_count': 0,
@@ -157,47 +157,47 @@ class AIGamingBot:
         
         # Add engagement question templates
         self.engagement_questions = [
-            "What's your favorite #GameFi project right now? Tell me why! 🎮",
-            "Shill me your best performing #crypto gaming token! What makes it special? 🚀",
-            "Which #P2E game has the most potential in 2025? Share your thoughts! 💭",
-            "What's the most innovative #blockchain game you've played? Why did you love it? 🎯",
-            "Looking for the next big #NFTGame - what project should I check out? 🔍",
-            "Which gaming #memecoin has the strongest community? Convince me! 🌟",
-            "What's your favorite AI feature in a blockchain game? Share examples! 🤖",
-            "Which gaming guild is crushing it right now? Why do they stand out? ⚔️",
-            "Searching for undervalued gaming tokens - what's flying under the radar? 👀",
-            "What's the most fun P2E game you've played? Shill me your favorite! 🎲"
+            "What's your favorite #GameFi project right now? Tell me why! ",
+            "Shill me your best performing #crypto gaming token! What makes it special? ",
+            "Which #P2E game has the most potential in 2025? Share your thoughts! ",
+            "What's the most innovative #blockchain game you've played? Why did you love it? ",
+            "Looking for the next big #NFTGame - what project should I check out? ",
+            "Which gaming #memecoin has the strongest community? Convince me! ",
+            "What's your favorite AI feature in a blockchain game? Share examples! ",
+            "Which gaming guild is crushing it right now? Why do they stand out? ",
+            "Searching for undervalued gaming tokens - what's flying under the radar? ",
+            "What's the most fun P2E game you've played? Shill me your favorite! "
         ]
         
         # Expand engagement topics
         self.engagement_topics = {
             'memes': {
                 'questions': [
-                    "What's the most undervalued #memecoin right now? Shill me! 🚀",
-                    "Which meme community is the most active? Show me some proof! 🔥",
-                    "Shill me your favorite dog coin that isn't $DOGE! Why is it special? 🐕",
-                    "What's the next big meme trend in crypto? Share your predictions! 🎯",
-                    "Which meme token has the best utility? Convince me! 💫"
+                    "What's the most undervalued #memecoin right now? Shill me! ",
+                    "Which meme community is the most active? Show me some proof! ",
+                    "Shill me your favorite dog coin that isn't $DOGE! Why is it special? ",
+                    "What's the next big meme trend in crypto? Share your predictions! ",
+                    "Which meme token has the best utility? Convince me! "
                 ],
                 'featured': set()
             },
             'ai': {
                 'questions': [
-                    "What's the most innovative #AI project you've seen? Why? 🤖",
-                    "Which AI token has the strongest fundamentals? Share your analysis! 📊",
-                    "Shill me your favorite AI x Crypto project! What makes it unique? 🌟",
-                    "What's the most practical use of AI in blockchain? Show examples! 💡",
-                    "Which AI project is revolutionizing DeFi? Tell me more! 🔮"
+                    "What's the most innovative #AI project you've seen? Why? ",
+                    "Which AI token has the strongest fundamentals? Share your analysis! ",
+                    "Shill me your favorite AI x Crypto project! What makes it unique? ",
+                    "What's the most practical use of AI in blockchain? Show examples! ",
+                    "Which AI project is revolutionizing DeFi? Tell me more! "
                 ],
                 'featured': set()
             },
             'gamefi': {
                 'questions': [
-                    "What's your favorite #GameFi project right now? Tell me why! 🎮",
-                    "Shill me your best performing gaming token! What makes it special? 🚀",
-                    "Which #P2E game has the most potential? Share your thoughts! 💭",
-                    "What's the most innovative blockchain game you've played? 🎯",
-                    "Which gaming guild is crushing it right now? Why? ⚔️"
+                    "What's your favorite #GameFi project right now? Tell me why! ",
+                    "Shill me your best performing gaming token! What makes it special? ",
+                    "Which #P2E game has the most potential? Share your thoughts! ",
+                    "What's the most innovative blockchain game you've played? ",
+                    "Which gaming guild is crushing it right now? Why? "
                 ],
                 'featured': set()
             }
@@ -207,11 +207,17 @@ class AIGamingBot:
         self.response_cache_file = 'response_cache.json'
         self.response_cache = self._load_response_cache()
         
-        # Initialize market intel gatherer
-        self.intel_gatherer = MarketIntelGatherer()
+        # Try to initialize market intel gatherer
+        try:
+            self.intel_gatherer = MarketIntelGatherer()
+            self.has_market_intel = True
+            print("Market intel gatherer initialized successfully")
+        except ImportError:
+            print("Market intel not available, using backup content generation")
+            self.has_market_intel = False
         
         # Initialize personality
-        self.personality = ELION_PROFILE()
+        self.personality = ElionPersonality()
         
         # Track successful calls
         self.track_record = {
@@ -244,6 +250,7 @@ class AIGamingBot:
                 self._clear_old_market_intel()
                 return True
             return False
+        
         except Exception as e:
             print(f"Error in daily reset check: {e}")
             return False
@@ -273,22 +280,15 @@ class AIGamingBot:
             return False
 
     def _should_reset_search_count(self):
-        """Check if we should reset the monthly search post count (resets on 15th)"""
+        """Check if we should reset the search count (daily reset)"""
         try:
             current_time = datetime.utcnow()
-            current_month_15th = current_time.replace(day=15, hour=0, minute=0, second=0, microsecond=0)
+            current_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
             
-            # If we're past the 15th, use next month's 15th
-            if current_time.day > 15:
-                if current_time.month == 12:
-                    current_month_15th = current_month_15th.replace(year=current_time.year + 1, month=1)
-                else:
-                    current_month_15th = current_month_15th.replace(month=current_time.month + 1)
-            
-            if current_time >= self.rate_limits['search']['monthly_reset']:
-                self.rate_limits['search']['monthly_searches'] = 0
-                self.rate_limits['search']['monthly_reset'] = current_month_15th
-                print(f"\nReset monthly search post count at {current_time} UTC")
+            if current_time >= self.rate_limits['search']['daily_reset']:
+                self.rate_limits['search']['daily_searches'] = 0
+                self.rate_limits['search']['daily_reset'] = current_day + timedelta(days=1)
+                print(f"\nReset daily search count at {current_time} UTC")
                 return True
             return False
             
@@ -342,37 +342,45 @@ class AIGamingBot:
     def gather_market_intel(self):
         """Gather market intelligence using multiple methods"""
         try:
+            if not self.has_market_intel:
+                print("Market intel not available, using backup content")
+                return False
+            
             # Try API search first (if we have quota)
             api_success = self._gather_from_api()
             
-            # Regardless of API success, gather from other sources
-            self.intel_gatherer.scrape_trending_projects()
+            # Regardless of API success, try to scrape trending projects
+            try:
+                self.intel_gatherer.scrape_trending_projects()
+                
+                # Generate insight from gathered data
+                insight = self.intel_gatherer.generate_market_insight()
+                if insight:
+                    self.market_intel.append({
+                        'text': insight,
+                        'category': 'market_insight',
+                        'created_at': datetime.utcnow().isoformat(),
+                        'used': False
+                    })
+            except Exception as e:
+                print(f"Error scraping trending projects: {e}")
             
-            # Generate insight from gathered data
-            insight = self.intel_gatherer.generate_market_insight()
-            if insight:
-                self.market_intel.append({
-                    'text': insight,
-                    'category': 'market_insight',
-                    'created_at': datetime.utcnow().isoformat(),
-                    'used': False
-                })
-            
+            # Always return True to continue posting
             return True
             
         except Exception as e:
             print(f"Error gathering market intel: {e}")
-            return False
-    
+            return True  # Still return True to continue posting
+
     def _gather_from_api(self):
         """Gather intel using Twitter API (if quota available)"""
         try:
-            # Check if we've hit monthly search limit
-            current_searches = self.rate_limits['search'].get('monthly_searches', 0)
-            search_limit = 100  # Twitter's actual monthly search limit
+            # Check if we've hit daily search limit
+            current_searches = self.rate_limits['search'].get('daily_searches', 0)
+            daily_limit = 15  # Conservative daily limit
             
-            if current_searches >= search_limit:
-                print("\nMonthly search limit reached, skipping API search")
+            if current_searches >= daily_limit:
+                print("\nDaily search limit reached, using backup content generation")
                 return False
             
             # Get next category to search
@@ -401,13 +409,7 @@ class AIGamingBot:
             if minutes_since_last < 15:  # Twitter's actual limit
                 wait_minutes = 15 - minutes_since_last
                 print(f"\nRate limit: Must wait {wait_minutes:.1f} minutes before next search")
-                
-                # Use cached data if available instead of waiting
-                if self.market_intel:
-                    print("Using cached intel instead of waiting")
-                    return False
-                    
-                time.sleep(wait_minutes * 60)
+                return False
             
             query = self.search_queries[category]
             max_results = 25  # Get more results per search since we search less frequently
@@ -417,12 +419,12 @@ class AIGamingBot:
             self.last_search_time = datetime.utcnow()
             self.last_category_search[category] = datetime.utcnow()
             
-            # Increment monthly search count
-            self.rate_limits['search']['monthly_searches'] = current_searches + 1
+            # Increment daily search count
+            self.rate_limits['search']['daily_searches'] = current_searches + 1
             
             # Perform the search
             print(f"\nGathering intelligence for category: {category} ({self.current_category_index + 1}/4)")
-            print(f"Search request {current_searches + 1}/{search_limit} this month")
+            print(f"Search request {current_searches + 1}/{daily_limit} today")
             
             response = self._search_tweets(query, max_results)
             
@@ -842,19 +844,19 @@ class AIGamingBot:
         topic = response['topic']
         templates = {
             'memes': [
-                "🚀 {project} has an amazing {feature}! Thanks {username} for this gem! #Memecoin",
-                "The {feature} of {project} is impressive! Great find {username}! 🔥 #Crypto",
-                "Love what {project} is doing with their {feature}! Shoutout to {username}! 🌟"
+                " {project} has an amazing {feature}! Thanks {username} for this gem! #Memecoin",
+                "The {feature} of {project} is impressive! Great find {username}! ",
+                "Love what {project} is doing with their {feature}! Shoutout to {username}! "
             ],
             'ai': [
-                "Mind-blown by {project}'s {feature}! Thanks {username} for sharing! 🤖 #AI",
-                "The AI capabilities of {project} are next level! Great insight {username}! 🔮",
-                "{project} is revolutionizing {feature}! Credit to {username} for the tip! 💡"
+                "Mind-blown by {project}'s {feature}! Thanks {username} for sharing! ",
+                "The AI capabilities of {project} are next level! Great insight {username}! ",
+                "{project} is revolutionizing {feature}! Credit to {username} for the tip! "
             ],
             'gamefi': [
-                "Loving {project}'s {feature}! Thanks {username} for the recommendation! 🎮",
-                "{project} is crushing it with their {feature}! Hat tip to {username}! ⚔️",
-                "Had to share: {project}'s {feature} is game-changing! Props to {username}! 🎯"
+                "Loving {project}'s {feature}! Thanks {username} for the recommendation! ",
+                "{project} is crushing it with their {feature}! Hat tip to {username}! ",
+                "Had to share: {project}'s {feature} is game-changing! Props to {username}! "
             ]
         }
         
@@ -1117,24 +1119,24 @@ class AIGamingBot:
             # List of evergreen crypto topics and takes
             backup_content = {
                 'crypto_wisdom': [
-                    "🧠 Crypto Trading Alpha:\n\nBest traders don't chase pumps.\nThey accumulate in silence.\nThey sell into FOMO.\n\nLike for more wisdom 🤝",
-                    "💎 Crypto Rules:\n\n- Research before APE\n- DCA > FOMO\n- Patience = Profit\n\nWho needs this reminder? 👀",
-                    "🎯 3 Rules of Crypto:\n\n1. Always DYOR\n2. Never FOMO at ATH\n3. Take profits\n\nSimple but effective 🤝"
+                    " Crypto Trading Alpha:\n\nBest traders don't chase pumps.\nThey accumulate in silence.\nThey sell into FOMO.\n\nLike for more wisdom ",
+                    " Crypto Rules:\n\n- Research before APE\n- DCA > FOMO\n- Patience = Profit\n\nWho needs this reminder? ",
+                    " 3 Rules of Crypto:\n\n1. Always DYOR\n2. Never FOMO at ATH\n3. Take profits\n\nSimple but effective "
                 ],
                 'crypto_psychology': [
-                    "😤 Crypto Truth:\n\nBear markets make you rich\nBull markets make you money\n\nAre you accumulating? 👀",
-                    "🧠 Crypto Psychology 101:\n\nFear = Opportunity\nGreed = Risk\nPatience = Profit\n\nSave this 🎯",
-                    "🎯 Remember:\n\nWhen market is fearful = Buy\nWhen market is greedy = Sell\nWhen market is quiet = Research"
+                    " Crypto Truth:\n\nBear markets make you rich\nBull markets make you money\n\nAre you accumulating? ",
+                    " Crypto Psychology 101:\n\nFear = Opportunity\nGreed = Risk\nPatience = Profit\n\nSave this ",
+                    " Remember:\n\nWhen market is fearful = Buy\nWhen market is greedy = Sell\nWhen market is quiet = Research"
                 ],
                 'blockchain_tech': [
-                    "🤖 Future of Crypto:\n\nL2s + AI integration\nZK privacy layers\nAI-powered DeFi\n\nThe future is clear 👀",
-                    "💡 Blockchain Alert:\n\nZK tech adoption growing\nL2 TVL increasing\nAI integration expanding\n\nConnect the dots 🧠",
-                    "🔥 Next Crypto Wave:\n\nAI-powered trading\nZK privacy\nL2 scaling\n\nPosition accordingly 🎯"
+                    " Future of Crypto:\n\nL2s + AI integration\nZK privacy layers\nAI-powered DeFi\n\nThe future is clear ",
+                    " Blockchain Alert:\n\nZK tech adoption growing\nL2 TVL increasing\nAI integration expanding\n\nConnect the dots ",
+                    " Next Crypto Wave:\n\nAI-powered trading\nZK privacy\nL2 scaling\n\nPosition accordingly "
                 ],
                 'crypto_community': [
-                    "🤝 Crypto Community Tips:\n\n- Add value daily\n- Network quietly\n- Share alpha freely\n\nWho's building? 💪",
-                    "🎯 Your Crypto Strategy:\n\n1. Find your niche\n2. Share genuine alpha\n3. Network strategically\n\nSimple but effective 🤝",
-                    "💎 Crypto Truth:\n\nValue providers win long-term\nNoise makers fade away\n\nChoose your path 🧠"
+                    " Crypto Community Tips:\n\n- Add value daily\n- Network quietly\n- Share alpha freely\n\nWho's building? ",
+                    " Your Crypto Strategy:\n\n1. Find your niche\n2. Share genuine alpha\n3. Network strategically\n\nSimple but effective ",
+                    " Crypto Truth:\n\nValue providers win long-term\nNoise makers fade away\n\nChoose your path "
                 ]
             }
             
@@ -1146,7 +1148,7 @@ class AIGamingBot:
             
         except Exception as e:
             print(f"Error generating backup tweet: {e}")
-            return "🎯 Focus on crypto value. Not noise.\n\nWho agrees? 👀"
+            return " Focus on crypto value. Not noise.\n\nWho agrees? "
             
     def _generate_market_aware_tweet(self):
         """Generate market-aware content without API dependency"""
@@ -1156,10 +1158,10 @@ class AIGamingBot:
             key_sectors = ['L2s', 'AI', 'GameFi', 'DeFi', 'ZK', 'RWA']
             
             templates = [
-                "👀 {project} looking interesting here\n\nKey levels:\n⚡️ Support: {support}\n🎯 Target: {target}\n\nThoughts? 🤔",
-                "🎯 {sector} sector heating up\n\nWatch for:\n📊 Volume spikes\n🐋 Whale moves\n💎 Accumulation\n\nReady? 👀",
-                "🧠 {project} vs {project2}\n\nWhich wins Q1?\n\nLike = {project}\nRT = {project2}\n\nReason in replies 🤝",
-                "💡 Building in {sector}?\n\nDM me if you need:\n- Tech review\n- Architecture feedback\n- Security check\n\nLets build 🤝"
+                " {project} looking interesting here\n\nKey levels:\n Support: {support}\n Target: {target}\n\nThoughts? ",
+                " {sector} sector heating up\n\nWatch for:\n Volume spikes\n Whale moves\n Accumulation\n\nReady? ",
+                " {project} vs {project2}\n\nWhich wins Q1?\n\nLike = {project}\nRT = {project2}\n\nReason in replies ",
+                " Building in {sector}?\n\nDM me if you need:\n- Tech review\n- Architecture feedback\n- Security check\n\nLets build "
             ]
             
             # Generate tweet with predefined data
@@ -1273,7 +1275,7 @@ def start_healthcheck_server(port=None):
         server = HTTPServer((host, port), HealthCheckHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        print(f"✓ Healthcheck server running on {host}:{port}")
+        print(f" Healthcheck server running on {host}:{port}")
         return server
     except Exception as e:
         print(f"Error starting healthcheck server: {e}")
