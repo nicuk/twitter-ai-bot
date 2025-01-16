@@ -120,10 +120,10 @@ class AIGamingBot:
         
         # Search queries for different types of market intelligence
         self.search_queries = {
-            'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) (million OR funding) -is:retweet",
-            'ai_tokens': "(AI token OR MOG OR BID) (mcap OR liquidity OR volume) (million OR launch) -is:retweet",
-            'funding': "(AI gaming OR GameFi) (raise OR seed OR series) (million OR funding) (VC OR venture) -is:retweet",
-            'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
+            'ai_gaming': "(AI gaming OR GameFi OR P2E) (launch OR partnership OR volume OR gaming OR NFT) (million OR funding OR users) -is:retweet",
+            'ai_tokens': "(AI token OR blockchain AI OR AI crypto) (mcap OR liquidity OR volume OR AI) (million OR launch OR integration) -is:retweet",
+            'funding': "(AI gaming OR GameFi OR P2E OR AI crypto) (raise OR seed OR series) (million OR funding) (VC OR venture) -is:retweet",
+            'tech': "(blockchain OR L1 OR L2) (AI OR agents OR gaming) (launch OR integration OR upgrade OR partnership) -is:retweet"
         }
         
         # Load cached data
@@ -295,68 +295,76 @@ class AIGamingBot:
             print(f"\nSearch attempt failed: {e}")
             return []
 
-    def post_tweet(self):
+    def post_tweet(self, tweet_content, reply_to=None):
         """Post tweet if within rate limits"""
         try:
-            current_time = datetime.utcnow()
-            
-            # Check for daily reset
-            self._should_reset_daily_count()
-            
-            # Check if we've hit the daily limit
-            if self.daily_tweet_count >= self.daily_tweet_limit:
-                print(f"\nDaily tweet limit reached ({self.daily_tweet_count}/{self.daily_tweet_limit})")
-                seconds_until_reset = (
-                    self.last_reset + timedelta(days=1) - current_time
-                ).total_seconds()
-                print(f"Next reset in {seconds_until_reset/3600:.1f} hours")
-                return False
-            
-            # Check if enough time has passed since last tweet
-            if self.last_tweet_time:
-                minutes_since_last = (current_time - self.last_tweet_time).total_seconds() / 60
-                if minutes_since_last < 90:  # 90 minutes between tweets
-                    wait_minutes = 90 - minutes_since_last
-                    self._handle_rate_limit(wait_minutes)
-                    return False
-            
-            # Reset retry count on successful timing
-            self.retry_count = 0
-            
-            # Generate and post the tweet with retry logic
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                try:
-                    tweet_text = self.generate_tweet()
-                    if not tweet_text:
-                        print("\nFailed to generate tweet")
-                        return False
-                    
-                    response = self.api.create_tweet(text=tweet_text)
-                    if response.data:
+            if isinstance(tweet_content, list):  # It's a thread
+                previous_tweet_id = None
+                for tweet in tweet_content:
+                    if self.daily_tweet_count >= self.daily_tweet_limit:
+                        print("Daily tweet limit reached")
+                        return None
+                        
+                    response = self.api.create_tweet(
+                        text=tweet,
+                        in_reply_to_tweet_id=previous_tweet_id
+                    )
+                    if response and response.data:
+                        previous_tweet_id = response.data['id']
                         self.daily_tweet_count += 1
-                        self.last_tweet_time = current_time
-                        print(f"\nTweet posted successfully!")
-                        print(f"Content: {tweet_text}")
-                        print(f"Tweet ID: {response.data['id']}")
-                        print(f"Tweets today: {self.daily_tweet_count}/{self.daily_tweet_limit}")
-                        return True
+                        time.sleep(2)  # Small delay between thread tweets
+                return previous_tweet_id
+            else:  # Single tweet
+                if self.daily_tweet_count >= self.daily_tweet_limit:
+                    print("Daily tweet limit reached")
+                    return None
                     
-                except Exception as e:
-                    if attempt < max_attempts - 1:
-                        wait_time = (attempt + 1) * 5  # Exponential backoff
-                        print(f"Tweet attempt {attempt + 1} failed: {e}")
-                        print(f"Retrying in {wait_time} minutes...")
-                        time.sleep(wait_time * 60)
-                    else:
-                        print(f"All tweet attempts failed: {e}")
-                        return False
-            
-            return False
-            
+                response = self.api.create_tweet(
+                    text=tweet_content,
+                    in_reply_to_tweet_id=reply_to
+                )
+                if response and response.data:
+                    self.daily_tweet_count += 1
+                    return response.data['id']
+                    
         except Exception as e:
-            print(f"\nError posting tweet: {e}")
-            return False
+            print(f"Error posting tweet: {e}")
+            if "duplicate content" in str(e).lower():
+                print("Duplicate tweet detected, will try again with different content")
+                return None
+            self._handle_rate_limit(self.base_wait)
+        return None
+
+    def get_tweet_type_for_next_post(self):
+        """Determine next tweet type based on position in cycle and engagement"""
+        total_tweets = self.history_manager.history['metadata']['total_tweets']
+        position_in_cycle = total_tweets % 50
+        
+        # Check remaining daily tweets
+        remaining_tweets = self.daily_tweet_limit - self.daily_tweet_count
+        
+        # Don't start threads if we're low on remaining tweets
+        if remaining_tweets < 4:  # Need buffer for threads
+            return 'regular'
+        
+        # Get engagement stats
+        recent_engagement = self.history_manager.get_recent_engagement(hours=24)
+        
+        # If engagement is low and we have enough tweet quota, do a thread
+        if recent_engagement < 10 and remaining_tweets >= 4:  # Low engagement threshold
+            if position_in_cycle in [15, 35]:  # Reduced thread spots
+                return 'controversial_thread'
+        else:
+            # Normal distribution with thread consideration
+            if position_in_cycle == 25 and remaining_tweets >= 4:  # One prime thread spot
+                return 'controversial_thread' if random.random() < 0.7 else 'controversial'
+        
+        # Rest of the logic
+        if position_in_cycle in [45]:  # Reduced giveaway frequency
+            return 'giveaway'
+        elif position_in_cycle in [10, 30]:
+            return 'ai_aware'
+        return 'regular'
 
     def _load_cached_intel(self):
         """Load cached market intelligence"""
@@ -484,7 +492,7 @@ class AIGamingBot:
                     print("\nNo new market intelligence gathered")
                 
                 # Try to post a tweet with retry logic
-                if self.post_tweet():
+                if self.post_tweet(self.generate_tweet()):
                     print("\nWaiting 90 minutes before next tweet...")
                     time.sleep(90 * 60)  # 90 minutes between tweets
                 else:

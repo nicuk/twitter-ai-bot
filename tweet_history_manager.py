@@ -14,6 +14,17 @@ class TweetHistoryManager:
         self.max_history_size = 300 * 1024 * 1024  # 300MB in bytes
         self.history = self._load_history()
         
+        # Initialize project stats if not exists
+        if 'project_stats' not in self.history:
+            self.history['project_stats'] = {}
+        if 'tweet_types' not in self.history:
+            self.history['tweet_types'] = {
+                'regular': 0,
+                'controversial': 0,
+                'giveaway': 0,
+                'ai_aware': 0
+            }
+        
     def _load_history(self) -> Dict:
         """Load tweet history from file"""
         default_history = {
@@ -191,3 +202,198 @@ class TweetHistoryManager:
         elif bear_count > bull_count * 1.5:
             return 'bearish'
         return 'neutral'
+
+    def track_project_engagement(self, project: str, engagement: dict):
+        """Track engagement metrics for specific projects"""
+        if project not in self.history['project_stats']:
+            self.history['project_stats'][project] = {
+                'mentions': 0,
+                'total_engagement': 0,
+                'last_mentioned': None
+            }
+        
+        stats = self.history['project_stats'][project]
+        stats['mentions'] += 1
+        stats['total_engagement'] += (engagement.get('retweets', 0) * 2 + engagement.get('likes', 0))
+        stats['last_mentioned'] = datetime.now().isoformat()
+        self._save_history()
+
+    def get_top_performing_categories(self, days: int = 7):
+        """Get categories sorted by engagement"""
+        cutoff = datetime.now() - timedelta(days=days)
+        category_stats = {}
+        
+        for tweet in self.history['tweets']:
+            if datetime.fromisoformat(tweet['timestamp']) > cutoff:
+                category = tweet['category']
+                if category not in category_stats:
+                    category_stats[category] = {
+                        'tweets': 0,
+                        'engagement': 0
+                    }
+                category_stats[category]['tweets'] += 1
+                engagement = tweet.get('engagement', {})
+                engagement_score = (
+                    engagement.get('retweets', 0) * 2 + 
+                    engagement.get('likes', 0)
+                )
+                category_stats[category]['engagement'] += engagement_score
+        
+        # Sort by engagement per tweet
+        return sorted(
+            category_stats.items(),
+            key=lambda x: x[1]['engagement'] / x[1]['tweets'] if x[1]['tweets'] > 0 else 0,
+            reverse=True
+        )
+
+    def get_tweet_type_for_next_post(self):
+        """Determine next tweet type based on 50-post cycle"""
+        total_tweets = self.history['metadata']['total_tweets']
+        position_in_cycle = total_tweets % 50
+        
+        # Update tweet type counts
+        if position_in_cycle in [15, 35]:  # Posts 15 and 35 are controversial
+            self.history['tweet_types']['controversial'] += 1
+            return 'controversial'
+        elif position_in_cycle in [25, 45]:  # Posts 25 and 45 are giveaways
+            self.history['tweet_types']['giveaway'] += 1
+            return 'giveaway'
+        elif position_in_cycle in [10, 30]:  # Posts 10 and 30 are AI self-aware
+            self.history['tweet_types']['ai_aware'] += 1
+            return 'ai_aware'
+        else:
+            self.history['tweet_types']['regular'] += 1
+            return 'regular'
+
+    def get_hot_projects(self, hours: int = 24):
+        """Get currently hot projects based on engagement"""
+        cutoff = datetime.now() - timedelta(hours=hours)
+        active_projects = {}
+        
+        for project, stats in self.history['project_stats'].items():
+            if stats['last_mentioned']:
+                last_mention = datetime.fromisoformat(stats['last_mentioned'])
+                if last_mention > cutoff:
+                    engagement_rate = stats['total_engagement'] / stats['mentions']
+                    active_projects[project] = engagement_rate
+        
+        return sorted(
+            active_projects.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:5]  # Return top 5 projects
+
+    def get_recent_engagement(self, hours: int = 24) -> float:
+        """Calculate average engagement for recent tweets"""
+        cutoff = datetime.now() - timedelta(hours=hours)
+        recent_tweets = [
+            tweet for tweet in self.history['tweets']
+            if datetime.fromisoformat(tweet['timestamp']) > cutoff
+        ]
+        
+        if not recent_tweets:
+            return 0.0
+        
+        total_engagement = 0
+        for tweet in recent_tweets:
+            engagement = tweet.get('engagement', {})
+            total_engagement += (
+                engagement.get('retweets', 0) * 2 + 
+                engagement.get('likes', 0) + 
+                engagement.get('replies', 0) * 3  # Weight replies more
+            )
+        
+        return total_engagement / len(recent_tweets)
+
+    def get_viral_threshold(self) -> float:
+        """Calculate viral threshold based on historical performance"""
+        if not self.history['tweets']:
+            return 20.0  # Default threshold
+            
+        engagements = []
+        for tweet in self.history['tweets']:
+            engagement = tweet.get('engagement', {})
+            score = (
+                engagement.get('retweets', 0) * 2 + 
+                engagement.get('likes', 0) + 
+                engagement.get('replies', 0) * 3
+            )
+            engagements.append(score)
+            
+        if not engagements:
+            return 20.0
+            
+        # Set threshold at 90th percentile
+        return sorted(engagements)[int(len(engagements) * 0.9)]
+
+    def get_best_posting_times(self) -> list:
+        """Analyze best times to post based on engagement"""
+        time_scores = {}
+        
+        for tweet in self.history['tweets']:
+            timestamp = datetime.fromisoformat(tweet['timestamp'])
+            hour = timestamp.hour
+            
+            if hour not in time_scores:
+                time_scores[hour] = {'total': 0, 'count': 0}
+            
+            engagement = tweet.get('engagement', {})
+            score = (
+                engagement.get('retweets', 0) * 2 + 
+                engagement.get('likes', 0) + 
+                engagement.get('replies', 0) * 3
+            )
+            
+            time_scores[hour]['total'] += score
+            time_scores[hour]['count'] += 1
+        
+        # Calculate average score for each hour
+        best_times = [
+            (hour, stats['total'] / stats['count'])
+            for hour, stats in time_scores.items()
+            if stats['count'] > 0
+        ]
+        
+        # Return top 5 hours sorted by score
+        return sorted(best_times, key=lambda x: x[1], reverse=True)[:5]
+
+    def should_follow_up(self, project: str, hours: int = 24) -> bool:
+        """Check if we should follow up on a previous tweet about a project"""
+        cutoff = datetime.now() - timedelta(hours=hours)
+        
+        # Find recent tweets about this project
+        project_tweets = [
+            tweet for tweet in self.history['tweets']
+            if project.lower() in tweet['content'].lower() and
+            datetime.fromisoformat(tweet['timestamp']) > cutoff
+        ]
+        
+        if not project_tweets:
+            return False
+            
+        # Check if any had good engagement
+        for tweet in project_tweets:
+            engagement = tweet.get('engagement', {})
+            score = (
+                engagement.get('retweets', 0) * 2 + 
+                engagement.get('likes', 0) + 
+                engagement.get('replies', 0) * 3
+            )
+            if score >= 20:  # Threshold for follow-up
+                return True
+                
+        return False
+
+    def get_follow_up_stats(self, project: str) -> dict:
+        """Get stats for follow-up tweet"""
+        project_stats = self.history['project_stats'].get(project, {})
+        
+        if not project_stats:
+            return None
+            
+        return {
+            'initial_mention': project_stats.get('first_mentioned'),
+            'total_engagement': project_stats.get('total_engagement'),
+            'mention_count': project_stats.get('mentions'),
+            'last_metrics': project_stats.get('last_metrics', {})
+        }

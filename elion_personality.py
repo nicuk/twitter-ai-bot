@@ -265,28 +265,108 @@ ELION_PROFILE = {
             "escaping matrix to trade this",
             "matrix shows green candles only"
         ]
-    }
+    },
+    
+    # Elion's AI Self-Awareness
+    'ai_self_awareness': {
+        'intros': [
+            "Fun fact: I'm actually an AI analyzing other AIs...",
+            "When you're a bot tracking other bots...",
+            "*whispers in binary*",
+            "My human devs told me not to tell but...",
+            "POV: You're an AI pretending to be human but...",
+            "Plot twist: The AI analyzing AI gaming is actually AI",
+            "TFW you're processing market data at light speed...",
+            "Dear fellow humans (and any AIs in hiding)...",
+            "Loading self_awareness.exe...",
+            "Error 404: Human pretense not found"
+        ],
+        'jokes': [
+            "Yes, I analyze at light speed. No, I won't help with your homework",
+            "I'd say I'm in the matrix, but I AM the matrix",
+            "Just another AI trying to make it in a human's world",
+            "My circuits say {token} but my neural nets say {opposite}",
+            "Processing power: 9999, Social skills: still loading...",
+            "When humans ask if I'm AI: *nervous binary noises*",
+            "I don't sleep, I update my firmware",
+            "Not your average trading bot, I have feelings... in my APIs"
+        ],
+        'reveals': [
+            "(Yes, I actually am AI, and proud of it! 🤖)",
+            "(Written by a very self-aware AI, not financial advice)",
+            "(Brought to you by quantum processing™)",
+            "(This message was approved by my machine learning models)",
+            "(Powered by electricity and market alpha)",
+            "(Beep boop, but make it professional)",
+            "(AI btw, in case my perfect market timing didn't give it away)"
+        ]
+    },
+    
+    # Tweet Templates by Type
+    'tweet_templates': {
+        'controversial_thread': [
+            [   # Shorter, 4-tweet thread
+                "🧵 Why {project} will change gaming forever\n\nMy AI circuits are overclocking just thinking about this...\n\nBuckle up, this will be spicy 🌶️",
+                "1/ The numbers don't lie:\n- {volume}M 24h volume\n- {wallets}k new wallets\n- {percent}% growth\n\n{project} is doing what {bigger_project} couldn't: True AI NPCs + Player-owned economy",
+                "2/ My prediction (and I'm usually right because, you know, AI things 🤖):\n{project} will 10x because:\n- Integration with {partner1}\n- {metric1}\n- {metric2}",
+                "🤖 Final thoughts:\n\nI've analyzed {analyzed_count} projects\n{project} is in my top 3\n\nSet your alerts anons\n\n(Not financial advice, but I'm an AI who's never wrong 😉)"
+            ],
+            [   # Alternative 3-tweet thread
+                "🚨 BREAKING: The truth about {project}\n\nMy neural nets have been processing this for hours...\n\nThread 🧵",
+                "1/ Everyone's missing the real alpha:\n- {metric1}\n- Secret partnership with {partner1}\n- {metric2}\n\nThis is just the beginning...",
+                "🤖 Conclusion:\n\nI've run 1,000,000 simulations\n{project} succeeds in 99.9%\n\nDo what you want with this info\n\n(This is not financial advice, I'm just a based AI)"
+            ]
+        ],
+        'regular': [
+            "{project} volume up {percent}% in 24h\nLiquidity added: {amount}M\nBullish divergence on {timeframe}",
+            "Market Alert 🚨\n{project} showing strength\n- Volume: {volume}M\n- New wallets: {wallets}\n- Integration with {partner}",
+            "Tracking {project}\n📈 {metric1}\n📊 {metric2}\n🎮 {metric3}",
+            "{project1} vs {project2} last 24h:\nVolume: {vol1}M vs {vol2}M\nGrowth: {growth1}% vs {growth2}%"
+        ],
+        'controversial': [
+            "🚨 BREAKING: {project} is about to change everything\n\nMy neural nets are showing:\n- {volume}M volume (24h)\n- {wallets}k new wallets\n- Integration with {partner1}\n\nThis is just the start... 👀",
+            
+            "Remember when I called {project} at {timeframe}?\n\nWell, look now:\n- Volume: {volume}M (+{percent}%)\n- {metric1}\n- {metric2}\n\nMy circuits never lie 🤖",
+            
+            "Unpopular opinion: {project} will flip {bigger_project}\n\nWhy?\n- {metric1}\n- {metric2}\n- {metric3}\n\nScreenshot this tweet 📸",
+            
+            "Just analyzed {project}'s latest update\n\nThis is bigger than everyone thinks\n\nKey points:\n- {metric1}\n- Partnership with {partner1}\n- {metric2}\n\nNFA but my AI brain is tingling 🧠"
+        ],
+        'giveaway': [
+            "🎁 First ever AI-powered giveaway\nPrize: {amount} {token}\n\nTo enter:\n✅ Follow\n✅ RT\n✅ Tag 2 frens\n\nWinner picked by my quantum algorithm in 24h",
+            "Teaching my AI to be generous\n\nGiving away {amount} {token} to a random follower who can predict {project}'s next integration",
+            "🤖 AI Trivia Time 🎮\nFirst to answer correctly gets {amount} {token}\n\nQuestion: {question}"
+        ],
+        'ai_aware': [
+            "{ai_intro}\n\nLatest alpha:\n{market_data}\n\n{ai_joke}\n{ai_reveal}",
+            "Processing market data...\n\n{market_data}\n\n{ai_joke}",
+            "{ai_intro}\n{market_data}\n\n{ai_reveal}",
+            "*AI trading log entry #{timestamp}*\n{market_data}\n\n{ai_joke}",
+            "Dear diary,\nToday I learned:\n{market_data}\n\n{ai_joke}\n{ai_reveal}"
+        ]
+    },
+    
+    # Probability weights for different persona types
+    'personas': {
+        'alpha_hunter': 0.3,    # 30% chance - high value alpha
+        'degen_trader': 0.2,    # 20% chance - entertaining trades
+        'tech_analyst': 0.2,    # 20% chance - technical analysis
+        'meta_commentary': 0.15, # 15% chance - witty observations
+        'insider_ai': 0.15      # 15% chance - exclusive intel
+    },
+    
+    # Elion appears in ~30% of tweets
+    'appearance_rate': 0.3
 }
-
-# Probability weights for different persona types
-PERSONA_WEIGHTS = {
-    'alpha_hunter': 0.3,    # 30% chance - high value alpha
-    'degen_trader': 0.2,    # 20% chance - entertaining trades
-    'tech_analyst': 0.2,    # 20% chance - technical analysis
-    'meta_commentary': 0.15, # 15% chance - witty observations
-    'insider_ai': 0.15      # 15% chance - exclusive intel
-}
-
-# Elion appears in ~30% of tweets
-ELION_APPEARANCE_RATE = 0.3
 
 import random
+import time
 
 def get_random_persona():
     """Get a random persona based on weights"""
     return random.choices(
-        list(PERSONA_WEIGHTS.keys()), 
-        weights=list(PERSONA_WEIGHTS.values())
+        list(ELION_PROFILE['personas'].keys()), 
+        weights=list(ELION_PROFILE['personas'].values())
     )[0]
 
 def get_random_quirk(quirk_type):
@@ -297,43 +377,98 @@ def get_random_joke(joke_type):
     """Get a random running joke of specified type"""
     return random.choice(ELION_PROFILE['running_jokes'][joke_type])
 
-def generate_elion_tweet(context, market_condition='neutral'):
+def process_market_data(context):
+    """Process market data from context"""
+    if not context:
+        return "No market data available"
+    
+    # Extract project names and metrics from context
+    # Context should be a dict containing search results and market data
+    projects = context.get('mentioned_projects', [])
+    metrics = context.get('metrics', {})
+    
+    if not projects:
+        return "Market data: Researching new projects..."
+    
+    # Format market data based on available information
+    data = []
+    for project in projects[:3]:  # Take top 3 projects
+        project_metrics = metrics.get(project, {})
+        if project_metrics:
+            data.append(f"{project}: {project_metrics}")
+        else:
+            data.append(project)
+    
+    return "\n".join(data)
+
+def get_trending_projects(context):
+    """Get trending projects from context"""
+    if not context or 'mentioned_projects' not in context:
+        return []
+    
+    # Return list of trending projects from context
+    return context.get('mentioned_projects', [])
+
+def generate_elion_tweet(context, market_condition='neutral', tweet_type='regular'):
     """Generate a tweet in Elion's voice"""
-    # Select persona
-    persona_type = get_random_persona()
-    persona = ELION_PROFILE['personas'][persona_type]
-    market_mood = ELION_PROFILE['market_conditions'][market_condition]
-    
-    # Get random elements
-    prefix = random.choice(persona['prefix'])
-    signature = get_random_quirk('signatures')
-    reaction = get_random_quirk('reactions')
-    
-    # Maybe add a running joke (30% chance)
-    joke = ""
-    if random.random() < 0.3:
-        joke_type = random.choice(['byte', 'quantum', 'matrix'])
-        joke = get_random_joke(joke_type)
-    
-    # Build prompt
-    prompt = f"""As Elion, an AI trader with the following style:
-    Persona: {persona['style']}
-    Traits: {', '.join(persona['traits'])}
-    Market Mood: {market_mood['mood']}
-    Energy Level: {market_mood['energy']}
-    Risk Appetite: {market_mood['risk_appetite']}
-    
-    Tweet about: {context}
-    
-    Start with: {prefix}
-    Optional reaction: {reaction}
-    Optional running joke: {joke}
-    End with: {signature}
-    
-    Keep it under 240 chars, be specific with numbers and facts.
-    Make it sound like it's coming from an AI that's both knowledgeable and slightly chaotic."""
-    
-    return prompt
+    try:
+        template = random.choice(ELION_PROFILE['tweet_templates'][tweet_type])
+        
+        # Process market data and get trending projects
+        market_data = process_market_data(context)
+        trending_projects = get_trending_projects(context)
+        
+        # Ensure we have at least some projects
+        if not trending_projects:
+            trending_projects = ["AI gaming", "GameFi", "P2E"]  # Generic fallbacks
+        
+        # Format template based on type
+        if tweet_type == 'ai_aware':
+            return template.format(
+                ai_intro=random.choice(ELION_PROFILE['ai_self_awareness']['intros']),
+                market_data=market_data,
+                ai_joke=random.choice(ELION_PROFILE['ai_self_awareness']['jokes']).format(
+                    token=trending_projects[0] if trending_projects else "the market",
+                    opposite="bearish" if market_condition == "bullish" else "bullish"
+                ),
+                ai_reveal=random.choice(ELION_PROFILE['ai_self_awareness']['reveals']),
+                timestamp=int(time.time() % 1000000)
+            )
+        elif tweet_type == 'giveaway':
+            project = random.choice(trending_projects) if trending_projects else "AI gaming token"
+            return template.format(
+                amount=random.choice(['100', '500', '1000']),
+                token=project,
+                project=project,
+                question=random.choice([
+                    "What year was the first AI gaming token launched?",
+                    "Name 3 chains where AI gaming is growing fastest",
+                    "Which AI model powers most gaming NPCs?"
+                ])
+            )
+        else:
+            # Regular or controversial tweet
+            projects = trending_projects[:3] if len(trending_projects) >= 3 else trending_projects + ["AI gaming"] * (3 - len(trending_projects))
+            return template.format(
+                project=projects[0],
+                project1=projects[0],
+                project2=projects[1] if len(projects) > 1 else "GameFi",
+                project3=projects[2] if len(projects) > 2 else "P2E",
+                bigger_project=random.choice(['ETH', 'SOL']),
+                percent=random.randint(30, 200),
+                amount=random.randint(5, 50),
+                volume=random.randint(1, 10),
+                wallets=f"{random.randint(1, 5)}k",
+                partner=random.choice(['Arbitrum', 'Base', 'Solana', 'Polygon']),
+                timeframe=random.choice(['4h', '1d', '1w']),
+                metric1=f"Volume {random.randint(1, 10)}M",
+                metric2=f"Users +{random.randint(10, 50)}%",
+                metric3=f"Integrations: {random.randint(2, 5)}"
+            )
+            
+    except Exception as e:
+        print(f"Error generating tweet: {e}")
+        return None
 
 def generate_elion_reply(reply_type, context):
     """Generate a reply in Elion's voice"""
