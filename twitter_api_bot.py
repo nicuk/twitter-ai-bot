@@ -74,13 +74,13 @@ class AIGamingBot:
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
             access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
-            wait_on_rate_limit=False  # Don't wait automatically
+            wait_on_rate_limit=True  # Auto-handle rate limits
         )
         
         # Create client for searching (OAuth 2.0 App Only)
         self.search_api = tweepy.Client(
             bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
-            wait_on_rate_limit=False  # Don't wait automatically
+            wait_on_rate_limit=True  # Auto-handle rate limits
         )
         print("Twitter client initialized")
         
@@ -1214,44 +1214,15 @@ class AIGamingBot:
     def get_timeline_tweets(self, max_results=20):
         """Fetch recent tweets from followed accounts"""
         try:
-            # Get tweets from followed accounts timeline
-            response = self.search_api.get_home_timeline(
-                max_results=max_results,
-                tweet_fields=['created_at', 'public_metrics', 'author_id'],
-                exclude=['retweets', 'replies']
-            )
-            
-            if not response.data:
-                return []
-            
-            # Update rate limits from response headers
-            self._update_rate_limits(response, 'timeline')
-            
-            results = []
-            for tweet in response.data:
-                # Only include tweets from last 6 hours to keep engagement fresh
-                tweet_time = tweet.created_at
-                if (datetime.utcnow() - tweet_time).total_seconds() > 6 * 3600:
-                    continue
-                    
-                results.append({
-                    'id': tweet.id,
-                    'author_id': tweet.author_id,
-                    'text': tweet.text,
-                    'created_at': tweet.created_at.isoformat(),
-                    'metrics': {
-                        'retweet_count': tweet.public_metrics['retweet_count'],
-                        'like_count': tweet.public_metrics['like_count'],
-                        'reply_count': tweet.public_metrics['reply_count']
-                    }
-                })
-            
-            return results
-            
-        except Exception as e:
-            print(f"\nTimeline fetch failed: {e}")
+            # Use the OAuth 1.0a authenticated client for timeline access
+            tweets = self.api.get_home_timeline(max_results=max_results)
+            if tweets and tweets.data:
+                return tweets.data
             return []
-
+        except Exception as e:
+            print(f"Error fetching timeline: {e}")
+            return []
+    
     def generate_engagement_reply(self, tweet):
         """Generate a personality-driven reply to a tweet"""
         try:
@@ -1337,23 +1308,39 @@ class AIGamingBot:
                 self._should_reset_search_count()
                 self._should_reset_engagement_count()
                 
-                # Try to post an engagement reply (20% chance when under daily limit)
-                if (random.random() < 0.2 and 
-                    self.rate_limits['timeline']['daily_engagement_posts'] < self.rate_limits['timeline']['max_daily_engagement']):
-                    self.post_engagement_reply()
+                # Every 50 tweets, try to engage with a reply
+                if self.rate_limits['post']['daily_count'] > 0 and self.rate_limits['post']['daily_count'] % 25 == 0:
+                    try:
+                        print("\nAttempting to engage with community...")
+                        self.post_engagement_reply()
+                    except Exception as e:
+                        print(f"Error in engagement attempt: {e}")
                 
                 # Regular posting logic
                 if self._can_post_tweet():
-                    self.post_tweet()
-                
-                # Sleep for a bit
-                time.sleep(60)
-                
+                    try:
+                        success = self.post_tweet()
+                        if success:
+                            # Sleep between 30-60 minutes
+                            sleep_time = random.randint(30, 60)
+                            print(f"\nSleeping for {sleep_time} minutes...")
+                            time.sleep(sleep_time * 60)
+                        else:
+                            # Sleep 5-15 minutes on failure
+                            sleep_time = random.randint(5, 15)
+                            print(f"\nPost failed. Sleeping for {sleep_time} minutes...")
+                            time.sleep(sleep_time * 60)
+                    except Exception as e:
+                        print(f"\nError in main loop: {e}")
+                        time.sleep(300)  # Sleep 5 minutes on error
+                else:
+                    time.sleep(300)  # Sleep 5 minutes if we can't post
+                    
         except KeyboardInterrupt:
             print("\nBot stopped by user")
         except Exception as e:
-            print(f"\nError in main loop: {e}")
-
+            print(f"\nCritical error in main loop: {e}")
+            
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
