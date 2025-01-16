@@ -195,19 +195,23 @@ class AIGamingBot:
         """Gather market intelligence while respecting rate limits"""
         try:
             current_time = datetime.utcnow()
-            minutes_since_last = (current_time - self.last_search_time).total_seconds() / 60
             
-            # Respect rate limits with retry logic
-            if minutes_since_last < (15 / self.rate_limits['search']['requests_per_15min']):
-                wait_minutes = (15 / self.rate_limits['search']['requests_per_15min']) - minutes_since_last
-                self._handle_rate_limit(wait_minutes)
-                return False
+            # Check if we have cached intel we can use
+            unused_intel = [x for x in self.market_intel if not x.get('used', False)]
+            if unused_intel:
+                print("\nUsing cached market intelligence")
+                return True
+                
+            # Check rate limits
+            minutes_since_last = float('inf')
+            if self.last_search_time:
+                minutes_since_last = (current_time - self.last_search_time).total_seconds() / 60
             
-            # Reset retry count on successful timing
-            self.retry_count = 0
-            
-            # Clear old intel periodically
-            self._clear_old_market_intel()
+            # Strict rate limit: 1 request per 15 minutes
+            if minutes_since_last < 15:  # Twitter's actual limit
+                wait_minutes = 15 - minutes_since_last
+                print(f"\nRate limit: Must wait {wait_minutes:.1f} minutes before next search")
+                time.sleep(wait_minutes * 60)
             
             # Get next category to search
             categories = list(self.search_queries.keys())
@@ -218,49 +222,36 @@ class AIGamingBot:
             self.current_category_index = (self.current_category_index + 1) % len(categories)
             self.last_search_time = current_time
             
-            # Perform the search with retry logic
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                try:
-                    print(f"\nGathering intelligence for category: {category} (attempt {attempt + 1}/{max_attempts})")
-                    response = self._search_tweets(query)
-                    
-                    if response:
-                        fresh_intel = []
-                        for tweet in response:
-                            intel = {
-                                'category': category,
-                                'text': tweet['text'],
-                                'created_at': tweet['created_at'],
-                                'metrics': {
-                                    'retweet_count': tweet['metrics']['retweet_count'],
-                                    'like_count': tweet['metrics']['like_count']
-                                },
-                                'used': False
-                            }
-                            fresh_intel.append(intel)
-                        
-                        self.market_intel.extend(fresh_intel)
-                        self._prune_cache()
-                        
-                        print(f"Found {len(fresh_intel)} new items for {category}")
-                        print(f"Next search available in {(15 / self.rate_limits['search']['requests_per_15min'])} minutes")
-                        print(f"Next category will be: {categories[(self.current_category_index)]}")
-                        return True
-                    
-                    print(f"No new tweets found for {category}")
-                    return False
-                    
-                except Exception as e:
-                    if attempt < max_attempts - 1:
-                        wait_time = (attempt + 1) * 5  # Exponential backoff
-                        print(f"Search attempt {attempt + 1} failed: {e}")
-                        print(f"Retrying in {wait_time} minutes...")
-                        time.sleep(wait_time * 60)
-                    else:
-                        print(f"All search attempts failed: {e}")
-                        return False
+            # Perform the search
+            print(f"\nGathering intelligence for category: {category}")
+            response = self._search_tweets(query)
             
+            if response:
+                fresh_intel = []
+                for tweet in response:
+                    intel = {
+                        'category': category,
+                        'text': tweet.get('text', ''),
+                        'created_at': tweet.get('created_at', current_time.isoformat()),
+                        'metrics': {
+                            'retweet_count': tweet.get('metrics', {}).get('retweet_count', 0),
+                            'like_count': tweet.get('metrics', {}).get('like_count', 0)
+                        },
+                        'used': False
+                    }
+                    fresh_intel.append(intel)
+                
+                self.market_intel.extend(fresh_intel)
+                self._prune_cache()
+                self._save_cached_intel()
+                
+                print(f"Found {len(fresh_intel)} new items for {category}")
+                print(f"Next search available in 15 minutes")
+                return True
+            
+            print(f"No new tweets found for {category}")
+            return False
+                
         except Exception as e:
             print(f"\nError gathering market intel: {e}")
             return False
