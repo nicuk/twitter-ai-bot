@@ -65,13 +65,19 @@ class AIGamingBot:
         self.model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
         
         print("\nInitializing Twitter client...")
+        # Create client for posting tweets (OAuth 1.0a)
         self.api = tweepy.Client(
-            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),  # Required for searches
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
             access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
-            wait_on_rate_limit=True  # Auto-wait when rate limited
+            wait_on_rate_limit=True
+        )
+        
+        # Create client for searching (OAuth 2.0 App Only)
+        self.search_api = tweepy.Client(
+            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
+            wait_on_rate_limit=True
         )
         print("Twitter client initialized")
         
@@ -114,9 +120,9 @@ class AIGamingBot:
         
         # Search queries for different types of market intelligence
         self.search_queries = {
-            'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) ($10M OR $20M OR $50M) -is:retweet",
-            'ai_tokens': "(AI token OR $MOG OR $BID) (mcap OR liquidity OR volume) ($500k OR $1M OR $5M) -is:retweet",
-            'funding': "(AI gaming OR GameFi) (raise OR seed OR series) ($1M OR $5M OR $10M) (a16z OR binance OR USV) -is:retweet",
+            'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) (million OR funding) -is:retweet",
+            'ai_tokens': "(AI token OR MOG OR BID) (mcap OR liquidity OR volume) (million OR launch) -is:retweet",
+            'funding': "(AI gaming OR GameFi) (raise OR seed OR series) (million OR funding) (VC OR venture) -is:retweet",
             'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
         }
         
@@ -217,22 +223,18 @@ class AIGamingBot:
             for attempt in range(max_attempts):
                 try:
                     print(f"\nGathering intelligence for category: {category} (attempt {attempt + 1}/{max_attempts})")
-                    response = self.api.search_recent_tweets(
-                        query=query,
-                        max_results=100,
-                        tweet_fields=['created_at', 'public_metrics']
-                    )
+                    response = self._search_tweets(query)
                     
-                    if response.data:
+                    if response:
                         fresh_intel = []
-                        for tweet in response.data:
+                        for tweet in response:
                             intel = {
                                 'category': category,
-                                'text': tweet.text,
-                                'created_at': tweet.created_at.isoformat(),
+                                'text': tweet['text'],
+                                'created_at': tweet['created_at'],
                                 'metrics': {
-                                    'retweet_count': tweet.public_metrics['retweet_count'],
-                                    'like_count': tweet.public_metrics['like_count']
+                                    'retweet_count': tweet['metrics']['retweet_count'],
+                                    'like_count': tweet['metrics']['like_count']
                                 },
                                 'used': False
                             }
@@ -262,6 +264,36 @@ class AIGamingBot:
         except Exception as e:
             print(f"\nError gathering market intel: {e}")
             return False
+
+    def _search_tweets(self, query):
+        """Search for tweets matching query"""
+        try:
+            # Use the search_api client for searching
+            tweets = self.search_api.search_recent_tweets(
+                query=query,
+                max_results=100,
+                tweet_fields=['created_at', 'public_metrics']
+            )
+            
+            if not tweets.data:
+                return []
+                
+            results = []
+            for tweet in tweets.data:
+                results.append({
+                    'id': tweet.id,
+                    'text': tweet.text,
+                    'created_at': tweet.created_at.isoformat(),
+                    'metrics': {
+                        'retweet_count': tweet.public_metrics['retweet_count'],
+                        'like_count': tweet.public_metrics['like_count']
+                    }
+                })
+            return results
+            
+        except Exception as e:
+            print(f"\nSearch attempt failed: {e}")
+            return []
 
     def post_tweet(self):
         """Post tweet if within rate limits"""
