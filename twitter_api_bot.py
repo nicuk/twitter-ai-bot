@@ -53,15 +53,29 @@ class AIGamingBot:
         )
         print("Twitter client initialized")
         
-        # Rate limiting setup
-        self.daily_tweet_limit = 16  # Keep 1 tweet buffer for errors
-        self.tweets_today = 0
-        self.last_reset = datetime.now()
+        # Rate limits for free tier
+        self.rate_limits = {
+            'search': {
+                'requests_per_15min': 1,
+                'buffer_minutes': 0.5  # Add 30 second buffer to be safe
+            },
+            'tweet': {'tweets_per_day': 16}  # Keep 1 buffer from 17 limit
+        }
         
-        # Market intelligence storage
+        # Enhanced cache configuration
+        self.cache_duration = timedelta(hours=12)  # Cache for longer since we can't query often
+        self.cache_expiry = datetime.now()
+        self.max_cache_size = 500  # Store up to 500 tweets
         self.market_intel = []
         
-        # Search queries for different types of market intelligence
+        # Engagement thresholds for cache retention
+        self.engagement_thresholds = {
+            'high': {'retweets': 10, 'likes': 20},
+            'medium': {'retweets': 5, 'likes': 10},
+            'low': {'retweets': 2, 'likes': 5}
+        }
+        
+        # Search categories - we'll rotate through these given our rate limits
         self.search_queries = {
             'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) ($10M OR $20M OR $50M) -is:retweet",
             'ai_tokens': "(AI token OR $MOG OR $BID) (mcap OR liquidity OR volume) ($500k OR $1M OR $5M) -is:retweet",
@@ -69,24 +83,13 @@ class AIGamingBot:
             'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
         }
         
-        # Different intervals for each category (in minutes)
-        self.category_intervals = {
-            'ai_gaming': 180,    # Check AI gaming news every 3 hours
-            'ai_tokens': 120,    # Check AI token metrics every 2 hours
-            'funding': 240,      # Check funding news every 4 hours
-            'tech': 180         # Check tech updates every 3 hours
-        }
+        # Track last search time and category
+        self.last_search_time = datetime.now() - timedelta(minutes=15)  # Allow immediate first search
+        self.current_category_index = 0
         
         # Initialize Elion's history manager
         self.history_manager = TweetHistoryManager()
         
-        # Track last check time for each category
-        self.last_checked = {category: 0 for category in self.search_queries}
-        
-        # Load cached intel if exists
-        self.intel_cache_file = "market_intel_cache.json"
-        self._load_cached_intel()
-
     def _load_cached_intel(self):
         """Load cached market intelligence"""
         try:
@@ -112,83 +115,100 @@ class AIGamingBot:
             self.last_reset = now
             print(f"Daily tweet count reset at {now}")
 
-    def gather_market_intel(self):
-        """Gather market intelligence from Twitter searches"""
-        try:
-            current_time = time.time()
-            
-            # Find categories that need checking based on intervals
-            categories_to_check = []
-            for category, interval in self.category_intervals.items():
-                if current_time - self.last_checked[category] >= interval * 60:
-                    categories_to_check.append(category)
-            
-            if not categories_to_check:
-                print("\nNo categories need checking yet...")
-                return True
-            
-            # Pick one random category from those that need checking
-            category = random.choice(categories_to_check)
-            self.last_checked[category] = current_time
-            
-            # First check if we have any unused cached intel
-            unused_cached = [x for x in self.market_intel if not x['used']]
-            if unused_cached:
-                print("\nUsing cached market intelligence...")
-                return True
+    def _update_rate_limit(self, response, limit_type):
+        """Update rate limit info from API response"""
+        if hasattr(response, 'rate_limit_remaining'):
+            self.rate_limits[limit_type]['remaining'] = int(response.rate_limit_remaining)
+            self.rate_limits[limit_type]['reset_time'] = int(response.rate_limit_reset)
 
-            time.sleep(5)  # Wait before making request
+    def _get_engagement_level(self, metrics):
+        """Calculate engagement level of a tweet"""
+        if (metrics['retweet_count'] >= self.engagement_thresholds['high']['retweets'] or 
+            metrics['like_count'] >= self.engagement_thresholds['high']['likes']):
+            return 'high'
+        elif (metrics['retweet_count'] >= self.engagement_thresholds['medium']['retweets'] or 
+              metrics['like_count'] >= self.engagement_thresholds['medium']['likes']):
+            return 'medium'
+        return 'low'
+
+    def _prune_cache(self):
+        """Intelligently prune cache based on engagement and age"""
+        if len(self.market_intel) <= self.max_cache_size:
+            return
             
-            fresh_intel = []
+        # Sort by engagement level and age
+        self.market_intel.sort(key=lambda x: (
+            self._get_engagement_level(x['metrics']),
+            datetime.fromisoformat(x['created_at'])
+        ), reverse=True)
+        
+        # Keep top entries
+        self.market_intel = self.market_intel[:self.max_cache_size]
+
+    def gather_market_intel(self):
+        """Gather market intelligence within rate limits"""
+        try:
+            current_time = datetime.now()
+            
+            # Check if we can make a new search request (15.5 minutes to be safe)
+            wait_time = 15 + self.rate_limits['search']['buffer_minutes']
+            time_since_last_search = (current_time - self.last_search_time).total_seconds() / 60
+            
+            if time_since_last_search < wait_time:
+                minutes_remaining = wait_time - time_since_last_search
+                print(f"Rate limit: Must wait {minutes_remaining:.1f} more minutes before next search")
+                return bool(self.market_intel)
+            
+            # Rotate through categories
+            categories = list(self.search_queries.keys())
+            category = categories[self.current_category_index]
+            self.current_category_index = (self.current_category_index + 1) % len(categories)
+            
             query = self.search_queries[category]
+            print(f"\nGathering intel for {category}...")
             
-            print(f"\nSearching {category}...")
             try:
-                tweets = self.api.search_recent_tweets(
+                response = self.api.search_recent_tweets(
                     query=query,
-                    max_results=10,
+                    max_results=100,  # Get maximum results since we can only query rarely
                     tweet_fields=['created_at', 'public_metrics']
                 )
                 
-                if tweets.data:
-                    for tweet in tweets.data:
-                        metrics = tweet.public_metrics
-                        if (metrics['retweet_count'] > 2 or 
-                            metrics['like_count'] > 5):
-                            intel = {
-                                'category': category,
-                                'text': tweet.text,
-                                'metrics': metrics,
-                                'created_at': tweet.created_at.isoformat(),
-                                'used': False
-                            }
-                            fresh_intel.append(intel)
+                self.last_search_time = current_time
                 
-                print(f"Found {len(fresh_intel)} items for {category}")
+                if response.data:
+                    fresh_intel = []
+                    for tweet in response.data:
+                        metrics = tweet.public_metrics
+                        engagement_level = self._get_engagement_level(metrics)
+                        
+                        intel = {
+                            'category': category,
+                            'text': tweet.text,
+                            'metrics': metrics,
+                            'created_at': tweet.created_at.isoformat(),
+                            'used': False,
+                            'engagement_level': engagement_level
+                        }
+                        fresh_intel.append(intel)
+                    
+                    # Update market intel
+                    self.market_intel.extend(fresh_intel)
+                    self._prune_cache()
+                    
+                    print(f"Found {len(fresh_intel)} new items for {category}")
+                    print(f"Next search available in {wait_time} minutes")
+                    print(f"Next category will be: {categories[(self.current_category_index)]}")
                 
             except Exception as e:
-                print(f"Error searching {category}: {str(e)}")
-                if self.market_intel:
-                    print("Falling back to cached intelligence...")
-                    return True
-                return False
+                print(f"Error in search: {str(e)}")
+                return bool(self.market_intel)
             
-            # Update market intel with new findings
-            self.market_intel = ([x for x in self.market_intel if not x['used']] 
-                               + fresh_intel)
-            self._save_cached_intel()
-            
-            print(f"\nGathered total of {len(fresh_intel)} new market intel items")
-            
-            return len(fresh_intel) > 0 or len(self.market_intel) > 0
+            return bool(self.market_intel)
             
         except Exception as e:
-            print(f"Error gathering market intel: {e}")
-            # On error, try to use cached intel if available
-            if self.market_intel:
-                print("Falling back to cached intelligence...")
-                return True
-            return False
+            print(f"Error in market intelligence gathering: {e}")
+            return bool(self.market_intel)
 
     def generate_tweet(self):
         """Generate market intelligence tweet using Meta Llama and gathered intel"""
@@ -270,52 +290,28 @@ class AIGamingBot:
             print(f"Error generating tweet: {e}")
             return False
 
-    def post_tweet(self):
+    def post_tweet(self, tweet_text):
         """Post tweet if within rate limits"""
-        self._reset_daily_count()
-        
-        if self.tweets_today >= self.daily_tweet_limit:
-            print(f"Daily tweet limit reached ({self.tweets_today}/{self.daily_tweet_limit})")
-            return
-
-        tweet = self.generate_tweet()
-        if tweet:
-            try:
-                self.api.create_tweet(text=tweet)
+        try:
+            # Reset daily count if needed
+            self._reset_daily_count()
+            
+            # Check if we've hit the daily limit
+            if self.tweets_today >= self.daily_tweet_limit:
+                print(f"Daily tweet limit reached ({self.tweets_today}/{self.daily_tweet_limit})")
+                return False
+            
+            # Post the tweet
+            response = self.api.create_tweet(text=tweet_text)
+            if response.data:
                 self.tweets_today += 1
-                print(f"Tweet posted successfully at {datetime.now()}: {tweet}")
+                print(f"Tweet posted successfully at {datetime.now()}: {tweet_text}")
+                print(f"Tweet ID: {response.data['id']}")
                 print(f"Tweets today: {self.tweets_today}/{self.daily_tweet_limit}")
-            except Exception as e:
-                print(f"Error posting tweet: {e}")
-
-def test_single_tweet():
-    """Quick test of tweet generation"""
-    # Check environment variables
-    required_vars = [
-        'TWITTER_BEARER_TOKEN',
-        'TWITTER_CLIENT_ID',
-        'TWITTER_CLIENT_SECRET',
-        'TWITTER_ACCESS_TOKEN',
-        'TWITTER_ACCESS_TOKEN_SECRET',
-        'AI_API_URL',
-        'AI_ACCESS_TOKEN',
-        'AI_MODEL_NAME'
-    ]
-    
-    print("\nChecking environment variables...")
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    if missing_vars:
-        print("Missing required environment variables:")
-        for var in missing_vars:
-            print(f"- {var}")
-        return
-    
-    print("All required environment variables present!")
-    
-    bot = AIGamingBot()
-    print("\nTesting single tweet generation...")
-    bot.gather_market_intel()
-    bot.generate_tweet()
-
-if __name__ == "__main__":
-    test_single_tweet()
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"Error posting tweet: {e}")
+            return False

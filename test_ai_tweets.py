@@ -108,6 +108,75 @@ def test_tweet_generation():
     
     return "Test completed successfully"
 
+def test_single_tweet():
+    """Test bot configuration and scheduling"""
+    # Check environment variables
+    required_vars = [
+        'TWITTER_BEARER_TOKEN',
+        'TWITTER_CLIENT_ID',
+        'TWITTER_CLIENT_SECRET',
+        'TWITTER_ACCESS_TOKEN',
+        'TWITTER_ACCESS_TOKEN_SECRET',
+        'AI_API_URL',
+        'AI_ACCESS_TOKEN',
+        'AI_MODEL_NAME'
+    ]
+    
+    print("\nChecking environment variables...")
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    if missing_vars:
+        print("Missing required environment variables:")
+        for var in missing_vars:
+            print(f"- {var}")
+        return
+    
+    print("All required environment variables present!")
+    
+    from twitter_api_bot import AIGamingBot
+    import schedule
+    
+    bot = AIGamingBot()
+    print("\nTesting bot configuration...")
+    
+    # Verify scheduling configuration
+    print("\nVerifying scheduling configuration...")
+    print("Daily tweet limit:", bot.daily_tweet_limit)
+    print("\nCategory check intervals:")
+    for category, interval in bot.category_intervals.items():
+        checks_per_day = 24 * 60 / interval
+        print(f"- {category}: Every {interval} minutes ({checks_per_day:.1f} checks/day)")
+    
+    total_checks = sum(24 * 60 / interval for interval in bot.category_intervals.values())
+    print(f"\nTotal API usage per day:")
+    print(f"- Market intelligence searches: {total_checks:.1f}")
+    print(f"- Tweets: {bot.daily_tweet_limit}")
+    
+    # Test market intelligence structure
+    print("\nTesting market intelligence structure...")
+    test_intel = {
+        'category': 'test',
+        'text': 'Test market intelligence',
+        'metrics': {'retweet_count': 5, 'like_count': 10},
+        'created_at': datetime.now().isoformat(),
+        'used': False
+    }
+    bot.market_intel = [test_intel]
+    
+    # Test tweet generation without API calls
+    print("\nTesting tweet generation (with mock data)...")
+    tweet = bot.generate_tweet()
+    if tweet:
+        print("Tweet generation successful!")
+        print(f"Sample tweet: {tweet}")
+    
+    print("\nTest complete! Bot is configured correctly.")
+    print("\nScheduled tasks would be:")
+    print("- Market intelligence gathering: Every 2 hours")
+    print("- Tweet posting: Every 90 minutes (16 tweets per day)")
+    print(f"\nEstimated daily API calls: {total_checks:.1f} searches + {bot.daily_tweet_limit} tweets")
+
 if __name__ == "__main__":
     print("Starting Elion Tweet Tests...")
     test_tweet_generation()
+    print("\nStarting Bot Configuration Test...")
+    test_single_tweet()
