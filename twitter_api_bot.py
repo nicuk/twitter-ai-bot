@@ -359,17 +359,11 @@ def main():
     
     try:
         # Start healthcheck server first
-        healthcheck_server = start_healthcheck_server()
+        start_healthcheck_server()
         
         # Initialize and run the bot
         bot = AIGamingBot()
-        try:
-            bot.run()
-        except KeyboardInterrupt:
-            print("\nShutting down gracefully...")
-        finally:
-            healthcheck_server.shutdown()
-            healthcheck_server.server_close()
+        bot.run()  # Run continuously
     except Exception as e:
         print(f"Error running bot: {e}")
         sys.exit(1)
