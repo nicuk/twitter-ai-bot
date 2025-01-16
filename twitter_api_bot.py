@@ -408,7 +408,7 @@ class AIGamingBot:
             # Strict rate limit: 1 request per 15 minutes
             if minutes_since_last < 15:  # Twitter's actual limit
                 wait_minutes = 15 - minutes_since_last
-                print(f"\nRate limit: Must wait {wait_minutes:.1f} minutes before next search")
+                print(f"\nRate limit hit, switching to backup content generation")
                 return False
             
             query = self.search_queries[category]
