@@ -43,27 +43,13 @@ def check_environment_variables():
 
 class AIGamingBot:
     def __init__(self):
-        # Meta Llama setup
-        base_url = os.getenv('AI_API_URL')
-        if not base_url:
-            raise ValueError("AI_API_URL environment variable is not set")
-        self.ai_url = base_url.rstrip('/')  # Just use the base URL as is
-        print(f"Using AI API URL: {self.ai_url}")
-        
-        self.ai_token = os.getenv('AI_ACCESS_TOKEN')
-        if not self.ai_token:
-            raise ValueError("AI_ACCESS_TOKEN environment variable is not set")
-            
-        self.model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
-        
-        # Twitter API setup
+        """Initialize the Twitter bot"""
         print("\nInitializing Twitter client...")
         self.api = tweepy.Client(
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
-            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
-            bearer_token=os.getenv('TWITTER_BEARER_TOKEN')
+            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
         )
         print("Twitter client initialized")
         
@@ -76,26 +62,15 @@ class AIGamingBot:
             'tweet': {'tweets_per_day': 16}  # Keep 1 buffer from 17 limit
         }
         
+        # Initialize daily tweet count
+        self.daily_tweet_count = 0
+        self.daily_tweet_limit = 16  # Keep 1 buffer from 17 limit
+        
         # Enhanced cache configuration
         self.cache_duration = timedelta(hours=12)  # Cache for longer since we can't query often
         self.cache_expiry = datetime.now()
         self.max_cache_size = 500  # Store up to 500 tweets
         self.market_intel = []
-        
-        # Engagement thresholds for cache retention
-        self.engagement_thresholds = {
-            'high': {'retweets': 10, 'likes': 20},
-            'medium': {'retweets': 5, 'likes': 10},
-            'low': {'retweets': 2, 'likes': 5}
-        }
-        
-        # Search categories - we'll rotate through these given our rate limits
-        self.search_queries = {
-            'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) ($10M OR $20M OR $50M) -is:retweet",
-            'ai_tokens': "(AI token OR $MOG OR $BID) (mcap OR liquidity OR volume) ($500k OR $1M OR $5M) -is:retweet",
-            'funding': "(AI gaming OR GameFi) (raise OR seed OR series) ($1M OR $5M OR $10M) (a16z OR binance OR USV) -is:retweet",
-            'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
-        }
         
         # Track last search time and category
         self.last_search_time = datetime.now() - timedelta(minutes=15)  # Allow immediate first search
@@ -104,6 +79,14 @@ class AIGamingBot:
         # Initialize Elion's history manager
         self.history_manager = TweetHistoryManager()
         
+        # Search queries for different types of market intelligence
+        self.search_queries = {
+            'ai_gaming': "(AI gaming OR GameFi) (launch OR partnership OR volume) ($10M OR $20M OR $50M) -is:retweet",
+            'ai_tokens': "(AI token OR $MOG OR $BID) (mcap OR liquidity OR volume) ($500k OR $1M OR $5M) -is:retweet",
+            'funding': "(AI gaming OR GameFi) (raise OR seed OR series) ($1M OR $5M OR $10M) (a16z OR binance OR USV) -is:retweet",
+            'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
+        }
+
     def _load_cached_intel(self):
         """Load cached market intelligence"""
         try:
@@ -304,25 +287,27 @@ class AIGamingBot:
             print(f"Error generating tweet: {e}")
             return False
 
-    def post_tweet(self, tweet_text):
+    def post_tweet(self):
         """Post tweet if within rate limits"""
         try:
             # Reset daily count if needed
             self._reset_daily_count()
             
             # Check if we've hit the daily limit
-            if self.tweets_today >= self.daily_tweet_limit:
-                print(f"Daily tweet limit reached ({self.tweets_today}/{self.daily_tweet_limit})")
+            if self.daily_tweet_count >= self.daily_tweet_limit:
+                print(f"Daily tweet limit reached ({self.daily_tweet_count}/{self.daily_tweet_limit})")
                 return False
             
-            # Post the tweet
-            response = self.api.create_tweet(text=tweet_text)
-            if response.data:
-                self.tweets_today += 1
-                print(f"Tweet posted successfully at {datetime.now()}: {tweet_text}")
-                print(f"Tweet ID: {response.data['id']}")
-                print(f"Tweets today: {self.tweets_today}/{self.daily_tweet_limit}")
-                return True
+            # Generate and post the tweet
+            tweet_text = self.generate_tweet()
+            if tweet_text:
+                response = self.api.create_tweet(text=tweet_text)
+                if response.data:
+                    self.daily_tweet_count += 1
+                    print(f"Tweet posted successfully at {datetime.now()}: {tweet_text}")
+                    print(f"Tweet ID: {response.data['id']}")
+                    print(f"Tweets today: {self.daily_tweet_count}/{self.daily_tweet_limit}")
+                    return True
             
             return False
             
@@ -330,25 +315,87 @@ class AIGamingBot:
             print(f"Error posting tweet: {e}")
             return False
 
+    def run(self):
+        """Main bot loop - runs continuously"""
+        print("\nStarting bot operations...")
+        
+        while True:
+            try:
+                current_time = datetime.now()
+                
+                # Reset daily tweet count at midnight
+                if current_time.hour == 0 and current_time.minute < 5:
+                    self.daily_tweet_count = 0
+                    print("\nReset daily tweet count")
+                
+                # Try to gather market intelligence
+                if self.gather_market_intel():
+                    print("\nSuccessfully gathered market intelligence")
+                else:
+                    print("\nNo new market intelligence gathered")
+                
+                # Check if we can post a tweet
+                if self.daily_tweet_count < self.daily_tweet_limit:
+                    if self.post_tweet():
+                        print("\nWaiting 90 minutes before next tweet...")
+                        time.sleep(90 * 60)  # 90 minutes between tweets
+                    else:
+                        print("\nTweet failed, waiting 5 minutes before retry...")
+                        time.sleep(5 * 60)
+                else:
+                    # Calculate time until midnight reset
+                    seconds_until_midnight = (
+                        ((24 - current_time.hour - 1) * 3600) +
+                        ((60 - current_time.minute - 1) * 60) +
+                        (60 - current_time.second)
+                    )
+                    print(f"\nDaily tweet limit reached. Waiting {seconds_until_midnight//3600} hours until reset")
+                    time.sleep(min(3600, seconds_until_midnight))  # Sleep max 1 hour
+                
+            except Exception as e:
+                print(f"\nError in main loop: {e}")
+                print("Waiting 5 minutes before retry...")
+                time.sleep(5 * 60)
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
-            self.wfile.write(json.dumps(response).encode())
+            try:
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = {
+                    'status': 'healthy',
+                    'timestamp': datetime.now().isoformat(),
+                    'version': '1.0.0'
+                }
+                self.wfile.write(json.dumps(response).encode())
+            except Exception as e:
+                print(f"Error in healthcheck: {e}")
         else:
             self.send_response(404)
             self.end_headers()
+    
+    def log_message(self, format, *args):
+        """Suppress logging of requests"""
+        return
 
-def start_healthcheck_server(port=8080):
+def start_healthcheck_server(port=None):
     """Start the healthcheck server in a separate thread"""
-    server = HTTPServer(('', port), HealthCheckHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    print(f"✓ Healthcheck server running on port {port}")
-    return server
+    if port is None:
+        port = int(os.getenv('PORT', 8080))
+    
+    host = os.getenv('HOST', '0.0.0.0')
+    
+    try:
+        server = HTTPServer((host, port), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        print(f"✓ Healthcheck server running on {host}:{port}")
+        return server
+    except Exception as e:
+        print(f"Error starting healthcheck server: {e}")
+        return None
 
 def main():
     """Main function to run the Twitter bot"""
@@ -359,11 +406,13 @@ def main():
     
     try:
         # Start healthcheck server first
-        start_healthcheck_server()
+        if not start_healthcheck_server():
+            print("Failed to start healthcheck server")
+            sys.exit(1)
         
         # Initialize and run the bot
         bot = AIGamingBot()
-        bot.run()  # Run continuously
+        bot.run()
     except Exception as e:
         print(f"Error running bot: {e}")
         sys.exit(1)
