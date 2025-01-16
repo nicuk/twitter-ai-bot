@@ -74,13 +74,13 @@ class AIGamingBot:
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
             access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
-            wait_on_rate_limit=True
+            wait_on_rate_limit=False  # Don't wait automatically
         )
         
         # Create client for searching (OAuth 2.0 App Only)
         self.search_api = tweepy.Client(
             bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
-            wait_on_rate_limit=True
+            wait_on_rate_limit=False  # Don't wait automatically
         )
         print("Twitter client initialized")
         
@@ -1213,12 +1213,12 @@ class AIGamingBot:
                 # Check if we need to wait for search rate limit
                 wait_minutes = self.should_wait_for_rate_limit('search')
                 if wait_minutes:
-                    time.sleep(wait_minutes * 60)
-                    continue
+                    print("\nSearch rate limit hit, using backup content")
                     
                 # Check if we need to wait for post rate limit
                 wait_minutes = self.should_wait_for_rate_limit('post')
                 if wait_minutes:
+                    print(f"\nPost rate limit hit, waiting {wait_minutes:.1f} minutes...")
                     time.sleep(wait_minutes * 60)
                     continue
                 
@@ -1226,7 +1226,7 @@ class AIGamingBot:
                 if self.gather_market_intel():
                     print("\nSuccessfully gathered market intelligence")
                 else:
-                    print("\nNo new market intelligence gathered")
+                    print("\nUsing backup content generation")
                 
                 # Try to post a tweet with retry logic
                 if self.post_tweet():
