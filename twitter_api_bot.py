@@ -411,16 +411,17 @@ class AIGamingBot:
         """Generate market intelligence tweet using Meta Llama and gathered intel"""
         try:
             # Get unused market intel
-            unused_intel = [x for x in self.market_intel if not x['used']]
+            unused_intel = [x for x in self.market_intel if not x.get('used', False)]
             context = ""
             category = ""
             
             if unused_intel:
                 # Use the most engaging piece of intel
                 intel = max(unused_intel, 
-                           key=lambda x: x['metrics']['like_count'] + x['metrics']['retweet_count'])
-                context = f"Category: {intel['category']}\nTrend: {intel['text']}"
-                category = intel['category']
+                           key=lambda x: (x.get('metrics', {}).get('like_count', 0) + 
+                                        x.get('metrics', {}).get('retweet_count', 0)))
+                context = f"Category: {intel.get('category', 'ai_gaming')}\nTrend: {intel.get('text', '')}"
+                category = intel.get('category', 'ai_gaming')
                 intel['used'] = True
                 self._save_cached_intel()
             else:
