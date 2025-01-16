@@ -44,6 +44,26 @@ def check_environment_variables():
 class AIGamingBot:
     def __init__(self):
         """Initialize the Twitter bot"""
+        print("\nInitializing Twitter bot...")
+        
+        # Initialize retry settings
+        self.max_retries = 3
+        self.base_wait = 5  # Base wait time in minutes
+        self.retry_count = 0
+        
+        # Meta Llama setup
+        base_url = os.getenv('AI_API_URL')
+        if not base_url:
+            raise ValueError("AI_API_URL environment variable is not set")
+        self.ai_url = base_url.rstrip('/')  # Just use the base URL as is
+        print(f"Using AI API URL: {self.ai_url}")
+        
+        self.ai_token = os.getenv('AI_ACCESS_TOKEN')
+        if not self.ai_token:
+            raise ValueError("AI_ACCESS_TOKEN environment variable is not set")
+            
+        self.model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
+        
         print("\nInitializing Twitter client...")
         self.api = tweepy.Client(
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
@@ -62,18 +82,29 @@ class AIGamingBot:
             'tweet': {'tweets_per_day': 16}  # Keep 1 buffer from 17 limit
         }
         
-        # Initialize daily tweet count
+        # Tweet tracking (use UTC for consistency)
         self.daily_tweet_count = 0
         self.daily_tweet_limit = 16  # Keep 1 buffer from 17 limit
+        self.last_reset = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        self.last_tweet_time = None
         
-        # Enhanced cache configuration
-        self.cache_duration = timedelta(hours=12)  # Cache for longer since we can't query often
-        self.cache_expiry = datetime.now()
-        self.max_cache_size = 500  # Store up to 500 tweets
+        # Engagement thresholds for cache retention
+        self.engagement_thresholds = {
+            'high': {'retweets': 10, 'likes': 20},
+            'medium': {'retweets': 5, 'likes': 10},
+            'low': {'retweets': 2, 'likes': 5}
+        }
+        
+        # Enhanced cache configuration with size monitoring
+        self.cache_duration = timedelta(hours=12)
+        self.cache_expiry = datetime.utcnow()
+        self.max_cache_size = 500
         self.market_intel = []
+        self.last_cache_cleanup = datetime.utcnow()
+        self.intel_cache_file = 'market_intel_cache.json'
         
         # Track last search time and category
-        self.last_search_time = datetime.now() - timedelta(minutes=15)  # Allow immediate first search
+        self.last_search_time = datetime.utcnow() - timedelta(minutes=15)
         self.current_category_index = 0
         
         # Initialize Elion's history manager
@@ -86,6 +117,212 @@ class AIGamingBot:
             'funding': "(AI gaming OR GameFi) (raise OR seed OR series) ($1M OR $5M OR $10M) (a16z OR binance OR USV) -is:retweet",
             'tech': "(Solana OR TON) (AI OR agents) (launch OR integration OR upgrade) -is:retweet"
         }
+        
+        # Load cached data
+        self._load_cached_intel()
+
+    def _should_reset_daily_count(self):
+        """Check if we should reset the daily tweet count (using UTC)"""
+        try:
+            current_time = datetime.utcnow()
+            current_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            if current_day > self.last_reset:
+                self.daily_tweet_count = 0
+                self.last_reset = current_day
+                self.retry_count = 0  # Reset retry counter on new day
+                print(f"\nReset daily tweet count at {current_time} UTC")
+                # Also clear old market intel on daily reset
+                self._clear_old_market_intel()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error in daily reset check: {e}")
+            return False
+
+    def _clear_old_market_intel(self):
+        """Clear old market intelligence to manage memory"""
+        try:
+            current_time = datetime.utcnow()
+            
+            # Only clean up if enough time has passed (every 6 hours)
+            if (current_time - self.last_cache_cleanup).total_seconds() < 21600:  # 6 hours
+                return
+                
+            initial_size = len(self.market_intel)
+            
+            # Keep only intel from the last 24 hours
+            self.market_intel = [
+                intel for intel in self.market_intel 
+                if (current_time - datetime.fromisoformat(intel['created_at'])).total_seconds() < 86400
+            ]
+            
+            # Trim to max size if still too large
+            if len(self.market_intel) > self.max_cache_size:
+                self.market_intel = self.market_intel[-self.max_cache_size:]
+            
+            cleaned_count = initial_size - len(self.market_intel)
+            if cleaned_count > 0:
+                print(f"\nCleared {cleaned_count} old market intel entries")
+                print(f"Cache size: {len(self.market_intel)}/{self.max_cache_size}")
+            
+            # Update cleanup time
+            self.last_cache_cleanup = current_time
+            
+            # Clear history manager periodically
+            self.history_manager.clear_old_history()
+            
+        except Exception as e:
+            print(f"Error clearing old market intel: {e}")
+
+    def _handle_rate_limit(self, wait_minutes):
+        """Handle rate limit with exponential backoff"""
+        if self.retry_count >= self.max_retries:
+            wait_minutes = min(wait_minutes * (2 ** self.retry_count), 60)  # Cap at 60 minutes
+        print(f"\nRate limit: Waiting {wait_minutes:.1f} minutes before retry")
+        time.sleep(wait_minutes * 60)
+        self.retry_count += 1
+
+    def gather_market_intel(self):
+        """Gather market intelligence while respecting rate limits"""
+        try:
+            current_time = datetime.utcnow()
+            minutes_since_last = (current_time - self.last_search_time).total_seconds() / 60
+            
+            # Respect rate limits with retry logic
+            if minutes_since_last < (15 / self.rate_limits['search']['requests_per_15min']):
+                wait_minutes = (15 / self.rate_limits['search']['requests_per_15min']) - minutes_since_last
+                self._handle_rate_limit(wait_minutes)
+                return False
+            
+            # Reset retry count on successful timing
+            self.retry_count = 0
+            
+            # Clear old intel periodically
+            self._clear_old_market_intel()
+            
+            # Get next category to search
+            categories = list(self.search_queries.keys())
+            category = categories[self.current_category_index]
+            query = self.search_queries[category]
+            
+            # Update for next time
+            self.current_category_index = (self.current_category_index + 1) % len(categories)
+            self.last_search_time = current_time
+            
+            # Perform the search with retry logic
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    print(f"\nGathering intelligence for category: {category} (attempt {attempt + 1}/{max_attempts})")
+                    response = self.api.search_recent_tweets(
+                        query=query,
+                        max_results=100,
+                        tweet_fields=['created_at', 'public_metrics']
+                    )
+                    
+                    if response.data:
+                        fresh_intel = []
+                        for tweet in response.data:
+                            intel = {
+                                'category': category,
+                                'text': tweet.text,
+                                'created_at': tweet.created_at.isoformat(),
+                                'metrics': {
+                                    'retweet_count': tweet.public_metrics['retweet_count'],
+                                    'like_count': tweet.public_metrics['like_count']
+                                },
+                                'used': False
+                            }
+                            fresh_intel.append(intel)
+                        
+                        self.market_intel.extend(fresh_intel)
+                        self._prune_cache()
+                        
+                        print(f"Found {len(fresh_intel)} new items for {category}")
+                        print(f"Next search available in {(15 / self.rate_limits['search']['requests_per_15min'])} minutes")
+                        print(f"Next category will be: {categories[(self.current_category_index)]}")
+                        return True
+                    
+                    print(f"No new tweets found for {category}")
+                    return False
+                    
+                except Exception as e:
+                    if attempt < max_attempts - 1:
+                        wait_time = (attempt + 1) * 5  # Exponential backoff
+                        print(f"Search attempt {attempt + 1} failed: {e}")
+                        print(f"Retrying in {wait_time} minutes...")
+                        time.sleep(wait_time * 60)
+                    else:
+                        print(f"All search attempts failed: {e}")
+                        return False
+            
+        except Exception as e:
+            print(f"\nError gathering market intel: {e}")
+            return False
+
+    def post_tweet(self):
+        """Post tweet if within rate limits"""
+        try:
+            current_time = datetime.utcnow()
+            
+            # Check for daily reset
+            self._should_reset_daily_count()
+            
+            # Check if we've hit the daily limit
+            if self.daily_tweet_count >= self.daily_tweet_limit:
+                print(f"\nDaily tweet limit reached ({self.daily_tweet_count}/{self.daily_tweet_limit})")
+                seconds_until_reset = (
+                    self.last_reset + timedelta(days=1) - current_time
+                ).total_seconds()
+                print(f"Next reset in {seconds_until_reset/3600:.1f} hours")
+                return False
+            
+            # Check if enough time has passed since last tweet
+            if self.last_tweet_time:
+                minutes_since_last = (current_time - self.last_tweet_time).total_seconds() / 60
+                if minutes_since_last < 90:  # 90 minutes between tweets
+                    wait_minutes = 90 - minutes_since_last
+                    self._handle_rate_limit(wait_minutes)
+                    return False
+            
+            # Reset retry count on successful timing
+            self.retry_count = 0
+            
+            # Generate and post the tweet with retry logic
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    tweet_text = self.generate_tweet()
+                    if not tweet_text:
+                        print("\nFailed to generate tweet")
+                        return False
+                    
+                    response = self.api.create_tweet(text=tweet_text)
+                    if response.data:
+                        self.daily_tweet_count += 1
+                        self.last_tweet_time = current_time
+                        print(f"\nTweet posted successfully!")
+                        print(f"Content: {tweet_text}")
+                        print(f"Tweet ID: {response.data['id']}")
+                        print(f"Tweets today: {self.daily_tweet_count}/{self.daily_tweet_limit}")
+                        return True
+                    
+                except Exception as e:
+                    if attempt < max_attempts - 1:
+                        wait_time = (attempt + 1) * 5  # Exponential backoff
+                        print(f"Tweet attempt {attempt + 1} failed: {e}")
+                        print(f"Retrying in {wait_time} minutes...")
+                        time.sleep(wait_time * 60)
+                    else:
+                        print(f"All tweet attempts failed: {e}")
+                        return False
+            
+            return False
+            
+        except Exception as e:
+            print(f"\nError posting tweet: {e}")
+            return False
 
     def _load_cached_intel(self):
         """Load cached market intelligence"""
@@ -103,20 +340,6 @@ class AIGamingBot:
                 json.dump(self.market_intel, f)
         except Exception as e:
             print(f"Error saving cache: {e}")
-
-    def _reset_daily_count(self):
-        """Reset daily tweet count if 24 hours have passed"""
-        now = datetime.now()
-        if (now - self.last_reset) >= timedelta(hours=24):
-            self.tweets_today = 0
-            self.last_reset = now
-            print(f"Daily tweet count reset at {now}")
-
-    def _update_rate_limit(self, response, limit_type):
-        """Update rate limit info from API response"""
-        if hasattr(response, 'rate_limit_remaining'):
-            self.rate_limits[limit_type]['remaining'] = int(response.rate_limit_remaining)
-            self.rate_limits[limit_type]['reset_time'] = int(response.rate_limit_reset)
 
     def _get_engagement_level(self, metrics):
         """Calculate engagement level of a tweet"""
@@ -141,71 +364,6 @@ class AIGamingBot:
         
         # Keep top entries
         self.market_intel = self.market_intel[:self.max_cache_size]
-
-    def gather_market_intel(self):
-        """Gather market intelligence within rate limits"""
-        try:
-            current_time = datetime.now()
-            
-            # Check if we can make a new search request (15.5 minutes to be safe)
-            wait_time = 15 + self.rate_limits['search']['buffer_minutes']
-            time_since_last_search = (current_time - self.last_search_time).total_seconds() / 60
-            
-            if time_since_last_search < wait_time:
-                minutes_remaining = wait_time - time_since_last_search
-                print(f"Rate limit: Must wait {minutes_remaining:.1f} more minutes before next search")
-                return bool(self.market_intel)
-            
-            # Rotate through categories
-            categories = list(self.search_queries.keys())
-            category = categories[self.current_category_index]
-            self.current_category_index = (self.current_category_index + 1) % len(categories)
-            
-            query = self.search_queries[category]
-            print(f"\nGathering intel for {category}...")
-            
-            try:
-                response = self.api.search_recent_tweets(
-                    query=query,
-                    max_results=100,  # Get maximum results since we can only query rarely
-                    tweet_fields=['created_at', 'public_metrics']
-                )
-                
-                self.last_search_time = current_time
-                
-                if response.data:
-                    fresh_intel = []
-                    for tweet in response.data:
-                        metrics = tweet.public_metrics
-                        engagement_level = self._get_engagement_level(metrics)
-                        
-                        intel = {
-                            'category': category,
-                            'text': tweet.text,
-                            'metrics': metrics,
-                            'created_at': tweet.created_at.isoformat(),
-                            'used': False,
-                            'engagement_level': engagement_level
-                        }
-                        fresh_intel.append(intel)
-                    
-                    # Update market intel
-                    self.market_intel.extend(fresh_intel)
-                    self._prune_cache()
-                    
-                    print(f"Found {len(fresh_intel)} new items for {category}")
-                    print(f"Next search available in {wait_time} minutes")
-                    print(f"Next category will be: {categories[(self.current_category_index)]}")
-                
-            except Exception as e:
-                print(f"Error in search: {str(e)}")
-                return bool(self.market_intel)
-            
-            return bool(self.market_intel)
-            
-        except Exception as e:
-            print(f"Error in market intelligence gathering: {e}")
-            return bool(self.market_intel)
 
     def generate_tweet(self):
         """Generate market intelligence tweet using Meta Llama and gathered intel"""
@@ -273,46 +431,10 @@ class AIGamingBot:
             persona = self.history_manager.suggest_persona(category)
             self.history_manager.add_tweet(tweet_content, persona, category)
             
-            # Post the tweet if ENABLE_POSTING is true
-            if os.getenv('ENABLE_POSTING', 'false').lower() == 'true':
-                print("\nPosting tweet...")
-                tweet = self.api.create_tweet(text=tweet_content)
-                print(f"Tweet posted successfully! ID: {tweet.data['id']}")
-            else:
-                print("\nSkipping tweet posting (ENABLE_POSTING is not true)")
-            
             return tweet_content
             
         except Exception as e:
             print(f"Error generating tweet: {e}")
-            return False
-
-    def post_tweet(self):
-        """Post tweet if within rate limits"""
-        try:
-            # Reset daily count if needed
-            self._reset_daily_count()
-            
-            # Check if we've hit the daily limit
-            if self.daily_tweet_count >= self.daily_tweet_limit:
-                print(f"Daily tweet limit reached ({self.daily_tweet_count}/{self.daily_tweet_limit})")
-                return False
-            
-            # Generate and post the tweet
-            tweet_text = self.generate_tweet()
-            if tweet_text:
-                response = self.api.create_tweet(text=tweet_text)
-                if response.data:
-                    self.daily_tweet_count += 1
-                    print(f"Tweet posted successfully at {datetime.now()}: {tweet_text}")
-                    print(f"Tweet ID: {response.data['id']}")
-                    print(f"Tweets today: {self.daily_tweet_count}/{self.daily_tweet_limit}")
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"Error posting tweet: {e}")
             return False
 
     def run(self):
@@ -321,36 +443,19 @@ class AIGamingBot:
         
         while True:
             try:
-                current_time = datetime.now()
-                
-                # Reset daily tweet count at midnight
-                if current_time.hour == 0 and current_time.minute < 5:
-                    self.daily_tweet_count = 0
-                    print("\nReset daily tweet count")
-                
-                # Try to gather market intelligence
+                # Try to gather market intelligence with retry logic
                 if self.gather_market_intel():
                     print("\nSuccessfully gathered market intelligence")
                 else:
                     print("\nNo new market intelligence gathered")
                 
-                # Check if we can post a tweet
-                if self.daily_tweet_count < self.daily_tweet_limit:
-                    if self.post_tweet():
-                        print("\nWaiting 90 minutes before next tweet...")
-                        time.sleep(90 * 60)  # 90 minutes between tweets
-                    else:
-                        print("\nTweet failed, waiting 5 minutes before retry...")
-                        time.sleep(5 * 60)
+                # Try to post a tweet with retry logic
+                if self.post_tweet():
+                    print("\nWaiting 90 minutes before next tweet...")
+                    time.sleep(90 * 60)  # 90 minutes between tweets
                 else:
-                    # Calculate time until midnight reset
-                    seconds_until_midnight = (
-                        ((24 - current_time.hour - 1) * 3600) +
-                        ((60 - current_time.minute - 1) * 60) +
-                        (60 - current_time.second)
-                    )
-                    print(f"\nDaily tweet limit reached. Waiting {seconds_until_midnight//3600} hours until reset")
-                    time.sleep(min(3600, seconds_until_midnight))  # Sleep max 1 hour
+                    print("\nWaiting 5 minutes before retry...")
+                    time.sleep(5 * 60)
                 
             except Exception as e:
                 print(f"\nError in main loop: {e}")
