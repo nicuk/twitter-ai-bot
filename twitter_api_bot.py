@@ -9,23 +9,37 @@ import random
 import json
 from elion_personality import ELION_PROFILE, generate_elion_tweet, generate_elion_reply
 from tweet_history_manager import TweetHistoryManager
+import sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
 # Load test environment variables
 load_dotenv('.env.test')  # Load test environment first
 load_dotenv(override=True)  # Then load production env if it exists
 
-# Add debug logging
-print("\nChecking environment variables...")
-for var in ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_ACCESS_TOKEN', 
-            'TWITTER_ACCESS_TOKEN_SECRET', 'TWITTER_BEARER_TOKEN', 'AI_API_URL', 
-            'AI_ACCESS_TOKEN', 'AI_MODEL_NAME']:
-    print(f"{var} exists: {os.getenv(var) is not None}")
-
-print("\nAfter loading .env:")
-for var in ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_ACCESS_TOKEN', 
-            'TWITTER_ACCESS_TOKEN_SECRET', 'TWITTER_BEARER_TOKEN', 'AI_API_URL', 
-            'AI_ACCESS_TOKEN', 'AI_MODEL_NAME']:
-    print(f"{var} exists: {os.getenv(var) is not None}")
+def check_environment_variables():
+    """Check if all required environment variables are set"""
+    required_vars = [
+        'TWITTER_CLIENT_ID',
+        'TWITTER_CLIENT_SECRET',
+        'TWITTER_ACCESS_TOKEN',
+        'TWITTER_ACCESS_TOKEN_SECRET',
+        'TWITTER_BEARER_TOKEN',
+        'AI_API_URL',
+        'AI_ACCESS_TOKEN',
+        'AI_MODEL_NAME'
+    ]
+    
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        print("Error: Missing required environment variables:")
+        for var in missing_vars:
+            print(f"- {var}")
+        return False
+    
+    print("✓ All required environment variables are set")
+    return True
 
 class AIGamingBot:
     def __init__(self):
@@ -315,3 +329,50 @@ class AIGamingBot:
         except Exception as e:
             print(f"Error posting tweet: {e}")
             return False
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
+            self.wfile.write(json.dumps(response).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_healthcheck_server(port=8080):
+    """Start the healthcheck server in a separate thread"""
+    server = HTTPServer(('', port), HealthCheckHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"✓ Healthcheck server running on port {port}")
+    return server
+
+def main():
+    """Main function to run the Twitter bot"""
+    print("\nInitializing Twitter AI Bot...")
+    
+    if not check_environment_variables():
+        sys.exit(1)
+    
+    try:
+        # Start healthcheck server first
+        healthcheck_server = start_healthcheck_server()
+        
+        # Initialize and run the bot
+        bot = AIGamingBot()
+        try:
+            bot.run()
+        except KeyboardInterrupt:
+            print("\nShutting down gracefully...")
+        finally:
+            healthcheck_server.shutdown()
+            healthcheck_server.server_close()
+    except Exception as e:
+        print(f"Error running bot: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

@@ -1,7 +1,8 @@
 import tweepy
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import os
+import time
 from dotenv import load_dotenv
 import json
 import random
@@ -175,8 +176,42 @@ def test_single_tweet():
     print("- Tweet posting: Every 90 minutes (16 tweets per day)")
     print(f"\nEstimated daily API calls: {total_checks:.1f} searches + {bot.daily_tweet_limit} tweets")
 
+def test_healthcheck():
+    """Test the healthcheck endpoint"""
+    print("\nHealthcheck Status")
+    print("=================")
+    
+    path = "/"
+    retry_window = timedelta(seconds=100)
+    retry_until = datetime.now() + retry_window
+    attempt = 1
+    
+    while datetime.now() < retry_until:
+        try:
+            response = requests.get(f"{os.getenv('BASE_URL')}{path}")
+            if response.status_code == 200:
+                print("✓ Service is healthy")
+                return True
+            
+            time_left = (retry_until - datetime.now()).seconds
+            if time_left > 0:
+                print(f"× Attempt {attempt} failed. Retrying... ({time_left}s remaining)")
+                attempt += 1
+                time.sleep(2)  # Wait 2 seconds between attempts
+            
+        except requests.RequestException as e:
+            time_left = (retry_until - datetime.now()).seconds
+            if time_left > 0:
+                print(f"× Connection failed. Retrying... ({time_left}s remaining)")
+                time.sleep(2)
+    
+    print("× Healthcheck failed: Service unavailable")
+    return False
+
 if __name__ == "__main__":
     print("Starting Elion Tweet Tests...")
     test_tweet_generation()
     print("\nStarting Bot Configuration Test...")
     test_single_tweet()
+    print("\nStarting Healthcheck Test...")
+    test_healthcheck()
