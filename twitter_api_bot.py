@@ -146,7 +146,7 @@ class AIGamingBot:
             try:
                 tweets = self.api.search_recent_tweets(
                     query=query,
-                    max_results=5,
+                    max_results=10,
                     tweet_fields=['created_at', 'public_metrics']
                 )
                 
