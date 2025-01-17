@@ -24,7 +24,7 @@ class CryptoRankAPI:
         self.api_key = os.getenv('CRYPTORANK_API_KEY')
         self.base_url = 'https://api.cryptorank.io/v2'
         self.headers = {
-            'X-Api-Key': self.api_key
+            'X-Api-Key': self.api_key  # Only use X-Api-Key header
         }
 
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
@@ -32,12 +32,15 @@ class CryptoRankAPI:
         url = f"{self.base_url}/{endpoint}"
         
         try:
-            print(f"Making request to {url}")
+            print(f"\nMaking request to {url}")
             print(f"Headers: {self.headers}")
             print(f"Params: {params}")
             
             response = requests.get(url, headers=self.headers, params=params)
             print(f"Response status: {response.status_code}")
+            
+            if response.status_code == 401:
+                print("API key is missing or invalid. Check your CRYPTORANK_API_KEY environment variable.")
             
             response.raise_for_status()
             return response.json()
@@ -50,13 +53,20 @@ class CryptoRankAPI:
     def get_currencies(self, limit: int = 100) -> List[Dict]:
         """Get list of currencies with market data"""
         params = {
-            'limit': limit,
-            'sortBy': 'rank',
-            'sortDirection': 'ASC',
-            'include': ['percentChange']
+            'limit': limit,  # Must be 100, 500, or 1000
+            'sortBy': 'rank',  # Not sort[by]
+            'sortDirection': 'ASC',  # Not sort[dir]
+            'include': ['percentChange']  # Include price change data
         }
-        response = self._make_request('currencies', params)
-        return response.get('data', [])
+        
+        response = self._make_request('currencies', params=params)
+        data = response.get('data', [])
+        
+        if not data:
+            print("No coins found in response")
+            return []
+            
+        return data
 
     def get_alpha_opportunities(self, limit: int = 100) -> List[Dict]:
         """
@@ -193,8 +203,8 @@ class DataSources:
         )
         
         # Initialize data sources
-        self.crypto_rank_api_key = os.getenv('CRYPTO_RANK_API_KEY', '').strip()
-        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"
+        self.crypto_rank_api_key = os.getenv('CRYPTORANK_API_KEY')
+        self.crypto_rank_base_url = "https://api.cryptorank.io/v2"  # Updated to v2
         
         # Cache for API responses
         self._cache = {}
