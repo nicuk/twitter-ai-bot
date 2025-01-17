@@ -1,18 +1,19 @@
-import sys
-import os
-import time
-import json
-from datetime import datetime, timedelta
 import tweepy
 import schedule
-from dotenv import load_dotenv
+import time
+from datetime import datetime, timedelta
+import requests
+import os
+import json
+import random
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-import random
 import logging
+from dotenv import load_dotenv
+import uuid
 from elion.elion import Elion
-from elion.data_sources import DataSources
 from tweet_history_manager import TweetHistoryManager
+from elion.data_sources import DataSources
 
 # Configure logging
 logging.basicConfig(
@@ -23,39 +24,31 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 logger.info("Loading environment variables...")
-load_dotenv()  # Load production env
+load_dotenv('.env.test')  # Load test environment first
+load_dotenv(override=True)  # Then load production env if it exists
 logger.info("Environment variables loaded")
 
 def check_environment_variables():
     """Check if all required environment variables are set"""
     logger.info("Checking required environment variables...")
     
-    # Set default values for AI environment variables if not set
-    if not os.getenv('AI_API_URL'):
-        logger.info("Setting default AI_API_URL")
-        os.environ['AI_API_URL'] = 'https://api.openai.com/v1'
-    if not os.getenv('AI_MODEL_NAME'):
-        logger.info("Setting default AI_MODEL_NAME to meta-llama-3.3-70b-instruct")
-        os.environ['AI_MODEL_NAME'] = 'meta-llama-3.3-70b-instruct'
-    if not os.getenv('AI_ACCESS_TOKEN'):
-        logger.info("Setting default AI_ACCESS_TOKEN")
-        os.environ['AI_ACCESS_TOKEN'] = 'dummy_token'
-    
-    # Check Twitter variables as they are required
-    critical_vars = [
+    required_vars = [
         'TWITTER_CLIENT_ID',
         'TWITTER_CLIENT_SECRET',
         'TWITTER_ACCESS_TOKEN',
         'TWITTER_ACCESS_TOKEN_SECRET',
         'TWITTER_BEARER_TOKEN',
-        'CRYPTORANK_API_KEY'  # Add CryptoRank API key as critical
+        'AI_API_URL',
+        'AI_ACCESS_TOKEN',
+        'AI_MODEL_NAME'
     ]
     
-    missing_vars = [var for var in critical_vars if not os.getenv(var)]
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
     if missing_vars:
         logger.error("Missing required environment variables: %s", missing_vars)
-        raise ValueError(f"Missing required environment variables: {missing_vars}")
-        
+        return False
+    
     logger.info("All required environment variables present")
     return True
 
@@ -68,13 +61,16 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"OK")
     
     def log_message(self, format, *args):
-        return
+        # Suppress logging
+        pass
 
 def start_healthcheck(port=8080):
+    """Start health check server"""
     server = HTTPServer(('', port), HealthCheckHandler)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
+    logger.info(f"Health check server started on port {port}")
 
 class AIGamingBot:
     def __init__(self):
