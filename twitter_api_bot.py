@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 logger.info("Loading environment variables...")
-load_dotenv()  # Load environment variables from .env
+load_dotenv('.env.test')  # Load test environment first
+load_dotenv(override=True)  # Then load production env if it exists
 logger.info("Environment variables loaded")
 
 def check_environment_variables():

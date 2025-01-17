@@ -38,152 +38,110 @@ class ContentGenerator:
         market_data = data.get('market_data', {})
         analysis = data.get('analysis', {})
         
-        # Get market conditions
-        symbol = market_data.get('symbol', 'BTC')
-        price = market_data.get('price', 0)
-        trend = market_data.get('trend', 'neutral')
+        content = "🔍 Market Analysis\n\n"
+        content += f"${market_data.get('symbol', 'BTC')} Update:\n"
+        content += f"• Price: ${market_data.get('price', 0):,.2f}\n"
+        content += f"• Trend: {market_data.get('trend', 'neutral').upper()}\n"
         
-        # Format indicators
-        indicators = []
-        if 'rsi' in market_data:
-            indicators.append(f"RSI: {market_data['rsi']}")
-        if 'macd' in market_data:
-            indicators.append(f"MACD: {market_data['macd']}")
-        if 'volume' in market_data:
-            indicators.append(f"Volume: {market_data['volume']}")
-            
-        # Get AI analysis
-        ai_analysis = self.llm.generate(
-            f"Analyze {symbol} at ${price:,} with {trend} trend. "
-            f"Keep it concise and engaging."
-        )
+        if 'indicators' in market_data:
+            content += "• Indicators:\n"
+            for name, value in market_data['indicators'].items():
+                content += f"  - {name}: {value}\n"
         
-        # Format tweet
-        content = f" ${symbol} Technical Analysis\n\n"
-        content += f"Price: ${price:,}\n"
-        content += f"Trend: {trend.upper()}\n"
-        if indicators:
-            content += "\n" + "\n".join(indicators)
-        content += f"\n\n{ai_analysis}"
+        if 'summary' in analysis:
+            content += f"\nAnalysis: {analysis['summary']}"
         
-        return self.personality.enhance_tweet(content)
-        
+        return content
+    
     def _format_gem_alpha(self, data: Dict) -> str:
         """Format gem alpha tweet"""
         gem_data = data.get('gem_data', {})
         
-        # Extract gem info
-        name = gem_data.get('name', '')
-        symbol = gem_data.get('symbol', '')
-        score = gem_data.get('score', 0)
-        market_data = gem_data.get('market_data', {})
-        analysis = gem_data.get('analysis', '')
-        conviction = gem_data.get('conviction_level', 'MEDIUM')
+        content = "💎 GEM ALERT 💎\n\n"
+        content += f"Found a hidden gem: ${gem_data.get('symbol', 'UNKNOWN')}\n\n"
+        content += "Key Metrics:\n"
         
-        # Get AI analysis
-        ai_analysis = self.llm.generate(
-            f"Analyze {name} (${symbol}) as a potential gem. "
-            f"Score: {score}/100, Market Cap: ${market_data.get('market_cap', 0):,}. "
-            f"Keep it concise and engaging."
-        )
+        if 'market_cap' in gem_data:
+            content += f"• MCap: ${gem_data['market_cap']:,.0f}\n"
+        if 'volume' in gem_data:
+            content += f"• 24h Vol: ${gem_data['volume']:,.0f}\n"
+        if 'holders' in gem_data:
+            content += f"• Holders: {gem_data['holders']:,}\n"
         
-        # Format tweet
-        content = f" GEM ALERT: ${symbol}\n\n"
-        content += f"Score: {score}/100\n"
-        content += f"Market Cap: ${market_data.get('market_cap', 0):,}\n"
-        content += f"Volume: ${market_data.get('volume', 0):,}\n"
-        content += f"Price: ${market_data.get('price', 0)}\n"
-        content += f"\nConviction: {conviction}\n"
-        content += f"\n{ai_analysis}"
+        if 'analysis' in gem_data:
+            content += f"\nAnalysis: {gem_data['analysis']}"
         
-        return self.personality.enhance_tweet(content)
-        
+        return content
+    
     def _format_portfolio_update(self, data: Dict) -> str:
         """Format portfolio update tweet"""
         stats = data.get('portfolio_stats', {})
+        performance = stats.get('performance', {})
+        metrics = stats.get('stats', {})
         
-        # Extract portfolio stats
-        total_value = stats.get('total_value', 0)
-        total_roi = stats.get('total_roi', 0)
-        win_rate = stats.get('win_rate', 0)
-        positions = stats.get('positions', [])
+        content = "📊 Portfolio Update 📊\n\n"
+        content += "Performance:\n"
+        content += f"• Daily: {performance.get('daily', 0):+.1f}%\n"
+        content += f"• Weekly: {performance.get('weekly', 0):+.1f}%\n"
+        content += f"• Monthly: {performance.get('monthly', 0):+.1f}%\n"
         
-        # Format positions
-        position_text = []
-        for pos in positions[:3]:  # Show top 3 positions
-            symbol = pos.get('symbol', '')
-            roi = pos.get('roi', 0)
-            position_text.append(f"${symbol}: {roi*100:.1f}%")
-            
-        # Get AI analysis
-        ai_analysis = self.llm.generate(
-            f"Analyze portfolio performance with {total_roi*100:.1f}% ROI "
-            f"and {win_rate*100:.1f}% win rate. Keep it concise and engaging."
-        )
+        content += "\nStats:\n"
+        content += f"• Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
+        content += f"• Avg Profit: {metrics.get('avg_profit', 0):+.1f}%\n"
         
-        # Format tweet
-        content = f" Portfolio Update\n\n"
-        content += f"Total Value: ${total_value:,}\n"
-        content += f"Total ROI: {total_roi*100:.1f}%\n"
-        content += f"Win Rate: {win_rate*100:.1f}%\n"
-        if position_text:
-            content += f"\nTop Positions:\n" + "\n".join(position_text)
-        content += f"\n\n{ai_analysis}"
+        if metrics.get('best_trade'):
+            content += f"\n🏆 Best: ${metrics['best_trade']}"
+        if metrics.get('worst_trade'):
+            content += f"\n💩 Worst: ${metrics['worst_trade']}"
         
-        return self.personality.enhance_tweet(content)
-        
+        return content
+    
     def _format_market_awareness(self, data: Dict) -> str:
         """Format market awareness tweet"""
         market_data = data.get('market_data', {})
         analysis = data.get('analysis', {})
         
-        # Get AI analysis
-        ai_analysis = self.llm.generate(
-            f"Analyze current market conditions and sentiment. "
-            f"Keep it concise and engaging."
-        )
+        content = "👁️ Market Watch 👁️\n\n"
         
-        # Format tweet
-        content = f" Market Update\n\n"
-        content += f"BTC Dominance: {market_data.get('btc_dominance', 0)}%\n"
-        content += f"Market Cap: ${market_data.get('market_cap', 0):,}\n"
-        content += f"24h Volume: ${market_data.get('volume_24h', 0):,}\n"
+        if 'sentiment' in analysis:
+            content += f"Sentiment: {analysis['sentiment'].upper()}\n"
+        if 'confidence' in analysis:
+            content += f"Confidence: {analysis['confidence']}%\n"
         
-        # Add trending coins
-        trending = market_data.get('trending_coins', [])
-        if trending:
-            content += f"\nTrending: " + " ".join(f"${coin}" for coin in trending[:3])
-            
-        content += f"\n\n{ai_analysis}"
+        if 'signals' in analysis:
+            signals = analysis['signals']
+            if 'market' in signals:
+                content += f"\nMarket Signals:\n{signals['market']}"
+            if 'onchain' in signals:
+                content += f"\nOn-chain:\n{signals['onchain']}"
+            if 'whales' in signals:
+                content += f"\nWhale Activity:\n{signals['whales']}"
         
-        return self.personality.enhance_tweet(content)
-        
+        return content
+    
     def _format_shill_review(self, data: Dict) -> str:
         """Format shill review tweet"""
         projects = data.get('projects', [])
         if not projects:
             return None
             
-        project = projects[0]  # Get first project
+        content = "🔍 Project Review 🔍\n\n"
+        project = projects[0]  # Take first project
         
-        # Extract project info
-        name = project.get('name', '')
-        symbol = project.get('symbol', '')
-        score = project.get('score', 0)
-        analysis = project.get('analysis', '')
-        conviction = project.get('conviction_level', 'MEDIUM')
+        content += f"Project: {project.get('name', 'Unknown')}\n"
+        content += f"Symbol: ${project.get('symbol', 'XXX')}\n\n"
         
-        # Get AI analysis
-        ai_analysis = self.llm.generate(
-            f"Review {name} (${symbol}) for potential investment. "
-            f"Score: {score}/100, Analysis: {analysis}. "
-            f"Keep it concise and engaging."
-        )
+        if 'metrics' in project:
+            metrics = project['metrics']
+            content += "Key Metrics:\n"
+            if 'tvl' in metrics:
+                content += f"• TVL: ${metrics['tvl']:,.0f}\n"
+            if 'volume' in metrics:
+                content += f"• Volume: ${metrics['volume']:,.0f}\n"
+            if 'growth' in metrics:
+                content += f"• Growth: {metrics['growth']:+.1f}%\n"
         
-        # Format tweet
-        content = f" Project Review: ${symbol}\n\n"
-        content += f"Score: {score}/100\n"
-        content += f"Conviction: {conviction}\n"
-        content += f"\n{ai_analysis}"
+        if 'review' in project:
+            content += f"\nVerdict: {project['review']}"
         
-        return self.personality.enhance_tweet(content)
+        return content
