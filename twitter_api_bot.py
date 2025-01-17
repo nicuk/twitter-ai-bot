@@ -30,36 +30,6 @@ load_dotenv('.env.test')  # Load test environment first
 load_dotenv('.env', override=True)  # Then load production env if it exists
 logger.info("Environment variables loaded")
 
-def check_environment_variables():
-    """Check if all required environment variables are set"""
-    logger.info("Checking required environment variables...")
-    
-    required_vars = {
-        'TWITTER_CLIENT_ID': 'Twitter API Key',
-        'TWITTER_CLIENT_SECRET': 'Twitter API Secret',
-        'TWITTER_ACCESS_TOKEN': 'Twitter Access Token',
-        'TWITTER_ACCESS_TOKEN_SECRET': 'Twitter Access Token Secret',
-        'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
-        'AI_ACCESS_TOKEN': 'AI API Access Token',
-        'AI_API_URL': 'AI API Base URL',
-        'AI_MODEL_NAME': 'AI Model Name',
-        'CRYPTORANK_API_KEY': 'CryptoRank API Key'
-    }
-    
-    missing_vars = []
-    for var, desc in required_vars.items():
-        if not os.getenv(var):
-            missing_vars.append(f"{desc} ({var})")
-            
-    if missing_vars:
-        error_msg = "Missing required environment variables:\n"
-        error_msg += "\n".join(f"- {var}" for var in missing_vars)
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-        
-    logger.info("All required environment variables present")
-    return True
-
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
@@ -117,6 +87,29 @@ class AIGamingBot:
             }
         }
         
+        # Check required Twitter and AI credentials
+        required_vars = {
+            'TWITTER_CLIENT_ID': 'Twitter API Key',
+            'TWITTER_CLIENT_SECRET': 'Twitter API Secret',
+            'TWITTER_ACCESS_TOKEN': 'Twitter Access Token',
+            'TWITTER_ACCESS_TOKEN_SECRET': 'Twitter Access Token Secret',
+            'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
+            'AI_ACCESS_TOKEN': 'AI API Access Token',
+            'AI_API_URL': 'AI API Base URL',
+            'AI_MODEL_NAME': 'AI Model Name'
+        }
+        
+        missing_vars = []
+        for var, desc in required_vars.items():
+            if not os.getenv(var):
+                missing_vars.append(f"{desc} ({var})")
+        
+        if missing_vars:
+            error_msg = "Missing required environment variables:\n"
+            error_msg += "\n".join(f"- {var}" for var in missing_vars)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Initialize Twitter API clients
         logger.info("Initializing Twitter client...")
         self.api = tweepy.Client(
@@ -136,6 +129,12 @@ class AIGamingBot:
             api_key=os.getenv('AI_ACCESS_TOKEN'),
             api_base=os.getenv('AI_API_URL')
         )
+        
+        # Check for optional CryptoRank API key
+        cryptorank_api_key = os.getenv('CRYPTORANK_API_KEY')
+        if not cryptorank_api_key:
+            logger.warning("CRYPTORANK_API_KEY not found. Market data functionality will be limited.")
+        
         self.elion = Elion(llm=llm)
         logger.info("Elion initialized")
         
@@ -484,13 +483,8 @@ class AIGamingBot:
                 sys.exit(1)
 
 def main():
-    logger.info("Initializing Twitter AI Bot...")
-    logger.info("Checking environment variables...")
-    
-    # Check environment variables
-    if not check_environment_variables():
-        logger.error("Environment check failed")
-        sys.exit(1)
+    """Main function to run the Twitter AI Bot"""
+    logger.info("\nInitializing Twitter AI Bot...")
     
     try:
         logger.info("Starting healthcheck server...")
