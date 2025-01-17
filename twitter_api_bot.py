@@ -9,53 +9,85 @@ from dotenv import load_dotenv
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import random
+import logging
 from elion.elion import Elion
+from elion.data_sources import DataSources
+from tweet_history_manager import TweetHistoryManager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
-load_dotenv()
+logger.info("Loading environment variables...")
+load_dotenv()  # Load environment variables from .env
+logger.info("Environment variables loaded")
 
-def check_environment():
+def check_environment_variables():
     """Check if all required environment variables are set"""
-    required_vars = [
+    logger.info("Checking required environment variables...")
+    
+    # Set default values for AI environment variables if not set
+    if not os.getenv('AI_API_URL'):
+        logger.info("Setting default AI_API_URL")
+        os.environ['AI_API_URL'] = 'https://api.openai.com/v1'
+    if not os.getenv('AI_MODEL_NAME'):
+        logger.info("Setting default AI_MODEL_NAME to meta-llama-3.3-70b-instruct")
+        os.environ['AI_MODEL_NAME'] = 'meta-llama-3.3-70b-instruct'
+    if not os.getenv('AI_ACCESS_TOKEN'):
+        logger.info("Setting default AI_ACCESS_TOKEN")
+        os.environ['AI_ACCESS_TOKEN'] = 'dummy_token'
+    
+    # Check Twitter variables as they are required
+    critical_vars = [
         'TWITTER_CLIENT_ID',
         'TWITTER_CLIENT_SECRET',
         'TWITTER_ACCESS_TOKEN',
         'TWITTER_ACCESS_TOKEN_SECRET',
-        'TWITTER_BEARER_TOKEN',
-        'AI_API_URL',
-        'AI_ACCESS_TOKEN',
-        'AI_MODEL_NAME'
+        'TWITTER_BEARER_TOKEN'
     ]
     
-    missing = [var for var in required_vars if not os.getenv(var)]
-    if missing:
-        print("Error: Missing environment variables:", ", ".join(missing))
+    missing_vars = [var for var in critical_vars if not os.getenv(var)]
+    if missing_vars:
+        logger.error("Error: Missing critical environment variables: %s", ', '.join(missing_vars))
         return False
+    
+    logger.info("[OK] All critical environment variables are set")
     return True
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b"OK")
     
     def log_message(self, format, *args):
-        pass  # Suppress logging
+        return
 
 def start_healthcheck(port=8080):
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server = HTTPServer(('', port), HealthCheckHandler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
     thread.start()
-    print(f"Healthcheck server running on 0.0.0.0:{port}")
 
-class TwitterBot:
+class AIGamingBot:
     def __init__(self):
-        print("\nInitializing Twitter bot...")
+        """Initialize the Twitter bot"""
+        logger.info("\nInitializing Twitter bot...")
         
         # Initialize retry settings
         self.max_retries = 3
         self.base_wait = 5  # Base wait time in minutes
         self.retry_count = 0
+        
+        # Cache file paths
+        self.cache_file = 'rate_limits.json'
+        self.response_cache_file = 'response_cache.json'
         
         # Track rate limits
         self.rate_limits = {
@@ -76,7 +108,7 @@ class TwitterBot:
         }
         
         # Initialize Twitter API clients
-        print("Initializing Twitter client...")
+        logger.info("Initializing Twitter client...")
         self.api = tweepy.Client(
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
@@ -85,11 +117,14 @@ class TwitterBot:
             bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
             wait_on_rate_limit=True
         )
-        print("Twitter client initialized")
+        logger.info("Twitter client initialized")
         
         # Initialize Elion
         model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
         self.elion = Elion(llm=model_name)
+        
+        # Initialize tweet history manager
+        self.tweet_history = TweetHistoryManager()
         
         # Set up tweet schedule
         self._setup_schedule()
@@ -130,11 +165,11 @@ class TwitterBot:
         
         # Check limits
         if self.rate_limits['post']['daily_count'] >= self.rate_limits['post']['daily_limit']:
-            print("Daily tweet limit reached")
+            logger.info("Daily tweet limit reached")
             return False
             
         if self.rate_limits['post']['monthly_count'] >= self.rate_limits['post']['monthly_limit']:
-            print("Monthly tweet limit reached")
+            logger.info("Monthly tweet limit reached")
             return False
         
         return True
@@ -148,55 +183,90 @@ class TwitterBot:
     def _load_cache(self):
         """Load cached data"""
         try:
-            if os.path.exists('bot_cache.json'):
-                with open('bot_cache.json', 'r') as f:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r') as f:
                     cache = json.load(f)
-                    self.rate_limits = cache.get('rate_limits', self.rate_limits)
+                    # Convert ISO format strings back to datetime objects
+                    self.rate_limits['post']['last_reset'] = datetime.fromisoformat(cache['rate_limits']['post']['last_reset'])
+                    self.rate_limits['post']['monthly_reset'] = datetime.fromisoformat(cache['rate_limits']['post']['monthly_reset'])
+                    self.rate_limits['post']['daily_count'] = cache['rate_limits']['post']['daily_count']
+                    self.rate_limits['post']['monthly_count'] = cache['rate_limits']['post']['monthly_count']
+                    self.rate_limits['post']['daily_limit'] = cache['rate_limits']['post']['daily_limit']
+                    self.rate_limits['post']['monthly_limit'] = cache['rate_limits']['post']['monthly_limit']
+                    
+                    self.rate_limits['search']['daily_searches'] = cache['rate_limits']['search']['daily_searches']
+                    self.rate_limits['search']['monthly_posts_pulled'] = cache['rate_limits']['search']['monthly_posts_pulled']
+                    self.rate_limits['search']['monthly_post_limit'] = cache['rate_limits']['search']['monthly_post_limit']
+                    self.rate_limits['search']['last_search'] = datetime.fromisoformat(cache['rate_limits']['search']['last_search']) if cache['rate_limits']['search']['last_search'] else None
         except Exception as e:
-            print(f"Error loading cache: {e}")
+            logger.error(f"Error loading cache: {e}")
     
     def _save_cache(self):
         """Save cache data"""
         try:
+            # Convert datetime objects to ISO format strings
             cache = {
-                'rate_limits': self.rate_limits
-            }
-            with open('bot_cache.json', 'w') as f:
-                json.dump(cache, f)
-        except Exception as e:
-            print(f"Error saving cache: {e}")
-    
-    def _load_response_cache(self):
-        """Load cached responses"""
-        try:
-            if os.path.exists('response_cache.json'):
-                with open('response_cache.json', 'r') as f:
-                    return json.load(f)
-            return {
-                'questions': {},  # tweet_id -> question data
-                'responses': {},  # tweet_id -> response data
-                'featured_projects': {
-                    'memes': set(),
-                    'ai': set(),
-                    'gamefi': set()
+                'rate_limits': {
+                    'post': {
+                        'daily_count': self.rate_limits['post']['daily_count'],
+                        'monthly_count': self.rate_limits['post']['monthly_count'],
+                        'last_reset': self.rate_limits['post']['last_reset'].isoformat(),
+                        'monthly_reset': self.rate_limits['post']['monthly_reset'].isoformat(),
+                        'daily_limit': self.rate_limits['post']['daily_limit'],
+                        'monthly_limit': self.rate_limits['post']['monthly_limit']
+                    },
+                    'search': {
+                        'daily_searches': self.rate_limits['search']['daily_searches'],
+                        'monthly_posts_pulled': self.rate_limits['search']['monthly_posts_pulled'],
+                        'monthly_post_limit': self.rate_limits['search']['monthly_post_limit'],
+                        'last_search': self.rate_limits['search']['last_search'].isoformat() if self.rate_limits['search']['last_search'] else None
+                    }
                 }
             }
-        except Exception as e:
-            print(f"Error loading response cache: {e}")
-            return None
-    
-    def _save_response_cache(self):
-        """Save response cache"""
-        try:
-            # Convert sets to lists for JSON serialization
-            cache = self.response_cache.copy()
-            cache['featured_projects'] = {
-                k: list(v) for k, v in cache['featured_projects'].items()
-            }
-            with open('response_cache.json', 'w') as f:
+            with open(self.cache_file, 'w') as f:
                 json.dump(cache, f)
         except Exception as e:
-            print(f"Error saving response cache: {e}")
+            logger.error(f"Error saving cache: {e}")
+    
+    def _load_response_cache(self):
+        """Load response cache from JSON"""
+        try:
+            if os.path.exists(self.response_cache_file):
+                with open(self.response_cache_file, 'r') as f:
+                    return json.load(f)
+            return {'questions': {}}
+        except Exception as e:
+            logger.error(f"Error loading response cache: {e}")
+            return {'questions': {}}
+    
+    def _save_response_cache(self):
+        """Save response cache to JSON"""
+        try:
+            # Convert datetime objects to ISO format strings
+            cache = {
+                'questions': {}
+            }
+            for tweet_id, data in self.response_cache['questions'].items():
+                cache['questions'][tweet_id] = {
+                    'text': data['text'],
+                    'time': data['time'],  # Already ISO format
+                    'responses_checked': data['responses_checked'],
+                    'used': data.get('used', False),
+                    'responses': {}
+                }
+                # Store only high-engagement responses to save space
+                for rid, rdata in data.get('responses', {}).items():
+                    if rdata.get('engagement_score', 0) >= 5:  # Only store responses with good engagement
+                        cache['questions'][tweet_id]['responses'][rid] = {
+                            'text': rdata['text'],
+                            'user': rdata['user'],
+                            'engagement_score': rdata['engagement_score']
+                        }
+            
+            with open(self.response_cache_file, 'w') as f:
+                json.dump(cache, f)
+        except Exception as e:
+            logger.error(f"Error saving response cache: {e}")
     
     def _cleanup_cache(self):
         """Clean up old cache data"""
@@ -215,7 +285,7 @@ class TwitterBot:
             
             # Clean up old responses
             if self.response_cache:
-                for cache_type in ['questions', 'responses']:
+                for cache_type in ['questions']:
                     old_items = []
                     for tweet_id, data in self.response_cache[cache_type].items():
                         if current_time - datetime.fromisoformat(data['time']) > timedelta(days=7):
@@ -223,77 +293,54 @@ class TwitterBot:
                     for tweet_id in old_items:
                         del self.response_cache[cache_type][tweet_id]
                 
-                # Reset featured projects every week
-                if any(len(projects) > 100 for projects in self.response_cache['featured_projects'].values()):
-                    self.response_cache['featured_projects'] = {
-                        'memes': set(),
-                        'ai': set(),
-                        'gamefi': set()
-                    }
-                
                 self._save_response_cache()
             
             self._save_cache()
         except Exception as e:
-            print(f"Error cleaning cache: {e}")
+            logger.error(f"Error cleaning cache: {e}")
     
     def check_responses(self):
         """Check responses to recent tweets"""
         try:
-            if not self.response_cache:
-                return
-                
+            # Clean old entries first
             current_time = datetime.utcnow()
-            
-            # Check unchecked questions from last 24 hours
-            for qid, qdata in self.response_cache['questions'].items():
-                if qdata.get('responses_checked'):
-                    continue
-                    
-                question_time = datetime.fromisoformat(qdata['time'])
-                if (current_time - question_time).total_seconds() > 24 * 3600:
+            for tweet_id in list(self.response_cache['questions'].keys()):
+                data = self.response_cache['questions'][tweet_id]
+                tweet_time = datetime.fromisoformat(data['time'])
+                
+                # Remove entries older than 7 days
+                if (current_time - tweet_time).days > 7:
+                    del self.response_cache['questions'][tweet_id]
                     continue
                 
-                # Get replies using API
+                # Skip if already checked
+                if data['responses_checked']:
+                    continue
+                
                 try:
-                    search_query = f"conversation_id:{qid}"
-                    replies = self.api.search_recent_tweets(
-                        query=search_query,
-                        max_results=100,
-                        tweet_fields=['public_metrics', 'author_id']
-                    )
+                    # Get replies
+                    replies = self.api.get_tweet_replies(tweet_id)
                     
-                    if replies.data:
-                        for reply in replies.data:
-                            reply_id = str(reply.id)
-                            
-                            # Skip if already processed
-                            if reply_id in self.response_cache['responses']:
-                                continue
-                            
-                            engagement_score = reply.public_metrics['like_count'] + reply.public_metrics['retweet_count']
-                            
-                            # Cache responses with good engagement
-                            if engagement_score >= 5:
-                                self.response_cache['responses'][reply_id] = {
-                                    'text': reply.text,
-                                    'author_id': reply.author_id,
-                                    'engagement_score': engagement_score,
-                                    'time': current_time.isoformat(),
-                                    'used': False
-                                }
+                    # Store only high-engagement responses
+                    for reply in replies:
+                        engagement_score = reply.public_metrics['like_count'] + reply.public_metrics['retweet_count'] * 2
+                        if engagement_score >= 5:  # Only store responses with good engagement
+                            data['responses'][str(reply.id)] = {
+                                'text': reply.text,
+                                'user': reply.author_id,
+                                'engagement_score': engagement_score
+                            }
                     
-                    # Mark question as checked
-                    qdata['responses_checked'] = True
+                    data['responses_checked'] = True
                     
                 except Exception as e:
-                    print(f"Error getting replies for {qid}: {e}")
+                    logger.error(f"Error getting replies for {tweet_id}: {e}")
                     continue
             
             self._save_response_cache()
             
         except Exception as e:
-            print(f"Error checking responses: {e}")
+            logger.error(f"Error checking responses: {e}")
     
     def run_cycle(self):
         """Run a single tweet cycle"""
@@ -301,34 +348,46 @@ class TwitterBot:
             if not self._can_post_tweet():
                 return
             
-            # Get tweet content from Elion
-            tweet = self.elion.generate_tweet()
+            # Get tweet content
+            tweet_type = self.elion.get_next_tweet_type()
+            tweet = None
+            
+            if tweet_type == 'market_analysis':
+                data = self.elion.process_market_alpha()
+                tweet = self.elion.content.generate('market_analysis', data)
+            elif tweet_type == 'gem_alpha':
+                data = self.elion.process_gem_alpha()
+                tweet = self.elion.content.generate('gem_alpha', data)
+            elif tweet_type == 'portfolio_update':
+                data = self.elion.process_portfolio_update()
+                tweet = self.elion.content.generate('portfolio_update', data)
+            elif tweet_type == 'market_aware':
+                data = self.elion.process_market_aware()
+                tweet = self.elion.content.generate('market_aware', data)
+            elif tweet_type == 'shill_review':
+                data = self.elion.process_shill_review()
+                tweet = self.elion.content.generate('shill_review', data)
+            
             if tweet:
                 # Post tweet
                 response = self.api.create_tweet(text=tweet)
-                print(f"Tweet posted: {tweet}")
+                logger.info(f"Tweet posted: {tweet}")
                 
                 # Update counts
                 self._update_post_counts()
                 
-                # Let Elion analyze performance
-                self.elion.analyze_performance({
-                    'id': response.data['id'],
-                    'text': tweet,
-                    'timestamp': datetime.utcnow().isoformat()
-                })
-                
-                # Track if it's a question
+                # Store in response cache if it's a question
                 if '?' in tweet:
-                    self.response_cache['questions'][str(response.data['id'])] = {
+                    tweet_id = str(response.data['id'])
+                    self.response_cache['questions'][tweet_id] = {
                         'text': tweet,
                         'time': datetime.utcnow().isoformat(),
                         'responses_checked': False,
-                        'topic': self._detect_topic(tweet)
+                        'responses': {}
                     }
                     self._save_response_cache()
         except Exception as e:
-            print(f"Error in tweet cycle: {e}")
+            logger.error(f"Error in tweet cycle: {e}")
             self.retry_count += 1
             if self.retry_count < self.max_retries:
                 time.sleep(self.base_wait * (2 ** self.retry_count))  # Exponential backoff
@@ -336,96 +395,108 @@ class TwitterBot:
             else:
                 self.retry_count = 0
     
-    def _detect_topic(self, text):
-        """Detect tweet topic"""
-        text = text.lower()
-        if any(word in text for word in ['meme', 'doge', 'pepe']):
-            return 'memes'
-        elif any(word in text for word in ['ai', 'artificial', 'intelligence', 'bot']):
-            return 'ai'
-        else:
-            return 'gamefi'  # Default to gamefi
-    
     def engagement_cycle(self):
         """Run engagement cycle"""
         try:
+            # Check if we can post
             if not self._can_post_tweet():
                 return
             
-            # First try to feature a good response
+            # Try to feature a response first
             featured = False
-            if self.response_cache and random.random() < 0.3:  # 30% chance to feature response
-                for cache_type in ['responses']:
-                    items = [
-                        (tid, data) for tid, data in self.response_cache[cache_type].items()
-                        if not data['used'] and data['engagement_score'] >= 5
-                    ]
-                    if items:
-                        tweet_id, data = random.choice(items)
-                        try:
-                            # Get username
-                            author = self.api.get_user(id=data['author_id'])
-                            username = f"@{author.data.username}"
-                            
-                            # Create feature tweet
-                            tweet = f"Great insight from {username}! {data['text'][:100]}..."
-                            response = self.api.create_tweet(
-                                text=tweet,
-                                in_reply_to_tweet_id=tweet_id
-                            )
-                            print(f"Featured response: {tweet}")
-                            
-                            # Mark as used
-                            data['used'] = True
-                            self._save_response_cache()
-                            
-                            featured = True
-                            break
-                        except Exception as e:
-                            print(f"Error featuring response: {e}")
-                            continue
+            for tweet_id, data in self.response_cache['questions'].items():
+                if not data.get('used', False):
+                    # Get responses with high engagement
+                    for response_id, response_data in data.get('responses', {}).items():
+                        if response_data.get('engagement_score', 0) > 10:  # Threshold for featuring
+                            try:
+                                # Generate response using Elion
+                                tweet = self.elion.engage_with_community({
+                                    'type': 'feature_response',
+                                    'user': response_data['user'],
+                                    'content': response_data['text']
+                                })
+                                
+                                # Post response
+                                self.api.create_tweet(
+                                    text=tweet,
+                                    in_reply_to_tweet_id=tweet_id
+                                )
+                                logger.info(f"Featured response: {tweet}")
+                                
+                                # Mark as used
+                                data['used'] = True
+                                self._save_response_cache()
+                                
+                                featured = True
+                                break
+                            except Exception as e:
+                                logger.error(f"Error featuring response: {e}")
+                                continue
             
             # If no feature, do regular engagement
             if not featured:
-                engagement = self.elion.handle_engagement()
+                engagement = self.elion.engage_with_community({
+                    'type': 'regular_engagement',
+                    'content': None
+                })
                 if engagement:
-                    response = self.api.create_tweet(
-                        text=engagement['text'],
-                        in_reply_to_tweet_id=engagement.get('reply_to')
+                    self.api.create_tweet(
+                        text=engagement,
+                        in_reply_to_tweet_id=None
                     )
-                    print(f"Engagement tweet posted: {engagement['text']}")
+                    logger.info(f"Engagement tweet posted: {engagement}")
             
             self._update_post_counts()
             
         except Exception as e:
-            print(f"Error in engagement cycle: {e}")
+            logger.error(f"Error in engagement cycle: {e}")
     
     def run(self):
-        """Run the bot continuously"""
-        print("Starting Twitter bot...")
-        while True:
-            try:
+        """Main bot loop - runs continuously"""
+        try:
+            logger.info("Starting bot...")
+            
+            # Run initial cycles
+            self.run_cycle()
+            self.engagement_cycle()
+            
+            # Main loop
+            while True:
                 schedule.run_pending()
-                time.sleep(60)
-            except KeyboardInterrupt:
-                print("\nShutting down...")
-                break
-            except Exception as e:
-                print(f"Error: {e}")
-                time.sleep(300)  # Wait 5 minutes before retrying
+                time.sleep(60)  # Check every minute
+                
+        except KeyboardInterrupt:
+            logger.info("\nBot stopped by user")
+        except Exception as e:
+            logger.error(f"Error in main loop: {e}")
+            if self.retry_count < self.max_retries:
+                self.retry_count += 1
+                wait_time = self.base_wait * (2 ** self.retry_count)
+                logger.info(f"Retrying in {wait_time} minutes...")
+                time.sleep(wait_time * 60)
+                self.run()
+            else:
+                logger.info("Max retries reached. Exiting...")
+                sys.exit(1)
 
 def main():
-    print("Initializing Twitter AI Bot...")
+    logger.info("Initializing Twitter AI Bot...")
+    logger.info("Checking environment variables...")
     
     # Check environment variables
-    if not check_environment():
+    if not check_environment_variables():
+        logger.error("Environment check failed")
         sys.exit(1)
     
+    logger.info("Starting healthcheck server...")
     # Start healthcheck server for Railway
     start_healthcheck()
     
+    logger.info("Creating bot instance...")
     # Start bot
-    bot = TwitterBot()
+    bot = AIGamingBot()
+    logger.info("Starting bot...")
     bot.run()
 
 if __name__ == "__main__":
