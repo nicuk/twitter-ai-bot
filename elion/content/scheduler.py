@@ -45,75 +45,73 @@ class TweetScheduler:
         # Reset cycle if completed
         if self.cycle_count >= self.total_cycles:
             self._reset_cycle()
-            
-        # Calculate remaining posts needed for each type
-        remaining_posts = {
-            tweet_type: int(self.total_cycles * ratio) - self.type_counts[tweet_type]
-            for tweet_type, ratio in self.type_distribution.items()
+        
+        # Don't try failed types again in same cycle
+        available_types = {
+            t: r for t, r in self.type_distribution.items()
+            if t not in self.failed_types
         }
         
-        # Filter out completed types and failed types
-        available_types = [t for t, r in remaining_posts.items() if r > 0 and t not in self.failed_types]
-        
         if not available_types:
-            if self.failed_types:  # If we have failed types, try them again
-                available_types = list(self.failed_types)
-                self.failed_types.clear()
-            else:
-                self._reset_cycle()
-                return self.get_next_tweet_type()
-            
-        # Prioritize based on time of day if possible
-        priority_type = None
+            self._reset_cycle()
+            available_types = self.type_distribution
         
-        # Portfolio updates every 4 hours
-        if current_hour % 4 == 0 and 'portfolio_update' in available_types:
-            priority_type = 'portfolio_update'
-            
-        # Market analysis (non-Twitter) at 9 AM and 4 PM
-        elif current_hour in [9, 16] and 'market_analysis' in available_types:
-            priority_type = 'market_analysis'
-            
-        # Gem alpha at 11 AM and 6 PM
-        elif current_hour in [11, 18] and 'gem_alpha' in available_types:
-            priority_type = 'gem_alpha'
-            
-        # Shill review at 2 PM
-        elif current_hour == 14 and 'shill_review' in available_types:
-            priority_type = 'shill_review'
-            
-        # Market awareness posts
-        elif current_hour % 3 == 0 and 'market_aware' in available_types:  # Every 3 hours
-            priority_type = 'market_aware'
-            
-        # Market search (Twitter) at 10 AM and 5 PM
-        elif current_hour in [10, 17] and 'market_search' in available_types:
-            priority_type = 'market_search'
-            
-        # Use priority type if available and timing is right
-        if priority_type and priority_type in available_types:
-            tweet_type = priority_type
-        else:
-            # Otherwise, randomly select from available types
-            # Weight by remaining posts needed
-            weights = [remaining_posts[t] for t in available_types]
-            tweet_type = random.choices(available_types, weights=weights, k=1)[0]
-            
+        # Adjust for time of day
+        if 0 <= current_hour < 6:  # Night hours
+            available_types = {
+                t: r * 0.5 for t, r in available_types.items()
+                if t not in ['market_analysis', 'portfolio_update']
+            }
+        elif 14 <= current_hour < 20:  # Peak hours
+            available_types = {
+                t: r * 1.5 for t, r in available_types.items()
+                if t in ['market_analysis', 'gem_alpha']
+            }
+        
+        # Calculate remaining posts
+        remaining = {
+            t: int(self.total_cycles * r) - self.type_counts[t]
+            for t, r in available_types.items()
+        }
+        
+        # Filter out completed types
+        remaining = {t: r for t, r in remaining.items() if r > 0}
+        
+        if not remaining:
+            return None
+        
+        # Select type weighted by remaining posts
+        total = sum(remaining.values())
+        weights = [r/total for r in remaining.values()]
+        tweet_type = random.choices(list(remaining.keys()), weights=weights)[0]
+        
         # Update counts
         self.type_counts[tweet_type] += 1
         self.cycle_count += 1
         
         return tweet_type
         
-    def mark_type_failed(self, tweet_type: str):
-        """Mark a tweet type as failed so it will be tried last"""
+    def handle_failed_tweet(self, tweet_type: str):
+        """Handle a failed tweet attempt"""
         self.failed_types.add(tweet_type)
-        # Revert the count since it failed
-        if self.type_counts[tweet_type] > 0:
-            self.type_counts[tweet_type] -= 1
-        if self.cycle_count > 0:
-            self.cycle_count -= 1
         
+        # If too many failures, adjust distribution
+        if len(self.failed_types) > len(self.type_distribution) / 2:
+            self._adjust_distribution()
+
+    def _adjust_distribution(self):
+        """Adjust type distribution based on failures"""
+        working_types = set(self.type_distribution.keys()) - self.failed_types
+        if not working_types:
+            return
+        
+        # Redistribute failed type percentages
+        failed_total = sum(self.type_distribution[t] for t in self.failed_types)
+        boost = failed_total / len(working_types)
+        
+        for t in working_types:
+            self.type_distribution[t] += boost
+
     def get_cycle_progress(self) -> Dict:
         """Get current cycle progress"""
         return {

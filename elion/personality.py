@@ -341,3 +341,33 @@ class ElionPersonality:
     def enhance_tweet(self, content: str, persona: str = None, context: Dict = None, user: str = None) -> str:
         """Wrapper for enhance_with_persona specifically for tweets"""
         return self.enhance_with_persona(content, persona, context, user)
+
+    def generate(self, content_type: str, context: Dict = None) -> str:
+        """Generate a personality-enhanced response
+        
+        Args:
+            content_type: Type of content to generate
+            context: Additional context for generation
+            
+        Returns:
+            Generated content string with personality
+        """
+        # Get personality components
+        hook = random.choice(self.character.get('hooks', {}).get(content_type, []))
+        style = self.character['traits']
+        
+        # Build response
+        response = []
+        if hook and style['confident'] > 0.5:
+            response.append(hook)
+            
+        # Add context-based elements
+        if context:
+            if 'market_mood' in context and style['empathetic'] > 0.5:
+                response.append(f"Market feeling {context['market_mood']}")
+                
+        # Add personality flair
+        if style['quirky'] > 0.7:
+            response.append("🤖✨")
+            
+        return "\n".join(response)

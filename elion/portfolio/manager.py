@@ -194,3 +194,22 @@ class PortfolioManager:
             'positions': positions,
             'closed_positions': self.closed_positions
         }
+
+    def get_portfolio_update(self) -> Dict:
+        """Get a formatted portfolio update for tweets
+        
+        Returns:
+            Dict containing portfolio stats and recent activity
+        """
+        stats = self.get_portfolio_stats()
+        
+        # Format portfolio update
+        update = {
+            'total_value': stats['total_value'],
+            'daily_pnl': stats.get('daily_pnl', 0.0),
+            'weekly_pnl': stats.get('weekly_pnl', 0.0),
+            'top_performers': stats['positions'][:3],
+            'recent_trades': self.closed_positions[-3:] if self.closed_positions else []
+        }
+        
+        return update

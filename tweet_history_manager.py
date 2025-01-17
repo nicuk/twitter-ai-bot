@@ -89,21 +89,43 @@ class TweetHistoryManager:
             print(f"Error loading history: {e}")
             return default_history
     
+    def _cleanup_old_history(self):
+        """Cleanup old history entries to manage file size"""
+        if not self.history.get('tweets'):
+            return
+        
+        # Keep only last 1000 tweets
+        if len(self.history['tweets']) > 1000:
+            self.history['tweets'] = self.history['tweets'][-1000:]
+        
+        # Convert sets to lists for JSON serialization
+        if 'engagement_stats' in self.history:
+            if isinstance(self.history['engagement_stats'].get('mentioned_by'), set):
+                self.history['engagement_stats']['mentioned_by'] = list(
+                    self.history['engagement_stats']['mentioned_by']
+                )
+
     def _save_history(self):
-        """Save tweet history to file"""
+        """Save tweet history to file with cleanup"""
+        self._cleanup_old_history()
+        
+        # Create backup before saving
+        if os.path.exists(self.history_file):
+            backup_file = f"{self.history_file}.bak"
+            try:
+                os.replace(self.history_file, backup_file)
+            except OSError:
+                pass
+        
         try:
-            # Convert set to list for JSON serialization
-            history_to_save = self.history.copy()
-            history_to_save['tokens'] = list(self.history['tokens'])
-            
             with open(self.history_file, 'w') as f:
-                json.dump(history_to_save, f, indent=2)
-                
-            # Update file size in metadata
-            self.history['metadata']['file_size'] = os.path.getsize(self.history_file)
+                json.dump(self.history, f, indent=2)
         except Exception as e:
-            print(f"Error saving history: {e}")
-    
+            # Restore from backup if save fails
+            if os.path.exists(backup_file):
+                os.replace(backup_file, self.history_file)
+            raise e
+
     def add_tweet(self, tweet_content: str, persona: str, category: str):
         """Add a new tweet to history"""
         # Extract mentioned tokens
@@ -125,7 +147,7 @@ class TweetHistoryManager:
         self.history['tokens'].update(tokens)
         
         # Cleanup if needed
-        self._cleanup_if_needed()
+        self._cleanup_old_history()
         self._save_history()
     
     def _cleanup_if_needed(self):
