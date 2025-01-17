@@ -50,17 +50,18 @@ class MetaLlamaComponent:
             try:
                 result = response.json()
                 if 'choices' in result and len(result['choices']) > 0:
-                    return result['choices'][0]['message']['content'].strip()
-                return "Error: No response generated"
-            except Exception as e:
-                return f"Error: Failed to parse response - {str(e)}"
+                    message = result['choices'][0].get('message', {})
+                    return message.get('content', '').strip()
+                return "Error: No valid response from API"
+            except json.JSONDecodeError:
+                return "Error: Invalid JSON response"
                 
-        except requests.exceptions.Timeout:
-            return "Error: API request timed out"
-        except requests.exceptions.RequestException as e:
-            return f"Error: API request failed - {str(e)}"
+        except requests.RequestException as e:
+            print(f"Error making API request: {e}")
+            return f"Error: {str(e)}"
         except Exception as e:
-            return f"Error: Unexpected error - {str(e)}"
+            print(f"Unexpected error: {e}")
+            return f"Error: {str(e)}"
 
     def __call__(self, prompt: str, **kwargs) -> str:
         """Make the class callable"""

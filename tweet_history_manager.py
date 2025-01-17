@@ -4,9 +4,12 @@ Tweet History Manager - Stores and manages Elion's tweet history for better vari
 
 import json
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import random
+
+logger = logging.getLogger(__name__)
 
 class TweetHistoryManager:
     def __init__(self, history_file: str = "elion_tweet_history.json"):
@@ -48,17 +51,20 @@ class TweetHistoryManager:
             
         if 'engagement_stats' not in self.history:
             self.history['engagement_stats'] = {
-                'mentioned_by': set(),
+                'mentioned_by': [],  # Changed from set() to list
+                'replied_to': [],    # Changed from set() to list
+                'retweeted_by': [],  # Changed from set() to list
+                'liked_by': [],       # Changed from set() to list
                 'top_interactions': {},
                 'viral_tweets': [],
                 'project_performance': {}
             }
             
         if 'favorite_humans' not in self.history:
-            self.history['favorite_humans'] = set()
+            self.history['favorite_humans'] = []
             
         if 'running_jokes' not in self.history:
-            self.history['running_jokes'] = set()
+            self.history['running_jokes'] = []
             
         if 'hot_projects' not in self.history:
             self.history['hot_projects'] = []
@@ -74,15 +80,15 @@ class TweetHistoryManager:
             'tweets': [],
             'personas': {},  # Track persona usage
             'topics': {},    # Track topic frequency
-            'tokens': set()  # Track mentioned tokens
+            'tokens': []  # Track mentioned tokens
         }
         
         try:
             if os.path.exists(self.history_file):
                 with open(self.history_file, 'r') as f:
                     history = json.load(f)
-                    # Convert tokens back to set
-                    history['tokens'] = set(history.get('tokens', []))
+                    # Convert tokens back to list
+                    history['tokens'] = history.get('tokens', [])
                     return history
             return default_history
         except Exception as e:
@@ -100,43 +106,70 @@ class TweetHistoryManager:
         
         # Convert sets to lists for JSON serialization
         if 'engagement_stats' in self.history:
-            if isinstance(self.history['engagement_stats'].get('mentioned_by'), set):
+            if isinstance(self.history['engagement_stats'].get('mentioned_by'), list):
                 self.history['engagement_stats']['mentioned_by'] = list(
                     self.history['engagement_stats']['mentioned_by']
+                )
+            if isinstance(self.history['engagement_stats'].get('replied_to'), list):
+                self.history['engagement_stats']['replied_to'] = list(
+                    self.history['engagement_stats']['replied_to']
+                )
+            if isinstance(self.history['engagement_stats'].get('retweeted_by'), list):
+                self.history['engagement_stats']['retweeted_by'] = list(
+                    self.history['engagement_stats']['retweeted_by']
+                )
+            if isinstance(self.history['engagement_stats'].get('liked_by'), list):
+                self.history['engagement_stats']['liked_by'] = list(
+                    self.history['engagement_stats']['liked_by']
                 )
 
     def _save_history(self):
         """Save tweet history to file with cleanup"""
         self._cleanup_old_history()
         
-        # Create backup before saving
-        if os.path.exists(self.history_file):
-            backup_file = f"{self.history_file}.bak"
-            try:
-                os.replace(self.history_file, backup_file)
-            except OSError:
-                pass
+        # Create temp file for atomic save
+        temp_file = f"{self.history_file}.tmp"
+        backup_file = f"{self.history_file}.bak"
         
         try:
-            with open(self.history_file, 'w') as f:
+            # Write to temp file first
+            with open(temp_file, 'w') as f:
                 json.dump(self.history, f, indent=2)
+            
+            # Create backup of current file
+            if os.path.exists(self.history_file):
+                try:
+                    os.replace(self.history_file, backup_file)
+                except OSError:
+                    pass
+            
+            # Atomic replace of current file with temp file
+            os.replace(temp_file, self.history_file)
+            
+            # Remove backup if everything succeeded
+            if os.path.exists(backup_file):
+                os.remove(backup_file)
+                
         except Exception as e:
             # Restore from backup if save fails
             if os.path.exists(backup_file):
                 os.replace(backup_file, self.history_file)
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
             raise e
 
     def add_tweet(self, tweet_content: str, persona: str, category: str):
         """Add a new tweet to history"""
         # Extract mentioned tokens
-        tokens = set(word for word in tweet_content.split() if word.startswith('$'))
+        tokens = [word for word in tweet_content.split() if word.startswith('$')]
         
         tweet = {
             'content': tweet_content,
             'persona': persona,
             'category': category,
             'timestamp': datetime.now().isoformat(),
-            'tokens': list(tokens)
+            'tokens': tokens
         }
         
         # Update statistics
@@ -144,7 +177,7 @@ class TweetHistoryManager:
         self.history['metadata']['total_tweets'] += 1
         self.history['personas'][persona] = self.history['personas'].get(persona, 0) + 1
         self.history['topics'][category] = self.history['topics'].get(category, 0) + 1
-        self.history['tokens'].update(tokens)
+        self.history['tokens'].extend(tokens)
         
         # Cleanup if needed
         self._cleanup_old_history()
@@ -152,35 +185,49 @@ class TweetHistoryManager:
     
     def _cleanup_if_needed(self):
         """Cleanup old tweets if file size exceeds limit"""
-        if os.path.exists(self.history_file):
-            current_size = os.path.getsize(self.history_file)
-            if current_size > self.max_history_size:
-                # Keep last 1000 tweets
-                self.history['tweets'] = self.history['tweets'][-1000:]
-                # Reset statistics
-                self._recalculate_statistics()
-                self._save_history()
+        if not os.path.exists(self.history_file):
+            return
+            
+        current_size = os.path.getsize(self.history_file)
+        if current_size > self.max_history_size:
+            logger.info(f"History file size ({current_size} bytes) exceeds limit ({self.max_history_size} bytes). Cleaning up...")
+            
+            # Calculate how many tweets to keep based on average tweet size
+            avg_tweet_size = current_size / len(self.history['tweets'])
+            keep_count = int(self.max_history_size * 0.8 / avg_tweet_size)  # Target 80% of max size
+            keep_count = max(keep_count, 1000)  # Keep at least 1000 tweets
+            
+            # Keep most recent tweets
+            self.history['tweets'] = self.history['tweets'][-keep_count:]
+            
+            # Reset statistics
+            self._recalculate_statistics()
+            self._save_history()
+            
+            # Log cleanup results
+            new_size = os.path.getsize(self.history_file)
+            logger.info(f"Cleanup complete. New size: {new_size} bytes, Kept {len(self.history['tweets'])} tweets")
     
     def _recalculate_statistics(self):
         """Recalculate all statistics from current tweets"""
         self.history['personas'] = {}
         self.history['topics'] = {}
-        self.history['tokens'] = set()
+        self.history['tokens'] = []
         
         for tweet in self.history['tweets']:
             self.history['personas'][tweet['persona']] = self.history['personas'].get(tweet['persona'], 0) + 1
             self.history['topics'][tweet['category']] = self.history['topics'].get(tweet['category'], 0) + 1
-            self.history['tokens'].update(set(tweet.get('tokens', [])))
+            self.history['tokens'].extend(tweet.get('tokens', []))
     
-    def get_recent_tokens(self, days: int = 3) -> set:
+    def get_recent_tokens(self, days: int = 3) -> list:
         """Get tokens mentioned in last N days"""
         cutoff = datetime.now() - timedelta(days=days)
-        recent_tokens = set()
+        recent_tokens = []
         
         for tweet in self.history['tweets']:
             tweet_date = datetime.fromisoformat(tweet['timestamp'])
             if tweet_date > cutoff:
-                recent_tokens.update(set(tweet.get('tokens', [])))
+                recent_tokens.extend(tweet.get('tokens', []))
         
         return recent_tokens
     
@@ -546,21 +593,21 @@ class TweetHistoryManager:
 
     def add_favorite_human(self, username: str):
         """Add a human to Elion's favorites list"""
-        self.history['favorite_humans'].add(username)
+        self.history['favorite_humans'].append(username)
         self._save_history()
 
     def add_running_joke(self, joke: str):
         """Add a running joke to track"""
-        self.history['running_jokes'].add(joke)
+        self.history['running_jokes'].append(joke)
         self._save_history()
 
     def get_favorite_humans(self, limit: int = 5) -> list:
         """Get Elion's favorite humans to interact with"""
-        return list(self.history['favorite_humans'])[:limit]
+        return self.history['favorite_humans'][:limit]
 
     def get_running_jokes(self, limit: int = 3) -> list:
         """Get active running jokes to reference"""
-        return list(self.history['running_jokes'])[:limit]
+        return self.history['running_jokes'][:limit]
 
     def add_hot_project(self, symbol: str, roi: float):
         """Add hot project to tracking"""

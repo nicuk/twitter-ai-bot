@@ -103,7 +103,7 @@ class CryptoRankAPI:
         """
         # Get a larger sample size to filter from
         params = {
-            'limit': 500,  # Get more coins to filter from
+            'limit': 30,  # Reduced from 500 to save credits
             'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
         }
         response = self._make_request('currencies', params)
@@ -152,7 +152,7 @@ class CryptoRankAPI:
         """
         # Get a larger sample size to filter from
         params = {
-            'limit': 500,
+            'limit': 20,  # Reduced from 500 to save credits
             'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
         }
         response = self._make_request('currencies', params)
@@ -294,7 +294,7 @@ class DataSources:
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 50,  # Reduced from 200 to save daily credits
+                'limit': 20,  # Reduced from 25 to save credits
                 'convert': 'USD'
             })
             
@@ -416,9 +416,9 @@ class DataSources:
     def get_alpha_opportunities(self) -> List[Dict]:
         """Get potential alpha opportunities from CryptoRank"""
         try:
-            # Get top 500 coins by volume
+            # Get top 30 coins by volume
             params = {
-                'limit': 500,
+                'limit': 30,  # Reduced from 500 to save credits
                 'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             }
             
@@ -490,38 +490,12 @@ class DataSources:
             print(f"Error in get_alpha_opportunities: {str(e)}")
             return []
             
-    def _get_market_condition(self, data: List[Dict]) -> Tuple[str, float, float]:
-        """Determine market condition based on BTC performance"""
-        try:
-            # Get BTC data
-            btc_data = next((coin for coin in data if coin['symbol'] == 'BTC'), None)
-            if not btc_data:
-                return 'NEUTRAL', 0, 0
-                
-            # Get price changes
-            btc_24h = btc_data.get('priceChange24h', 0)
-            btc_7d = btc_data.get('priceChange7d', 0)
-            
-            # Determine market condition
-            if btc_24h >= 5 or btc_7d >= 10:
-                condition = 'HOT'
-            elif btc_24h <= -5 or btc_7d <= -10:
-                condition = 'COLD'
-            else:
-                condition = 'NEUTRAL'
-                
-            return condition, btc_24h, btc_7d
-            
-        except Exception as e:
-            print(f"Error getting market condition: {e}")
-            return 'NEUTRAL', 0, 0
-
     def get_shill_opportunities(self) -> Dict:
         """Get shill review opportunities"""
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 100,
+                'limit': 20,  # Reduced from 100 to save credits
                 'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             })
             
@@ -569,7 +543,7 @@ class DataSources:
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 200,  # Increased limit for better search
+                'limit': 30,  # Reduced from 200 to save credits
                 'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             })
             
@@ -626,6 +600,87 @@ class DataSources:
             
         except Exception as e:
             print(f"Error searching market data: {e}")
+            return {'error': str(e)}
+
+    def _get_market_condition(self, data: List[Dict]) -> Tuple[str, float, float]:
+        """Determine market condition based on BTC performance"""
+        try:
+            # Get BTC data
+            btc_data = next((coin for coin in data if coin['symbol'] == 'BTC'), None)
+            if not btc_data:
+                return 'NEUTRAL', 0, 0
+                
+            # Get price changes
+            btc_24h = btc_data.get('priceChange24h', 0)
+            btc_7d = btc_data.get('priceChange7d', 0)
+            
+            # Determine market condition
+            if btc_24h >= 5 or btc_7d >= 10:
+                condition = 'HOT'
+            elif btc_24h <= -5 or btc_7d <= -10:
+                condition = 'COLD'
+            else:
+                condition = 'NEUTRAL'
+                
+            return condition, btc_24h, btc_7d
+            
+        except Exception as e:
+            print(f"Error getting market condition: {e}")
+            return 'NEUTRAL', 0, 0
+
+    def get_shill_review(self, symbol: str = None) -> Dict:
+        """Get shill review data for a token"""
+        try:
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 20,  # Reduced from 100 to save credits
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
+            })
+            
+            if 'error' in response:
+                return {'error': response['error']}
+                
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # If symbol provided, find that specific coin
+            if symbol:
+                coin = next((c for c in data if c['symbol'].lower() == symbol.lower()), None)
+                if not coin:
+                    return {'error': f'Token {symbol} not found'}
+                coins = [coin]
+            else:
+                # Otherwise get top gainers
+                coins = sorted(data, key=lambda x: float(x.get('priceChange24h', 0)), reverse=True)[:5]
+                
+            # Format review data
+            reviews = []
+            for coin in coins:
+                if self._is_stablecoin(coin['symbol'], float(coin.get('price', 0)), float(coin.get('priceChange24h', 0))):
+                    continue
+                    
+                review = {
+                    'project': {
+                        'symbol': coin['symbol'],
+                        'name': coin.get('name', '')
+                    },
+                    'metrics': {
+                        'price': float(coin.get('price', 0)),
+                        'price_change_24h': float(coin.get('priceChange24h', 0)),
+                        'price_change_7d': float(coin.get('priceChange7d', 0)),
+                        'market_cap': float(coin.get('marketCap', 0)) / 1e6,  # Convert to millions
+                        'volume_24h': float(coin.get('volume24h', 0)) / 1e6,  # Convert to millions
+                        'volume_to_mcap': float(coin.get('volume24h', 0)) / float(coin.get('marketCap', 1))
+                    }
+                }
+                reviews.append(review)
+                
+            return reviews[0] if reviews else {'error': 'No suitable tokens found'}
+            
+        except Exception as e:
+            print(f"Error getting shill review: {e}")
             return {'error': str(e)}
 
     def get_latest_news(self) -> List[Dict]:
@@ -746,7 +801,7 @@ class DataSources:
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 100,
+                'limit': 30,  # Reduced from 200 to save credits
                 'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             })
             
@@ -791,7 +846,7 @@ class DataSources:
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 100,
+                'limit': 20,  # Reduced from 100 to save credits
                 'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             })
             

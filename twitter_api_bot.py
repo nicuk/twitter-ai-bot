@@ -5,16 +5,17 @@ from datetime import datetime, timedelta
 import requests
 import os
 import json
-import random
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
 import logging
 from dotenv import load_dotenv
-import uuid
+from typing import Dict, List, Optional
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+import sys
+
 from elion.elion import Elion
-from tweet_history_manager import TweetHistoryManager
 from elion.data_sources import DataSources
-from elion.components import MetaLlamaComponent
+from tweet_history_manager import TweetHistoryManager
+from custom_llm import MetaLlamaComponent
 
 # Configure logging
 logging.basicConfig(
@@ -73,11 +74,16 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def start_healthcheck(port=8080):
     """Start health check server"""
-    server = HTTPServer(('', port), HealthCheckHandler)
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
-    thread.start()
-    logger.info(f"Health check server started on port {port}")
+    try:
+        server = HTTPServer(('', port), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.daemon = True
+        thread.start()
+        logger.info(f"Health check server started on port {port}")
+    except Exception as e:
+        logger.error(f"Failed to start health check server: {e}")
+        # Don't fail the whole bot if health check fails
+        pass
 
 class AIGamingBot:
     def __init__(self):
@@ -147,11 +153,11 @@ class AIGamingBot:
     
     def _setup_schedule(self):
         """Set up the tweet schedule"""
-        # Main content schedule (every 4 hours)
-        schedule.every(4).hours.do(self.run_cycle)
+        # Main content schedule (every 6 hours)
+        schedule.every(6).hours.do(self.run_cycle)
         
-        # Engagement schedule (every 2 hours, offset by 1 hour from main content)
-        schedule.every(2).hours.do(self.engagement_cycle)
+        # Engagement schedule (every 4 hours)
+        schedule.every(4).hours.do(self.engagement_cycle)
         
         # Response checking (every hour)
         schedule.every(1).hours.do(self.check_responses)
@@ -486,15 +492,22 @@ def main():
         logger.error("Environment check failed")
         sys.exit(1)
     
-    logger.info("Starting healthcheck server...")
-    # Start healthcheck server for Railway
-    start_healthcheck()
-    
-    logger.info("Creating bot instance...")
-    # Start bot
-    bot = AIGamingBot()
-    logger.info("Starting bot...")
-    bot.run()
+    try:
+        logger.info("Starting healthcheck server...")
+        # Start healthcheck server for Railway
+        start_healthcheck()
+        
+        logger.info("Creating bot instance...")
+        # Start bot
+        bot = AIGamingBot()
+        logger.info("Starting bot...")
+        bot.run()
+    except KeyboardInterrupt:
+        logger.info("\nBot stopped by user")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
