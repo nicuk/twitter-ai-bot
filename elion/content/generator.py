@@ -18,6 +18,8 @@ class ContentGenerator:
         try:
             if content_type == 'market_analysis':
                 return self._format_market_analysis(data)
+            elif content_type == 'market_search':
+                return self._format_market_search(data)
             elif content_type == 'gem_alpha':
                 return self._format_gem_alpha(data)
             elif content_type == 'portfolio_update':
@@ -150,6 +152,32 @@ class ContentGenerator:
         except Exception as e:
             print(f"Error formatting market awareness: {e}")
             return "Error formatting market awareness"
+    
+    def _format_market_search(self, data: Dict) -> str:
+        """Format market search tweet based on Twitter data"""
+        try:
+            if not isinstance(data, list):
+                return "Error: Invalid market search data format"
+                
+            content = "🔍 Market Pulse\n\n"
+            
+            # Add viral tweets analysis
+            if data:
+                content += "Trending Topics:\n"
+                for tweet in data[:3]:  # Top 3 viral tweets
+                    username = tweet.get('username', 'Unknown')
+                    text = tweet.get('text', '').split('\n')[0][:100]  # First line, truncated
+                    engagement = tweet.get('engagement_score', 0)
+                    content += f"• @{username}: {text}...\n"
+                    content += f"  Engagement: {engagement:,}\n\n"
+            else:
+                content += "No significant market movements detected."
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting market search: {e}")
+            return "Error formatting market search"
     
     def _format_shill_review(self, data: Dict) -> str:
         """Format shill review tweet"""

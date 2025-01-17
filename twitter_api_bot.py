@@ -346,47 +346,34 @@ class AIGamingBot:
     def run_cycle(self):
         """Run a single tweet cycle"""
         try:
+            # Check if we can post
             if not self._can_post_tweet():
                 return
             
-            # Get tweet content
-            tweet_type = self.elion.get_next_tweet_type()
-            tweet = None
+            # Get next tweet type from scheduler
+            tweet_type = self.elion.scheduler.get_next_tweet_type()
             
-            if tweet_type == 'market_analysis':
-                data = self.elion.process_market_alpha()
-                tweet = self.elion.content.generate('market_analysis', data)
-            elif tweet_type == 'gem_alpha':
-                data = self.elion.process_gem_alpha()
-                tweet = self.elion.content.generate('gem_alpha', data)
-            elif tweet_type == 'portfolio_update':
-                data = self.elion.process_portfolio_update()
-                tweet = self.elion.content.generate('portfolio_update', data)
-            elif tweet_type == 'market_aware':
-                data = self.elion.process_market_aware()
-                tweet = self.elion.content.generate('market_aware', data)
-            elif tweet_type == 'shill_review':
-                data = self.elion.process_shill_review()
-                tweet = self.elion.content.generate('shill_review', data)
-            
-            if tweet:
+            try:
+                # Generate tweet content based on type
+                tweet = self.elion.generate_tweet(tweet_type)
+                
                 # Post tweet
-                response = self.api.create_tweet(text=tweet)
-                logger.info(f"Tweet posted: {tweet}")
-                
-                # Update counts
-                self._update_post_counts()
-                
-                # Store in response cache if it's a question
-                if '?' in tweet:
-                    tweet_id = str(response.data['id'])
-                    self.response_cache['questions'][tweet_id] = {
-                        'text': tweet,
-                        'time': datetime.utcnow().isoformat(),
-                        'responses_checked': False,
-                        'responses': {}
-                    }
-                    self._save_response_cache()
+                if tweet:
+                    self.api.create_tweet(text=tweet)
+                    logger.info(f"Tweet posted: {tweet}")
+                    self._update_post_counts()
+                else:
+                    logger.warning(f"No tweet content generated for type: {tweet_type}")
+                    self.elion.scheduler.mark_type_failed(tweet_type)
+                    
+            except tweepy.errors.TooManyRequests:
+                logger.warning(f"Rate limit hit for tweet type: {tweet_type}")
+                self.elion.scheduler.mark_type_failed(tweet_type)
+                # Let Tweepy handle the rate limit sleep
+                pass
+            except Exception as e:
+                logger.error(f"Error posting tweet: {e}")
+                self.elion.scheduler.mark_type_failed(tweet_type)
         except Exception as e:
             logger.error(f"Error in tweet cycle: {e}")
             self.retry_count += 1

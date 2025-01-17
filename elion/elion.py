@@ -60,7 +60,7 @@ class Elion:
             self.metrics['engagements'].append(engagement_score)
             
             # Analyze market impact if applicable
-            if tweet_data.get('type') in ['market_alpha', 'gem_alpha']:
+            if tweet_data.get('type') in ['market_analysis', 'market_search', 'gem_alpha']:
                 self.metrics['market_analysis'].append({
                     'tweet': tweet_data,
                     'market_response': self.market_analyzer.analyze_market_conditions()
@@ -114,6 +114,32 @@ class Elion:
     def get_next_tweet_type(self) -> str:
         """Get the next tweet type based on timing and distribution rules"""
         return self.scheduler.get_next_tweet_type()
+
+    def generate_tweet(self, tweet_type: str) -> Optional[str]:
+        """Generate tweet content based on type"""
+        try:
+            data = None
+            
+            if tweet_type == 'market_analysis':
+                data = self.data_sources.get_market_alpha()
+            elif tweet_type == 'market_search':
+                data = self.data_sources._get_viral_tweets()
+            elif tweet_type == 'gem_alpha':
+                data = self.data_sources.get_alpha_opportunities()
+            elif tweet_type == 'portfolio_update':
+                data = self.portfolio.get_portfolio_update()
+            elif tweet_type == 'market_aware':
+                data = self.market_analyzer.analyze_market_conditions()
+            elif tweet_type == 'shill_review':
+                data = self.data_sources.get_shill_opportunities()
+                
+            if data:
+                return self.content.generate(tweet_type, data)
+            return None
+            
+        except Exception as e:
+            print(f"Error generating tweet: {e}")
+            return None
 
     def process_market_alpha(self) -> Optional[str]:
         """Process market data and return alpha"""
