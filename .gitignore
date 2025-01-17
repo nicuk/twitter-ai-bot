@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *.pyc
+*$py.class
+*.so
 
 # Environment files
 .env
@@ -10,16 +12,16 @@ __pycache__/
 # IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # Logs
 *.log
+logs/
 
 # Cache files
 market_intel_cache.json
 elion_tweet_history.json
-
-# C extensions
-*.so
 
 # Distribution / packaging
 .Python
@@ -39,7 +41,6 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -65,6 +66,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+test_*.py
+*_test.py
+tests/
+pytest_cache/
 
 # Translations
 *.mo
@@ -179,6 +184,9 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# License
+LICENSE
 
 # PyPI configuration file
 .pypirc

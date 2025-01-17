@@ -14,6 +14,7 @@ import uuid
 from elion.elion import Elion
 from tweet_history_manager import TweetHistoryManager
 from elion.data_sources import DataSources
+from elion.components import MetaLlamaComponent
 
 # Configure logging
 logging.basicConfig(
@@ -32,23 +33,29 @@ def check_environment_variables():
     """Check if all required environment variables are set"""
     logger.info("Checking required environment variables...")
     
-    required_vars = [
-        'TWITTER_CLIENT_ID',
-        'TWITTER_CLIENT_SECRET',
-        'TWITTER_ACCESS_TOKEN',
-        'TWITTER_ACCESS_TOKEN_SECRET',
-        'TWITTER_BEARER_TOKEN',
-        'AI_API_URL',
-        'AI_ACCESS_TOKEN',
-        'AI_MODEL_NAME'
-    ]
+    required_vars = {
+        'TWITTER_CLIENT_ID': 'Twitter API Key',
+        'TWITTER_CLIENT_SECRET': 'Twitter API Secret',
+        'TWITTER_ACCESS_TOKEN': 'Twitter Access Token',
+        'TWITTER_ACCESS_TOKEN_SECRET': 'Twitter Access Token Secret',
+        'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
+        'AI_ACCESS_TOKEN': 'AI API Access Token',
+        'AI_API_URL': 'AI API Base URL',
+        'AI_MODEL_NAME': 'AI Model Name',
+        'CRYPTORANK_API_KEY': 'CryptoRank API Key'
+    }
     
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    
+    missing_vars = []
+    for var, desc in required_vars.items():
+        if not os.getenv(var):
+            missing_vars.append(f"{desc} ({var})")
+            
     if missing_vars:
-        logger.error("Missing required environment variables: %s", missing_vars)
-        return False
-    
+        error_msg = "Missing required environment variables:\n"
+        error_msg += "\n".join(f"- {var}" for var in missing_vars)
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+        
     logger.info("All required environment variables present")
     return True
 
@@ -117,8 +124,14 @@ class AIGamingBot:
         logger.info("Twitter client initialized")
         
         # Initialize Elion
+        logger.info("Initializing Elion...")
         model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
-        self.elion = Elion(llm=model_name)
+        llm = MetaLlamaComponent(
+            api_key=os.getenv('AI_ACCESS_TOKEN'),
+            api_base=os.getenv('AI_API_URL')
+        )
+        self.elion = Elion(llm=llm)
+        logger.info("Elion initialized")
         
         # Initialize tweet history manager
         self.tweet_history = TweetHistoryManager()
@@ -342,42 +355,39 @@ class AIGamingBot:
     def run_cycle(self):
         """Run a single tweet cycle"""
         try:
-            # Check if we can post
             if not self._can_post_tweet():
+                logger.info("Skipping tweet cycle - rate limit reached")
                 return
-            
-            # Get next tweet type from scheduler
-            tweet_type = self.elion.scheduler.get_next_tweet_type()
-            
-            try:
-                # Generate tweet content based on type
-                tweet = self.elion.generate_tweet(tweet_type)
                 
-                # Post tweet
-                if tweet:
-                    self.api.create_tweet(text=tweet)
-                    logger.info(f"Tweet posted: {tweet}")
-                    self._update_post_counts()
-                else:
-                    logger.warning(f"No tweet content generated for type: {tweet_type}")
-                    self.elion.scheduler.mark_type_failed(tweet_type)
-                    
-            except tweepy.errors.TooManyRequests:
-                logger.warning(f"Rate limit hit for tweet type: {tweet_type}")
-                self.elion.scheduler.mark_type_failed(tweet_type)
-                # Let Tweepy handle the rate limit sleep
-                pass
-            except Exception as e:
-                logger.error(f"Error posting tweet: {e}")
-                self.elion.scheduler.mark_type_failed(tweet_type)
+            # Get next tweet type
+            tweet_type = self.elion.get_next_tweet_type()
+            logger.info(f"Generating {tweet_type} tweet...")
+            
+            # Try to generate tweet
+            tweet = self.elion.generate_tweet(tweet_type)
+            if not tweet:
+                logger.info(f"Failed to generate {tweet_type} tweet, will try again later")
+                return
+                
+            # Post tweet
+            logger.info("Posting tweet...")
+            response = self.api.create_tweet(text=tweet)
+            
+            if response and hasattr(response, 'data'):
+                tweet_id = response.data['id']
+                logger.info(f"Tweet posted successfully! ID: {tweet_id}")
+                
+                # Update tracking
+                self._update_post_counts()
+                self.tweet_history.add_tweet(tweet, tweet_type)
+                
+                # Save cache
+                self._save_cache()
+            else:
+                logger.error("Failed to post tweet")
+                
         except Exception as e:
             logger.error(f"Error in tweet cycle: {e}")
-            self.retry_count += 1
-            if self.retry_count < self.max_retries:
-                time.sleep(self.base_wait * (2 ** self.retry_count))  # Exponential backoff
-                self.run_cycle()  # Retry
-            else:
-                self.retry_count = 0
     
     def engagement_cycle(self):
         """Run engagement cycle"""

@@ -225,18 +225,18 @@ class DataSources:
             api_base=api_url
         )
         
-        # Initialize data sources
+        # Initialize CryptoRank API (optional)
         self.crypto_rank_api_key = os.getenv('CRYPTORANK_API_KEY')
-        if not self.crypto_rank_api_key:
-            raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
-            
-        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"  # Updated to v1
+        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"
         
         # Cache for API responses
         self._cache = {}
         
         # Initialize CryptoRank API
-        self.cryptorank_api = CryptoRankAPI()
+        if self.crypto_rank_api_key:
+            self.cryptorank_api = CryptoRankAPI()
+        else:
+            self.cryptorank_api = None
         
         # Initialize data caches with timestamps
         self.cache = {
@@ -294,7 +294,7 @@ class DataSources:
         try:
             # Get currencies data from CryptoRank
             response = self.cryptorank_api._make_request('currencies', {
-                'limit': 10,  # Just get top 10 for now
+                'limit': 50,  # Reduced from 200 to save daily credits
                 'convert': 'USD'
             })
             
@@ -306,6 +306,47 @@ class DataSources:
             if not data:
                 return {'error': 'No data found'}
                 
+            # Process all coins first
+            processed_coins = []
+            for coin in data:
+                try:
+                    symbol = coin['symbol']
+                    values = coin.get('values', {}).get('USD', {})
+                    
+                    price = float(values.get('price', 0))
+                    change_24h = float(values.get('percentChange24h', 0))
+                    volume = float(values.get('volume24h', 0))
+                    mcap = float(values.get('marketCap', 0))
+                    
+                    # Skip invalid data
+                    if price <= 0 or mcap <= 0:
+                        continue
+                        
+                    # Skip stablecoins and major coins
+                    if self._is_stablecoin(symbol, price, change_24h) or symbol in ['BTC', 'ETH', 'BNB', 'SOL']:
+                        continue
+                        
+                    # Gem criteria:
+                    # 1. >30% price increase
+                    # 2. Market cap between $5M and $100M
+                    # 3. 24h volume > $1M
+                    if (change_24h >= 30 and 
+                        5_000_000 <= mcap <= 100_000_000 and
+                        volume >= 1_000_000):
+                        processed_coins.append({
+                            'symbol': symbol,
+                            'price': price,
+                            'change_24h': change_24h,
+                            'volume': volume,
+                            'mcap': mcap
+                        })
+                except (ValueError, TypeError) as e:
+                    print(f"Error processing coin {coin.get('symbol')}: {e}")
+                    continue
+                    
+            # Sort by combination of market cap and volume
+            processed_coins.sort(key=lambda x: (x['change_24h'], x['volume']), reverse=True)
+            
             # Get BTC/ETH data
             btc = next((c for c in data if c['symbol'] == 'BTC'), None)
             eth = next((c for c in data if c['symbol'] == 'ETH'), None)
@@ -325,9 +366,10 @@ class DataSources:
                 'change_24h': float(eth.get('values', {}).get('USD', {}).get('percentChange24h', 0))
             }
             
-            # Print debug info
-            print(f"\nBTC Data: {btc_data}")
-            print(f"ETH Data: {eth_data}")
+            # Print debug info for top performers
+            print("\nTop Performing Coins:")
+            for coin in processed_coins[:3]:
+                print(f"{coin['symbol']}: ${coin['price']:.4f} | +{coin['change_24h']:.1f}% | Vol: ${coin['volume']:,.0f} | MCap: ${coin['mcap']:,.0f}")
             
             # Format market data
             market_data = {
@@ -338,7 +380,7 @@ class DataSources:
                 'total_mcap': sum(float(c.get('values', {}).get('USD', {}).get('marketCap', 0)) for c in data),
                 'total_volume': sum(float(c.get('values', {}).get('USD', {}).get('volume24h', 0)) for c in data),
                 'market_sentiment': self._get_market_sentiment(btc_data),
-                'top_gainers': []  # Skip for now
+                'top_gainers': processed_coins[:3]  # Include top 3 performing coins
             }
             
             return market_data

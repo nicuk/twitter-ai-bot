@@ -12,6 +12,9 @@ from .engagement import EngagementManager
 from .content.generator import ContentGenerator
 from .content.scheduler import TweetScheduler
 from .market_analyzer import MarketAnalyzer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Elion:
     """
@@ -193,140 +196,49 @@ class Elion:
             return False
 
     def get_next_tweet_type(self) -> str:
-        """Get the next tweet type based on timing and distribution rules"""
-        return self.scheduler.get_next_tweet_type()
+        """Get the next tweet type to generate"""
+        # Get available types based on data availability
+        available_types = ['shill_review', 'market_search']  # These don't need market data
+        
+        # Add market analysis if we have market data
+        if self.data_sources.crypto_rank_api_key:
+            available_types.append('market_analysis')
+            
+        # Get the least recently used type
+        type_times = self.scheduler.get_type_times()
+        available_types.sort(key=lambda t: type_times.get(t, 0))
+        
+        return available_types[0]
 
     def generate_tweet(self, tweet_type: str) -> Optional[str]:
-        """Generate tweet content based on type"""
+        """Generate a tweet of the specified type"""
         try:
-            data = None
-            
-            # Regular Scheduled Posts (50%)
-            if tweet_type == 'market_analysis':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                data = {'market_data': market_data, 'analysis': analysis}
-            elif tweet_type == 'market_search':
-                data = self.data_sources._get_viral_tweets()
-            elif tweet_type == 'gem_alpha':
-                data = self.data_sources.get_alpha_opportunities()
-            elif tweet_type == 'portfolio_update':
-                data = self.portfolio.get_portfolio_update()
-            elif tweet_type == 'market_aware':
-                data = self.market_analyzer.analyze_market_conditions()
-            elif tweet_type == 'shill_review':
-                data = self.data_sources.get_shill_opportunities()
-            
-            # Special Event Posts (30%)
-            elif tweet_type == 'breaking_alpha':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                news = self.data_sources.get_latest_news()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'news': news,
-                    'is_breaking': True
-                }
-            elif tweet_type == 'whale_alert':
-                market_data = self.data_sources.get_market_alpha()
-                # Look for large transactions in market data
-                data = {
-                    'market_data': market_data,
-                    'transaction_type': 'whale_movement'
-                }
-            elif tweet_type == 'technical_analysis':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'technical_indicators': True
-                }
-            elif tweet_type == 'controversial_thread':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                news = self.data_sources.get_latest_news()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'news': news,
-                    'controversial': True
-                }
-            elif tweet_type == 'giveaway':
-                data = {
-                    'type': 'giveaway',
-                    'market_condition': self.market_analyzer.analyze_market_conditions()
-                }
-            elif tweet_type == 'self_aware':
-                data = {
-                    'type': 'self_aware',
-                    'market_condition': self.market_analyzer.analyze_market_conditions(),
-                    'personality': self.personality.get_current_state()
-                }
-            elif tweet_type == 'ai_market_analysis':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                news = self.data_sources.get_latest_news()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'news': news,
-                    'ai_perspective': True
-                }
-            elif tweet_type == 'self_aware_thought':
-                data = {
-                    'type': 'self_aware_thought',
-                    'market_condition': self.market_analyzer.analyze_market_conditions(),
-                    'personality': self.personality.get_current_state()
-                }
-            
-            # Reactive Posts (20%)
-            elif tweet_type == 'market_response':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                news = self.data_sources.get_latest_news()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'news': news,
-                    'is_response': True
-                }
-            elif tweet_type == 'engagement_reply':
-                data = {
-                    'type': 'engagement',
-                    'market_condition': self.market_analyzer.analyze_market_conditions(),
-                    'personality': self.personality.get_current_state()
-                }
-            elif tweet_type == 'alpha_call':
-                opportunities = self.data_sources.get_alpha_opportunities()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                data = {
-                    'opportunities': opportunities,
-                    'analysis': analysis,
-                    'is_alpha_call': True
-                }
-            elif tweet_type == 'technical_alpha':
-                market_data = self.data_sources.get_market_alpha()
-                analysis = self.market_analyzer.analyze_market_conditions()
-                data = {
-                    'market_data': market_data,
-                    'analysis': analysis,
-                    'is_technical': True
-                }
+            # Skip market analysis if we don't have market data
+            if tweet_type == 'market_analysis' and not self.data_sources.crypto_rank_api_key:
+                logger.info("Skipping market analysis - no market data available")
+                return None
                 
+            # Get data for tweet
+            data = None
+            if tweet_type == 'market_analysis':
+                data = self.data_sources.get_market_data()
+            elif tweet_type == 'market_search':
+                data = {'query': 'defi'}  # Default search query
+                
+            # Generate tweet content
             if data:
                 content = self.content.generate(tweet_type, data)
                 if content and not content.startswith("Error"):
                     # Only return valid tweets
                     if self._validate_tweet(content):
                         return content
+                        
             # If we get here, the tweet type failed
             self.scheduler.mark_type_failed(tweet_type)
             return None
             
         except Exception as e:
-            print(f"Error generating tweet: {e}")
+            logger.error(f"Error generating {tweet_type} tweet: {e}")
             self.scheduler.mark_type_failed(tweet_type)
             return None
 

@@ -742,58 +742,44 @@ class TweetFormatters:
     }
 
     def format_market_analysis(self, data: Dict) -> str:
-        """Format market analysis tweet"""
+        """Format market analysis data into a tweet"""
         try:
-            if not isinstance(data, dict):
-                return "Error: Invalid market analysis data"
+            # Extract market data
+            btc_price = data.get('btc_price', 0)
+            eth_price = data.get('eth_price', 0)
+            btc_change = data.get('btc_change_24h', 0)
+            eth_change = data.get('eth_change_24h', 0)
+            sentiment = data.get('market_sentiment', 'neutral')
+            top_gainers = data.get('top_gainers', [])
+            
+            # Format price changes
+            btc_change_str = f"+{btc_change:.1f}%" if btc_change > 0 else f"{btc_change:.1f}%"
+            eth_change_str = f"+{eth_change:.1f}%" if eth_change > 0 else f"{eth_change:.1f}%"
+            
+            # Build tweet
+            tweet = f"🚀 Market Update 🚀\n\n"
+            tweet += f"BTC: ${btc_price:,.0f} ({btc_change_str})\n"
+            tweet += f"ETH: ${eth_price:,.0f} ({eth_change_str})\n\n"
+            
+            # Add sentiment
+            if sentiment == 'bullish':
+                tweet += "Market looking strong! 💪\n"
+            elif sentiment == 'bearish':
+                tweet += "Market showing weakness 📉\n"
+            else:
+                tweet += "Market in consolidation 🔄\n"
                 
-            # Format tweet
-            content = "🌟 MARKET UPDATE\n\n"
-            
-            # Add BTC/ETH prices
-            content += f"BTC: ${data.get('btc_price', 0):,.2f}\n"
-            content += f"ETH: ${data.get('eth_price', 0):,.2f}\n"
-            
-            # Add market metrics
-            content += f"Market Cap: ${data.get('total_mcap', 0)/1e9:,.0f}B\n"
-            content += f"24h Vol: ${data.get('total_volume', 0)/1e9:,.0f}B\n\n"
-            
-            # Add market sentiment
-            content += f"Sentiment: {data.get('market_sentiment', 'NEUTRAL')}\n\n"
-            
-            # Add top gainers
-            gainers = data.get('top_gainers', [])
-            if gainers:
-                content += "🚀 Top Gainers:\n"
-                for gainer in gainers:
-                    content += f"${gainer['symbol']}: {gainer['change_24h']:+.1f}%\n"
-                content += "\n"
-            
-            # Add fear & greed
-            content += f"Fear & Greed: {data.get('fear_greed', 50)}/100\n"
-            
-            # Get LLM analysis
-            prompt = (
-                f"Analyze this crypto market data:\n"
-                f"BTC Price: ${data.get('btc_price', 0):,.2f}\n"
-                f"ETH Price: ${data.get('eth_price', 0):,.2f}\n"
-                f"Market Cap: ${data.get('total_mcap', 0)/1e9:,.0f}B\n"
-                f"24h Vol: ${data.get('total_volume', 0)/1e9:,.0f}B\n"
-                f"BTC 24h: {data.get('btc_change_24h', 0):+.1f}%\n"
-                f"ETH 24h: {data.get('eth_change_24h', 0):+.1f}%\n"
-                "\nProvide a brief market analysis in 1-2 sentences."
-            )
-            analysis = self.personality.llm.generate(prompt)
-            
-            # Clean up analysis
-            analysis = analysis.strip()
-            if analysis.startswith('"') and analysis.endswith('"'):
-                analysis = analysis[1:-1]
-            
-            content += f"\nAnalysis: {analysis}"
-            
-            return content
+            # Add top performers if available
+            if top_gainers:
+                tweet += "\n🔥 Top Performers 🔥\n"
+                for coin in top_gainers:
+                    price = coin['price']
+                    change = coin['change_24h']
+                    symbol = coin['symbol']
+                    tweet += f"{symbol}: ${price:.4f} (+{change:.1f}%)\n"
+                    
+            return tweet
             
         except Exception as e:
             print(f"Error formatting market analysis: {e}")
-            return "Error formatting market analysis"
+            return None
