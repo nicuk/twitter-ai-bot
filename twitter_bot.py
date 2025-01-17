@@ -12,6 +12,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
+import tweepy
+from requests_oauthlib import OAuth1
 
 # Load environment variables
 load_dotenv()
@@ -20,8 +22,13 @@ class TwitterBot:
     def __init__(self):
         self.api_url = os.getenv('AI_API_URL')
         self.access_token = os.getenv('AI_ACCESS_TOKEN')
+        self.twitter_api_key = os.getenv('TWITTER_API_KEY')
+        self.twitter_api_secret = os.getenv('TWITTER_API_SECRET')
+        self.twitter_access_token = os.getenv('TWITTER_ACCESS_TOKEN')
+        self.twitter_access_secret = os.getenv('TWITTER_ACCESS_SECRET')
         self.setup_driver()
         self.logged_in = False
+        self.current_method = 'selenium'  # Start with Selenium
 
     def setup_driver(self):
         """Initialize Chrome driver with appropriate options"""
@@ -107,41 +114,110 @@ class TwitterBot:
             raise
 
     def post_tweet(self):
-        """Post a tweet using browser automation"""
-        if not self.logged_in:
-            self.login()
-
+        """Try different methods to post a tweet"""
+        methods = ['selenium', 'twitter_api', 'requests']
+        
+        # Generate tweet content
         tweet_content = self.generate_tweet()
         if not tweet_content:
+            print("Failed to generate tweet content, retrying in 5 minutes...")
+            time.sleep(300)
             return
-
-        try:
-            # Click on Tweet button
-            tweet_button = self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]'))
-            )
-            tweet_button.click()
             
-            # Enter tweet content
+        # Try each method until one succeeds
+        for method in methods:
+            try:
+                if method == 'selenium':
+                    success = self._post_tweet_selenium(tweet_content)
+                elif method == 'twitter_api':
+                    success = self._post_tweet_api(tweet_content)
+                else:  # requests
+                    success = self._post_tweet_requests(tweet_content)
+                    
+                if success:
+                    print(f"Successfully posted tweet using {method}")
+                    self.current_method = method  # Remember successful method
+                    return True
+                    
+            except Exception as e:
+                print(f"Error posting tweet using {method}: {e}")
+                continue
+                
+        print("All posting methods failed. Will retry on next schedule.")
+        return False
+        
+    def _post_tweet_selenium(self, tweet_content):
+        """Post tweet using Selenium browser automation"""
+        try:
+            if not self.logged_in:
+                self.login()
+                
+            self.driver.get('https://twitter.com/compose/tweet')
+            
             tweet_input = self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]'))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-text='true']"))
             )
             tweet_input.send_keys(tweet_content)
             
-            # Click Post button
-            post_button = self.wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="tweetButton"]'))
+            tweet_button = self.wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='tweetButton']"))
             )
-            post_button.click()
+            tweet_button.click()
             
-            print(f"Tweet posted successfully at {datetime.now()}")
-            time.sleep(5)  # Wait for tweet to be posted
+            time.sleep(5)
+            return True
             
         except Exception as e:
-            print(f"Error posting tweet: {e}")
-            # Refresh the page if there's an error
-            self.driver.refresh()
-            time.sleep(5)
+            print(f"Selenium posting failed: {e}")
+            self.logged_in = False
+            return False
+            
+    def _post_tweet_api(self, tweet_content):
+        """Post tweet using Twitter API"""
+        try:
+            auth = tweepy.OAuthHandler(self.twitter_api_key, self.twitter_api_secret)
+            auth.set_access_token(self.twitter_access_token, self.twitter_access_secret)
+            api = tweepy.API(auth)
+            
+            api.update_status(tweet_content)
+            return True
+            
+        except Exception as e:
+            print(f"Twitter API posting failed: {e}")
+            return False
+            
+    def _post_tweet_requests(self, tweet_content):
+        """Post tweet using direct HTTP requests"""
+        try:
+            # Twitter API v2 endpoint
+            url = "https://api.twitter.com/2/tweets"
+            
+            # Create headers with OAuth 1.0a authentication
+            auth = OAuth1(
+                self.twitter_api_key,
+                self.twitter_api_secret,
+                self.twitter_access_token,
+                self.twitter_access_secret
+            )
+            
+            # Prepare request
+            headers = {
+                'Content-Type': 'application/json',
+            }
+            
+            data = {
+                'text': tweet_content
+            }
+            
+            # Make request
+            response = requests.post(url, headers=headers, auth=auth, json=data)
+            response.raise_for_status()
+            
+            return True
+            
+        except Exception as e:
+            print(f"Direct requests posting failed: {e}")
+            return False
 
     def cleanup(self):
         """Clean up resources"""
@@ -151,26 +227,55 @@ class TwitterBot:
 def main():
     """Main function to run the Twitter bot"""
     bot = TwitterBot()
+    retry_delay = 300  # 5 minutes
+    max_retries = 3
     
-    try:
-        # Initial login
-        bot.login()
-        
-        # Schedule tweets every 4 hours
-        schedule.every(4).hours.do(bot.post_tweet)
-        
-        # Post initial tweet
-        bot.post_tweet()
-        
-        # Keep the script running
-        while True:
-            schedule.run_pending()
-            time.sleep(60)
+    while True:
+        try:
+            # Initial login
+            if not bot.logged_in:
+                bot.login()
             
-    except KeyboardInterrupt:
-        print("\nShutting down bot...")
-    finally:
-        bot.cleanup()
+            # Schedule tweets every 4 hours
+            schedule.every(4).hours.do(bot.post_tweet)
+            
+            # Post initial tweet if not already posted
+            if not hasattr(bot, 'initial_tweet_posted'):
+                bot.post_tweet()
+                bot.initial_tweet_posted = True
+            
+            # Keep the script running
+            while True:
+                schedule.run_pending()
+                time.sleep(60)
+                
+        except KeyboardInterrupt:
+            print("\nShutting down bot...")
+            break
+            
+        except Exception as e:
+            print(f"\nError occurred: {str(e)}")
+            print(f"Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            
+            # Reset login status on error
+            bot.logged_in = False
+            
+            # Increment retry counter
+            if not hasattr(bot, 'retry_count'):
+                bot.retry_count = 0
+            bot.retry_count += 1
+            
+            # If max retries reached, wait longer
+            if bot.retry_count >= max_retries:
+                print("Max retries reached. Waiting 30 minutes before trying again...")
+                time.sleep(1800)  # 30 minutes
+                bot.retry_count = 0
+            
+            continue
+            
+        finally:
+            bot.cleanup()
 
 if __name__ == "__main__":
     main()

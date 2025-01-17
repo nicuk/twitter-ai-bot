@@ -593,3 +593,77 @@ class DataSources:
         except Exception as e:
             print(f"Error getting latest news: {e}")
             return []
+
+    def _get_viral_tweets(self, limit: int = 10) -> List[Dict]:
+        """Get viral tweets from followed accounts"""
+        try:
+            # Get tweets from key influencers
+            viral_tweets = []
+            
+            # Define viral thresholds
+            viral_thresholds = {
+                'likes': 1000,
+                'retweets': 100,
+                'replies': 50
+            }
+            
+            # Search tweets from each influencer
+            for influencer in self.key_influencers:
+                try:
+                    # Search recent tweets from this influencer
+                    tweets = self._search_tweets(f"from:{influencer}", limit=20)
+                    
+                    # Filter for viral tweets
+                    for tweet in tweets:
+                        if (tweet.get('likes', 0) >= viral_thresholds['likes'] or
+                            tweet.get('retweets', 0) >= viral_thresholds['retweets'] or
+                            tweet.get('replies', 0) >= viral_thresholds['replies']):
+                            viral_tweets.append(tweet)
+                            
+                except Exception as e:
+                    print(f"Error getting tweets from {influencer}: {e}")
+                    continue
+            
+            # Sort by engagement (likes + retweets * 2 + replies * 3)
+            viral_tweets.sort(
+                key=lambda x: (
+                    x.get('likes', 0) + 
+                    x.get('retweets', 0) * 2 + 
+                    x.get('replies', 0) * 3
+                ),
+                reverse=True
+            )
+            
+            return viral_tweets[:limit]
+            
+        except Exception as e:
+            print(f"Error getting viral tweets: {e}")
+            return []
+
+    def _search_tweets(self, query: str, limit: int = 10) -> List[Dict]:
+        """Search for tweets using Twitter API"""
+        try:
+            # Initialize Twitter client
+            client = tweepy.Client(
+                bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
+                consumer_key=os.getenv('TWITTER_CLIENT_ID'),
+                consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
+                access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+                access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+            )
+            
+            # Search tweets
+            tweets = client.search_recent_tweets(
+                query=query,
+                max_results=limit,
+                tweet_fields=['created_at', 'public_metrics']
+            )
+            
+            if not tweets.data:
+                return []
+                
+            return [tweet.data for tweet in tweets.data]
+            
+        except Exception as e:
+            print(f"Error searching tweets: {e}")
+            return []

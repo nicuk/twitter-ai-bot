@@ -18,6 +18,30 @@ class ElionPersonality:
             'viral_moments': {}   # Track successful viral content
         }
         
+        # Templates for different types of content
+        self.templates = {
+            'market_analysis': [
+                "Market Update 🎯\n\n{analysis}\n\nConfidence: {confidence}",
+                "Quick Alpha 🔥\n\n{analysis}\n\nSignals: {signals}",
+                "Market Intel 🧠\n\n{analysis}\n\nKey Points:\n{points}"
+            ],
+            'alpha_call': [
+                "🚨 ALPHA LEAK 🚨\n\n{alpha}\n\nConfidence: {confidence}",
+                "⚡️ DETECTED IN MEMPOOL ⚡️\n\n{alpha}\n\nSignals:\n{signals}",
+                "🎯 HIGH CONVICTION PLAY 🎯\n\n{alpha}\n\nRationale:\n{rationale}"
+            ],
+            'market_awareness': [
+                "Market Pulse 📊\n\n{awareness}\n\nTrends:\n{trends}",
+                "Sentiment Check 🌡️\n\n{awareness}\n\nMetrics:\n{metrics}",
+                "Market Vibes 🌊\n\n{awareness}\n\nSignals:\n{signals}"
+            ],
+            'engagement': [
+                "👀 {message}",
+                "💡 {message}",
+                "🤔 {message}"
+            ]
+        }
+        
         # Personality development
         self.character = {
             'core_values': {
@@ -369,7 +393,7 @@ class ElionPersonality:
         # Format with context
         return template.format(
             context=context,
-            emoji=random.choice(self.emojis) if self.emojis else "✨",
+            emoji=random.choice(self.speech_patterns['emojis'].values()) if self.speech_patterns['emojis'] else "✨",
             hashtag=random.choice(self.hashtags) if self.hashtags else "#crypto"
         )
 
