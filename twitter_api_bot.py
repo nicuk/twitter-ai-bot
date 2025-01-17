@@ -7,13 +7,13 @@ from dotenv import load_dotenv
 import os
 import random
 import json
-from elion_personality import ElionPersonality, generate_elion_tweet, generate_elion_reply
-from tweet_history_manager import TweetHistoryManager
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import re
 import uuid
+from elion.elion import Elion
+from tweet_history_manager import TweetHistoryManager
 from market_intel_gatherer import MarketIntelGatherer
 
 # Load test environment variables
@@ -84,6 +84,21 @@ class AIGamingBot:
         )
         print("Twitter client initialized")
         
+        # Initialize Elion's core components
+        self.elion = Elion()
+        
+        # Initialize history manager
+        self.history_manager = TweetHistoryManager()
+        
+        # Try to initialize market intel gatherer
+        try:
+            self.intel_gatherer = MarketIntelGatherer()
+            self.has_market_intel = True
+            print("Market intel gatherer initialized successfully")
+        except ImportError:
+            print("Market intel not available, using backup content generation")
+            self.has_market_intel = False
+        
         # Track rate limit info for different endpoints
         self.rate_limits = {
             'search': {
@@ -131,9 +146,6 @@ class AIGamingBot:
         # Track last search time and category
         self.last_search_time = datetime.utcnow() - timedelta(minutes=15)
         self.current_category_index = 0
-        
-        # Initialize Elion's history manager
-        self.history_manager = TweetHistoryManager()
         
         # Search queries for different types of market intelligence
         self.search_queries = {
@@ -213,18 +225,6 @@ class AIGamingBot:
         # Initialize response cache
         self.response_cache_file = 'response_cache.json'
         self.response_cache = self._load_response_cache()
-        
-        # Try to initialize market intel gatherer
-        try:
-            self.intel_gatherer = MarketIntelGatherer()
-            self.has_market_intel = True
-            print("Market intel gatherer initialized successfully")
-        except ImportError:
-            print("Market intel not available, using backup content generation")
-            self.has_market_intel = False
-        
-        # Initialize personality
-        self.personality = ElionPersonality()
         
         # Track successful calls
         self.track_record = {
@@ -608,7 +608,7 @@ class AIGamingBot:
                 "Strategic partnerships"
             ]
             
-            template = random.choice(self.personality.content_strategies['alpha_calls']['templates'])
+            template = random.choice(self.elion.content_strategies['alpha_calls']['templates'])
             return template.format(
                 project=project,
                 comparison_project=random.choice(comparison_projects),
@@ -655,7 +655,7 @@ class AIGamingBot:
                 "token unlock"
             ]
             
-            template = random.choice(self.personality.content_strategies['whale_tracking']['templates'])
+            template = random.choice(self.elion.content_strategies['whale_tracking']['templates'])
             return template.format(
                 project=project,
                 amount=random.choice(amounts),
@@ -692,7 +692,7 @@ class AIGamingBot:
                 "Partnership pipeline"
             ]
             
-            template = random.choice(self.personality.content_strategies['controversy']['templates'])
+            template = random.choice(self.elion.content_strategies['controversy']['templates'])
             return template.format(
                 project=project,
                 controversial_take=random.choice(takes),
@@ -730,7 +730,7 @@ class AIGamingBot:
                 "Zero-knowledge proofs"
             ]
             
-            template = random.choice(self.personality.content_strategies['technical_alpha']['templates'])
+            template = random.choice(self.elion.content_strategies['technical_alpha']['templates'])
             return template.format(
                 project=project,
                 metric1=random.choice(metrics),
@@ -1050,141 +1050,89 @@ class AIGamingBot:
     def generate_tweet(self):
         """Generate market intelligence tweet using Meta Llama and gathered intel"""
         try:
-            # Get unused market intel
-            unused_intel = [x for x in self.market_intel if not x.get('used', False)]
-            context = ""
-            category = ""
+            # Get market context and mood
+            context = self._get_market_context()
+            market_mood = self._get_market_mood()
             
-            if unused_intel:
-                # Use the most engaging piece of intel
-                intel = max(unused_intel, 
-                           key=lambda x: (x.get('metrics', {}).get('like_count', 0) + 
-                                        x.get('metrics', {}).get('retweet_count', 0)))
-                context = f"Category: {intel.get('category', 'ai_gaming')}\nTrend: {intel.get('text', '')}"
-                category = intel.get('category', 'ai_gaming')
-                intel['used'] = True
-                self._save_cached_intel()
-            else:
-                # Fallback to random category if no intel available
-                category = random.choice(list(self.search_queries.keys()))
-                context = f"Category: {category}\nGenerate a viral tweet about recent developments in {category}."
-            
-            print(f"\nGenerating tweet with context:\n{context}")
-            
-            # Get market mood from history
-            market_mood = self.history_manager.get_market_mood()
-            
-            # Generate tweet with Elion's personality
-            headers = {
-                'Authorization': f'Bearer {self.ai_token}',
-                'Content-Type': 'application/json'
-            }
-            
-            # Get tweet content from Elion
-            prompt = generate_elion_tweet(context, market_mood)
-            
-            data = {
-                "messages": [{
-                    "role": "system",
-                    "content": prompt
-                }],
-                "model": self.model_name,
-                "max_tokens": 100,
-                "temperature": 0.7
-            }
-            
-            print("Making request to AI API...")
-            response = requests.post(self.ai_url + "/chat/completions", headers=headers, json=data)
-            response.raise_for_status()
-            
-            tweet_content = response.json()['choices'][0]['message']['content'].strip()
-            print(f"\nGenerated tweet ({len(tweet_content)} chars):")
-            print(tweet_content)
-            
-            # Check for similarity with recent tweets
-            if self.history_manager.is_recent_duplicate(tweet_content):
-                print("[WARNING] Too similar to recent tweet, will try again")
-                return False
-            
-            if len(tweet_content) > 280:
-                print("[WARNING] Tweet too long, will try again")
-                return False
-            
-            # Add to history before posting
-            persona = self.history_manager.suggest_persona(category)
-            self.history_manager.add_tweet(tweet_content, persona, category)
-            
-            return tweet_content
+            # Generate tweet using Elion's personality
+            content = self.elion.generate_tweet(context, market_mood)
+            return content
             
         except Exception as e:
             print(f"Error generating tweet: {e}")
-            return self._generate_backup_tweet()
-    
-    def _generate_backup_tweet(self):
-        """Generate engaging crypto content when API or data is unavailable"""
+            return None
+
+    def generate_engagement_reply(self, tweet):
+        """Generate a personality-driven reply to a tweet"""
         try:
-            # List of evergreen crypto topics and takes
-            backup_content = {
-                'crypto_wisdom': [
-                    " Crypto Trading Alpha:\n\nBest traders don't chase pumps.\nThey accumulate in silence.\nThey sell into FOMO.\n\nLike for more wisdom ",
-                    " Crypto Rules:\n\n- Research before APE\n- DCA > FOMO\n- Patience = Profit\n\nWho needs this reminder? ",
-                    " 3 Rules of Crypto:\n\n1. Always DYOR\n2. Never FOMO at ATH\n3. Take profits\n\nSimple but effective "
-                ],
-                'crypto_psychology': [
-                    " Crypto Truth:\n\nBear markets make you rich\nBull markets make you money\n\nAre you accumulating? ",
-                    " Crypto Psychology 101:\n\nFear = Opportunity\nGreed = Risk\nPatience = Profit\n\nSave this ",
-                    " Remember:\n\nWhen market is fearful = Buy\nWhen market is greedy = Sell\nWhen market is quiet = Research"
-                ],
-                'blockchain_tech': [
-                    " Future of Crypto:\n\nL2s + AI integration\nZK privacy layers\nAI-powered DeFi\n\nThe future is clear ",
-                    " Blockchain Alert:\n\nZK tech adoption growing\nL2 TVL increasing\nAI integration expanding\n\nConnect the dots ",
-                    " Next Crypto Wave:\n\nAI-powered trading\nZK privacy\nL2 scaling\n\nPosition accordingly "
-                ],
-                'crypto_community': [
-                    " Crypto Community Tips:\n\n- Add value daily\n- Network quietly\n- Share alpha freely\n\nWho's building? ",
-                    " Your Crypto Strategy:\n\n1. Find your niche\n2. Share genuine alpha\n3. Network strategically\n\nSimple but effective ",
-                    " Crypto Truth:\n\nValue providers win long-term\nNoise makers fade away\n\nChoose your path "
-                ]
+            # Get engagement level
+            metrics = {
+                'likes': tweet.public_metrics['like_count'] if hasattr(tweet, 'public_metrics') else 0,
+                'retweets': tweet.public_metrics['retweet_count'] if hasattr(tweet, 'public_metrics') else 0,
+                'replies': tweet.public_metrics['reply_count'] if hasattr(tweet, 'public_metrics') else 0
             }
+            engagement_level = self._get_engagement_level(metrics)
             
-            # Pick random category and content
-            category = random.choice(list(backup_content.keys()))
-            tweet = random.choice(backup_content[category])
-            
-            return tweet
+            # Generate reply using Elion's personality
+            reply = self.elion.generate_reply(tweet.text, engagement_level)
+            return reply
             
         except Exception as e:
-            print(f"Error generating backup tweet: {e}")
-            return " Focus on crypto value. Not noise.\n\nWho agrees? "
-            
-    def _generate_market_aware_tweet(self):
-        """Generate market-aware content without API dependency"""
+            print(f"Error generating reply: {e}")
+            return None
+
+    def post_engagement_reply(self):
+        """Post a reply to a followed account's tweet"""
         try:
-            # Predefined high-value projects and sectors
-            key_projects = ['BTC', 'ETH', 'SOL', 'MATIC', 'ARB', 'OP']
-            key_sectors = ['L2s', 'AI', 'GameFi', 'DeFi', 'ZK', 'RWA']
+            # Check if we've hit daily engagement limit
+            if self.rate_limits['timeline']['daily_engagement_posts'] >= self.rate_limits['timeline']['max_daily_engagement']:
+                print("Daily engagement post limit reached")
+                return False
             
-            templates = [
-                " {project} looking interesting here\n\nKey levels:\n Support: {support}\n Target: {target}\n\nThoughts? ",
-                " {sector} sector heating up\n\nWatch for:\n Volume spikes\n Whale moves\n Accumulation\n\nReady? ",
-                " {project} vs {project2}\n\nWhich wins Q1?\n\nLike = {project}\nRT = {project2}\n\nReason in replies ",
-                " Building in {sector}?\n\nDM me if you need:\n- Tech review\n- Architecture feedback\n- Security check\n\nLets build "
-            ]
+            # Get recent timeline tweets
+            timeline_tweets = self.get_timeline_tweets()
+            if not timeline_tweets:
+                return False
             
-            # Generate tweet with predefined data
-            template = random.choice(templates)
-            return template.format(
-                project=random.choice(key_projects),
-                project2=random.choice(key_projects),
-                sector=random.choice(key_sectors),
-                support=f"${random.randint(20, 100)}K",
-                target=f"${random.randint(100, 500)}K"
+            # Sort by engagement potential (likes + retweets)
+            timeline_tweets.sort(
+                key=lambda x: (x.public_metrics['like_count'] + x.public_metrics['retweet_count']) if hasattr(x, 'public_metrics') else 0,
+                reverse=True
             )
             
+            # Try to generate replies until we find a good one
+            for tweet in timeline_tweets:
+                reply = self.generate_engagement_reply(tweet)
+                if reply:
+                    # Post the reply
+                    response = self.api.create_tweet(
+                        text=reply,
+                        in_reply_to_tweet_id=tweet['id']
+                    )
+                    
+                    if response:
+                        # Update engagement post count
+                        self.rate_limits['timeline']['daily_engagement_posts'] += 1
+                        print(f"\nPosted engagement reply ({self.rate_limits['timeline']['daily_engagement_posts']}/{self.rate_limits['timeline']['max_daily_engagement']} today)")
+                        return True
+            
+            return False
+            
         except Exception as e:
-            print(f"Error generating market-aware tweet: {e}")
-            return self._generate_backup_tweet()
-    
+            print(f"Error posting engagement reply: {e}")
+            return False
+
+    def _should_reset_engagement_count(self):
+        """Check if we should reset the daily engagement post count"""
+        current_time = datetime.utcnow()
+        last_reset = self.rate_limits['timeline'].get('last_reset')
+        
+        if not last_reset or current_time.date() > last_reset.date():
+            self.rate_limits['timeline']['daily_engagement_posts'] = 0
+            self.rate_limits['timeline']['last_reset'] = current_time
+            return True
+        return False
+
     def should_wait_for_rate_limit(self, endpoint='search'):
         """Check if we should wait for rate limit reset without making API calls"""
         if endpoint not in self.rate_limits:
@@ -1222,81 +1170,6 @@ class AIGamingBot:
         except Exception as e:
             print(f"Error fetching timeline: {e}")
             return []
-    
-    def generate_engagement_reply(self, tweet):
-        """Generate a personality-driven reply to a tweet"""
-        try:
-            # Get tweet context
-            tweet_text = tweet['text']
-            metrics = tweet['metrics']
-            
-            # Determine engagement level
-            engagement_level = self._get_engagement_level(metrics)
-            
-            # Generate reply using Elion's personality
-            reply = generate_elion_reply(
-                tweet_text,
-                engagement_level=engagement_level,
-                personality=self.personality
-            )
-            
-            return reply
-            
-        except Exception as e:
-            print(f"Error generating reply: {e}")
-            return None
-
-    def post_engagement_reply(self):
-        """Post a reply to a followed account's tweet"""
-        try:
-            # Check if we've hit daily engagement limit
-            if self.rate_limits['timeline']['daily_engagement_posts'] >= self.rate_limits['timeline']['max_daily_engagement']:
-                print("Daily engagement post limit reached")
-                return False
-            
-            # Get recent timeline tweets
-            timeline_tweets = self.get_timeline_tweets()
-            if not timeline_tweets:
-                return False
-            
-            # Sort by engagement potential (likes + retweets)
-            timeline_tweets.sort(
-                key=lambda x: x['metrics']['like_count'] + x['metrics']['retweet_count'],
-                reverse=True
-            )
-            
-            # Try to generate replies until we find a good one
-            for tweet in timeline_tweets:
-                reply = self.generate_engagement_reply(tweet)
-                if reply:
-                    # Post the reply
-                    response = self.api.create_tweet(
-                        text=reply,
-                        in_reply_to_tweet_id=tweet['id']
-                    )
-                    
-                    if response:
-                        # Update engagement post count
-                        self.rate_limits['timeline']['daily_engagement_posts'] += 1
-                        print(f"\nPosted engagement reply ({self.rate_limits['timeline']['daily_engagement_posts']}/{self.rate_limits['timeline']['max_daily_engagement']} today)")
-                        return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"Error posting engagement reply: {e}")
-            return False
-
-    def _should_reset_engagement_count(self):
-        """Check if we should reset the daily engagement post count"""
-        current_time = datetime.utcnow()
-        last_reset = self.rate_limits['timeline'].get('last_reset')
-        
-        if not last_reset or current_time.date() > last_reset.date():
-            self.rate_limits['timeline']['daily_engagement_posts'] = 0
-            self.rate_limits['timeline']['last_reset'] = current_time
-            return True
-        return False
 
     def run(self):
         """Main bot loop - runs continuously"""

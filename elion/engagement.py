@@ -520,3 +520,163 @@ class EngagementManager:
             if tweet['final_metrics'].get(factor, 0) >= threshold:
                 patterns.append(factor)
         return patterns
+
+    def generate_response(self, tweet_text: str, engagement_level: str) -> str:
+        """Generate an engaging response based on tweet text and engagement level"""
+        try:
+            # Analyze tweet content
+            analysis = self._analyze_tweet_content(tweet_text)
+            
+            # Get response template based on analysis and engagement
+            template = self._get_response_template(analysis, engagement_level)
+            
+            # Generate response using template
+            response = template.format(
+                insight=self._generate_insight(analysis),
+                agreement=self._generate_agreement(analysis),
+                question=self._generate_followup(analysis)
+            )
+            
+            # Track for optimization
+            self._track_engagement_attempt(tweet_text, response, engagement_level)
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error generating response: {e}")
+            return "Interesting point! What are your thoughts on recent market developments? 🤔"
+
+    def _analyze_tweet_content(self, tweet_text: str) -> Dict:
+        """Analyze tweet content for key topics and sentiment"""
+        return {
+            'topics': self._extract_topics(tweet_text),
+            'sentiment': self._analyze_sentiment(tweet_text),
+            'key_points': self._extract_key_points(tweet_text)
+        }
+
+    def _get_response_template(self, analysis: Dict, engagement_level: str) -> str:
+        """Get appropriate response template based on analysis and engagement level"""
+        templates = {
+            'high': [
+                "{insight}\n\n{agreement}\n\n{question} 🚀",
+                "Fascinating analysis! {insight}\n\n{agreement}\n\nCurious: {question} 🤔",
+                "You're onto something big!\n\n{insight}\n\n{agreement}\n\n{question} 👀"
+            ],
+            'medium': [
+                "{agreement}\n\n{insight}\n\n{question} 💡",
+                "Interesting point!\n\n{insight}\n\n{question} 🤔",
+                "{agreement}\n\nMy analysis: {insight}\n\n{question} 📊"
+            ],
+            'low': [
+                "{agreement}\n\n{question} 🤔",
+                "Interesting! {insight}\n\n{question} 💭",
+                "{agreement} What are your thoughts on {question} 🌟"
+            ]
+        }
+        
+        return random.choice(templates.get(engagement_level, templates['low']))
+
+    def _generate_insight(self, analysis: Dict) -> str:
+        """Generate an insightful comment based on tweet analysis"""
+        topics = analysis.get('topics', [])
+        if not topics:
+            return "The market dynamics here are fascinating"
+            
+        insights = {
+            'defi': [
+                "DeFi TVL patterns suggest growing institutional interest",
+                "Smart money is flowing into innovative DeFi protocols",
+                "DeFi 2.0 is revolutionizing capital efficiency"
+            ],
+            'nft': [
+                "NFT trading volumes indicate a shift in collector behavior",
+                "The NFT market is evolving beyond PFPs",
+                "Gaming NFTs are showing strong fundamentals"
+            ],
+            'gaming': [
+                "Gaming tokens are outperforming in user retention",
+                "Web3 gaming is attracting traditional developers",
+                "Play-to-earn mechanics are getting more sophisticated"
+            ],
+            'ai': [
+                "AI integration is creating new market inefficiencies to exploit",
+                "AI-powered DeFi is showing promising early results",
+                "The convergence of AI and crypto is just beginning"
+            ]
+        }
+        
+        for topic in topics:
+            if topic in insights:
+                return random.choice(insights[topic])
+        
+        return "The data suggests some interesting market movements"
+
+    def _generate_agreement(self, analysis: Dict) -> str:
+        """Generate an agreement statement based on sentiment"""
+        sentiment = analysis.get('sentiment', 'neutral')
+        
+        agreements = {
+            'positive': [
+                "Couldn't agree more!",
+                "You're absolutely right about this!",
+                "This is exactly what my analysis shows!"
+            ],
+            'negative': [
+                "Valid concerns, and my data supports this view.",
+                "You've identified a crucial issue here.",
+                "Important point about the risks."
+            ],
+            'neutral': [
+                "Interesting perspective!",
+                "This aligns with some patterns I've observed.",
+                "You've highlighted something important here."
+            ]
+        }
+        
+        return random.choice(agreements.get(sentiment, agreements['neutral']))
+
+    def _generate_followup(self, analysis: Dict) -> str:
+        """Generate a follow-up question based on key points"""
+        key_points = analysis.get('key_points', [])
+        
+        if not key_points:
+            return "what's your price target for Q1?"
+            
+        questions = {
+            'price': [
+                "what's your price target for Q1?",
+                "where do you see support levels?",
+                "what indicators are you watching?"
+            ],
+            'technology': [
+                "how do you see this scaling?",
+                "what's the tech advantage here?",
+                "thoughts on the development roadmap?"
+            ],
+            'adoption': [
+                "what's driving user growth?",
+                "how's the community engagement?",
+                "what adoption metrics matter most?"
+            ],
+            'competition': [
+                "how does this compare to competitors?",
+                "what's the competitive advantage?",
+                "who's the biggest threat here?"
+            ]
+        }
+        
+        for point in key_points:
+            if point in questions:
+                return random.choice(questions[point])
+        
+        return "what's your outlook on this?"
+
+    def _track_engagement_attempt(self, tweet: str, response: str, level: str):
+        """Track engagement attempt for optimization"""
+        self.tweet_history.append({
+            'timestamp': datetime.utcnow().isoformat(),
+            'tweet': tweet,
+            'response': response,
+            'engagement_level': level,
+            'performance': None  # To be updated later
+        })

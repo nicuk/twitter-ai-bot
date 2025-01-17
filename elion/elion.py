@@ -96,7 +96,7 @@ class Elion:
         mood = self._determine_mood(confidence, market_analysis)
         enhanced_content = self._enhance_with_personality(base_content, mood, confidence)
         
-        # Track for analysis
+        # Track for performance analysis
         self._track_content(enhanced_content, content_type, context, confidence)
         
         return enhanced_content
@@ -648,3 +648,53 @@ class Elion:
         ]
         
         return self.personality.enhance_with_persona('\n'.join(response), 'tech_analyst')
+
+    def generate_tweet(self, context: Dict, market_mood: str) -> str:
+        """Generate a tweet based on market context and mood"""
+        try:
+            # Analyze market conditions
+            market_analysis = self._analyze_market_conditions()
+            confidence = self._calculate_confidence(
+                market_analysis.get('technical', {}),
+                market_analysis.get('onchain', {})
+            )
+            
+            # Generate base content
+            content = self._generate_base_content('tweet', context)
+            
+            # Enhance with personality
+            enhanced_content = self._enhance_with_personality(content, market_mood, confidence)
+            
+            # Track for performance analysis
+            self._track_content(enhanced_content, 'tweet', context, confidence)
+            
+            return enhanced_content
+            
+        except Exception as e:
+            print(f"Error generating tweet: {e}")
+            return None
+
+    def generate_reply(self, tweet_text: str, engagement_level: str) -> str:
+        """Generate a reply based on tweet text and engagement level"""
+        try:
+            # Generate base reply
+            reply = self.engagement.generate_response(tweet_text, engagement_level)
+            
+            # Enhance with personality based on engagement
+            confidence = {
+                'high': 90.0,
+                'medium': 70.0,
+                'low': 50.0
+            }.get(engagement_level, 50.0)
+            
+            # Enhance with personality
+            enhanced_reply = self._enhance_with_personality(reply, 'engaging', confidence)
+            
+            # Track for performance analysis
+            self._track_content(enhanced_reply, 'reply', {'tweet': tweet_text}, confidence)
+            
+            return enhanced_reply
+            
+        except Exception as e:
+            print(f"Error generating reply: {e}")
+            return None
