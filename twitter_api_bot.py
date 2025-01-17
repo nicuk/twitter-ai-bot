@@ -469,6 +469,9 @@ class AIGamingBot:
                 
         except KeyboardInterrupt:
             logger.info("\nBot stopped by user")
+        except tweepy.errors.TooManyRequests:
+            # Let Tweepy handle rate limits
+            pass
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             if self.retry_count < self.max_retries:
