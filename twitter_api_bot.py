@@ -14,7 +14,7 @@ import re
 import uuid
 from elion.elion import Elion
 from tweet_history_manager import TweetHistoryManager
-from market_intel_gatherer import MarketIntelGatherer
+from data_sources import DataSources
 
 # Load test environment variables
 load_dotenv('.env.test')  # Load test environment first
@@ -90,14 +90,13 @@ class AIGamingBot:
         # Initialize history manager
         self.history_manager = TweetHistoryManager()
         
-        # Try to initialize market intel gatherer
+        # Initialize data sources
         try:
-            self.intel_gatherer = MarketIntelGatherer()
-            self.has_market_intel = True
-            print("Market intel gatherer initialized successfully")
-        except ImportError:
-            print("Market intel not available, using backup content generation")
-            self.has_market_intel = False
+            self.data_sources = DataSources(twitter_api=self.api)
+            print("Data sources initialized successfully")
+        except Exception as e:
+            print(f"Error initializing data sources: {e}")
+            self.data_sources = None
         
         # Track rate limit info for different endpoints
         self.rate_limits = {
@@ -349,19 +348,15 @@ class AIGamingBot:
     def gather_market_intel(self):
         """Gather market intelligence using multiple methods"""
         try:
-            if not self.has_market_intel:
-                print("Market intel not available, using backup content")
-                return False
-            
             # Try API search first (if we have quota)
             api_success = self._gather_from_api()
             
             # Regardless of API success, try to scrape trending projects
             try:
-                self.intel_gatherer.scrape_trending_projects()
+                self.data_sources.scrape_trending_projects()
                 
                 # Generate insight from gathered data
-                insight = self.intel_gatherer.generate_market_insight()
+                insight = self.data_sources.generate_market_insight()
                 if insight:
                     self.market_intel.append({
                         'text': insight,
@@ -540,28 +535,76 @@ class AIGamingBot:
         """Get content for the next tweet"""
         try:
             # Get market data if available
-            market_data = self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
-            
+            market_data = None
+            if hasattr(self, 'data_sources') and self.data_sources:
+                try:
+                    market_data = self.data_sources.get_market_alpha()
+                    if not market_data:
+                        # Try getting specific opportunities if overall market data fails
+                        alpha_ops = self.data_sources.get_alpha_opportunities()
+                        if alpha_ops:
+                            market_data = {'opportunities': alpha_ops}
+                        else:
+                            # Try getting news if opportunities fail
+                            news = self.data_sources.get_news_opportunities()
+                            if news:
+                                market_data = {'news': news}
+                except Exception as e:
+                    print(f"Error getting market data: {e}")
+        
             # Get current market mood
             market_mood = 'neutral'
             if market_data:
-                if market_data.get('sentiment', 0) > 0.6:
+                if market_data.get('market_sentiment') == 'bullish' or market_data.get('sentiment', 0) > 0.6:
                     market_mood = 'confident'
-                elif market_data.get('sentiment', 0) < 0.4:
+                elif market_data.get('market_sentiment') == 'bearish' or market_data.get('sentiment', 0) < 0.4:
                     market_mood = 'mysterious'
-            
-            # Generate tweet using Elion
-            tweet_content = self.elion.generate_tweet(market_data, market_mood)
-            
+        
+            # Try different tweet generation methods in order
+            tweet_content = None
+        
+            # 1. Try primary tweet generation with market data
+            if market_data:
+                tweet_content = self.elion.generate_tweet(market_data, market_mood)
+        
+            # 2. If that fails, try specific content types
             if not tweet_content:
-                # If tweet generation fails, use a simple backup
-                tweet_content = "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
-            
+                content_types = ['alpha_call', 'whale_alert', 'controversy', 'technical_alpha']
+                for content_type in content_types:
+                    try:
+                        context = {
+                            'content_type': content_type,
+                            'market_data': market_data
+                        }
+                        tweet_content = self.elion.generate_content(content_type, context)
+                        if tweet_content:
+                            break
+                    except Exception as e:
+                        print(f"Error generating {content_type}: {e}")
+                        continue
+        
+            # 3. If still no content, try engagement questions
+            if not tweet_content:
+                try:
+                    topics = ['gamefi', 'ai', 'memes']
+                    for topic in topics:
+                        if topic in self.engagement_topics:
+                            questions = self.engagement_topics[topic]['questions']
+                            if questions:
+                                tweet_content = random.choice(questions)
+                                break
+                except Exception as e:
+                    print(f"Error generating engagement question: {e}")
+        
+            # 4. Final fallback to backup tweet
+            if not tweet_content:
+                tweet_content = self._generate_backup_tweet()
+        
             return tweet_content
-            
+        
         except Exception as e:
             print(f"Error getting tweet content: {e}")
-            return "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
+            return self._generate_backup_tweet()
 
     def _generate_alpha_call(self):
         """Generate alpha call based on market data"""
@@ -569,7 +612,7 @@ class AIGamingBot:
             # Use Elion's content generation with alpha call context
             context = {
                 'content_type': 'alpha_call',
-                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+                'market_data': self.data_sources.get_market_alpha() if self.data_sources else None
             }
             return self.elion.generate_content('alpha_call', context)
         except Exception as e:
@@ -582,7 +625,7 @@ class AIGamingBot:
             # Use Elion's content generation with whale alert context
             context = {
                 'content_type': 'whale_alert',
-                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+                'market_data': self.data_sources.get_market_alpha() if self.data_sources else None
             }
             return self.elion.generate_content('whale_alert', context)
         except Exception as e:
@@ -595,7 +638,7 @@ class AIGamingBot:
             # Use Elion's content generation with controversy context
             context = {
                 'content_type': 'controversy',
-                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+                'market_data': self.data_sources.get_market_alpha() if self.data_sources else None
             }
             return self.elion.generate_content('controversy', context)
         except Exception as e:
@@ -608,7 +651,7 @@ class AIGamingBot:
             # Use Elion's content generation with technical analysis context
             context = {
                 'content_type': 'technical_analysis',
-                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+                'market_data': self.data_sources.get_market_alpha() if self.data_sources else None
             }
             return self.elion.generate_content('technical_analysis', context)
         except Exception as e:
@@ -797,6 +840,15 @@ class AIGamingBot:
                 print("\nNo content available for tweet")
                 return False
             
+            # Validate tweet length
+            if len(content) < 180:
+                print(f"\nTweet too short ({len(content)} chars), generating new content...")
+                content = self._generate_backup_tweet()
+                
+            if len(content) > 280:
+                print(f"\nTweet too long ({len(content)} chars), truncating...")
+                content = content[:277] + "..."
+            
             # Try to post the tweet
             try:
                 response = self.api.create_tweet(text=content)
@@ -940,7 +992,7 @@ class AIGamingBot:
                 'tweet_text': tweet.text,
                 'tweet_author': tweet.author_id,
                 'tweet_metrics': tweet.public_metrics if hasattr(tweet, 'public_metrics') else None,
-                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+                'market_data': self.data_sources.get_latest_intel() if self.data_sources else None
             }
             return self.elion.engagement.generate_reply(context)
         except Exception as e:
@@ -1098,7 +1150,17 @@ class AIGamingBot:
         """Generate a tweet based on market conditions and intelligence"""
         try:
             # Get market intel and generate tweet using Elion
-            market_data = self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            market_data = None
+            if self.data_sources:
+                try:
+                    market_data = self.data_sources.get_market_alpha()
+                    if not market_data:
+                        alpha_ops = self.data_sources.get_alpha_opportunities()
+                        if alpha_ops:
+                            market_data = {'opportunities': alpha_ops}
+                except Exception as e:
+                    print(f"Error getting market data: {e}")
+                
             context = {
                 'content_type': 'market_aware',
                 'market_data': market_data
@@ -1116,10 +1178,13 @@ class AIGamingBot:
                 'content_type': 'backup',
                 'market_data': None
             }
-            return self.elion.generate_content('backup', context)
+            tweet = self.elion.generate_content('backup', context)
+            if not tweet or len(tweet) < 180:
+                tweet = "The #GameFi space is evolving rapidly! 🎮 From advanced play-to-earn mechanics to AI-powered NPCs and dynamic game worlds, we're witnessing groundbreaking innovations in gaming. What upcoming features excite you the most? Share your predictions! 🤖"
+            return tweet
         except Exception as e:
             print(f"Error generating backup tweet: {e}")
-            return "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
+            return "The #GameFi space is evolving rapidly! 🎮 From advanced play-to-earn mechanics to AI-powered NPCs and dynamic game worlds, we're witnessing groundbreaking innovations in gaming. What upcoming features excite you the most? Share your predictions! 🤖"
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
