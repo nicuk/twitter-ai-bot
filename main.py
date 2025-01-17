@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 from custom_llm import MetaLlamaComponent
 from elion.elion import Elion
 from tweet_history_manager import TweetHistoryManager
+from elion.data_sources import CryptoRankAPI
+import requests
+import json
 
 def main():
     # Load environment variables
@@ -63,5 +66,23 @@ def main():
     for tweet_type, count in type_counts.items():
         print(f"- {tweet_type}: {count}")
 
+def test_api():
+    api = CryptoRankAPI()
+    
+    # Test v1 explicitly with all params
+    params = {
+        'api_key': api.api_key,
+        'limit': 10
+    }
+    
+    print("\nTesting v1...")
+    v1_response = requests.get('https://api.cryptorank.io/v1/currencies', params=params)
+    print(f"V1 Status: {v1_response.status_code}")
+    if v1_response.status_code == 200:
+        print("Full response:")
+        print(json.dumps(v1_response.json(), indent=2)[:500])  # Print first 500 chars
+    else:
+        print(f"Error: {v1_response.text}")
+    
 if __name__ == "__main__":
-    main()
+    test_api()

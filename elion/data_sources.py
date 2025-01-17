@@ -26,45 +26,49 @@ class CryptoRankAPI:
         except:
             pass  # In Railway, env vars are already set
             
-        self.api_key = os.getenv('CRYPTORANK_API_KEY')
+        self.api_key = os.getenv('CRYPTORANK_API_KEY', '').strip()
         if not self.api_key:
             raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
             
-        self.base_url = 'https://api.cryptorank.io/v1'  # Changed to v1
-        print(f"CryptoRank API Key: {self.api_key}")  # Temporarily print full key for debugging
-        self._cache = {}
+        self.base_url = 'https://api.cryptorank.io/v1'  # Using v1 API as it's working
+        
+        # Test v1 API
+        self.test_v1()
+        
+    def test_v1(self):
+        """Test v1 API endpoint"""
+        v1_url = 'https://api.cryptorank.io/v1/currencies'
+        print("\nTesting v1 API...")
+        try:
+            v1_response = requests.get(v1_url, params={'api_key': self.api_key})
+            print(f"V1 Status Code: {v1_response.status_code}")
+            print(f"V1 Response: {v1_response.text[:200]}...")  # Print first 200 chars
+        except Exception as e:
+            print(f"V1 Error: {str(e)}")
 
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         """Make a request to the API"""
         url = f"{self.base_url}/{endpoint}"
         
-        # Add API key to params
+        # Initialize params if None
         if params is None:
             params = {}
+            
+        # Add API key to params (v1 uses query param)
         params['api_key'] = self.api_key
         
         try:
-            # Make request
             response = requests.get(url, params=params)
             
-            # Print debug info
-            print(f"\nAPI Request:")
-            print(f"URL: {url}")
-            print(f"Status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"Error making request to {url}: {response.status_code} {response.reason}")
+                return {}
             
-            # Check response
-            if response.status_code == 200:
-                data = response.json()
-                print(f"Got {len(data.get('data', []))} coins")
-                return data
-                
-            # Handle errors
-            print(f"Error: {response.text}")
-            return {'error': f'API error: {response.status_code}'}
+            return response.json()
             
         except Exception as e:
-            print(f"Request failed: {e}")
-            return {'error': str(e)}
+            print(f"Error making request to {url}: {str(e)}")
+            return {}
 
     def _get_cached_response(self, endpoint: str) -> Optional[Dict]:
         """Get cached response for an endpoint"""
@@ -227,7 +231,7 @@ class DataSources:
         
         # Initialize CryptoRank API (optional)
         self.crypto_rank_api_key = os.getenv('CRYPTORANK_API_KEY')
-        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"
+        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"  # Using v1 API as it's working
         
         # Cache for API responses
         self._cache = {}

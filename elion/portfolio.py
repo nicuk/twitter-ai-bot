@@ -14,8 +14,12 @@ class PortfolioManager:
     def __init__(self):
         """Initialize portfolio manager"""
         self.portfolio_file = 'virtual_portfolio.json'
-        self.cryptorank_base_url = 'https://api.cryptorank.io/v2'
+        self.cryptorank_base_url = 'https://api.cryptorank.io/v1'  # Using v1 API consistently
         self.cryptorank_api_key = os.getenv('CRYPTORANK_API_KEY')
+        if self.cryptorank_api_key:
+            self.headers = {
+                'X-Api-Key': self.cryptorank_api_key
+            }
         
         # Load or initialize portfolio
         self.portfolio = self._load_portfolio()
@@ -61,35 +65,24 @@ class PortfolioManager:
     
     def _get_live_prices(self, symbols=None) -> Dict:
         """Get live prices from CryptoRank API"""
+        if not self.cryptorank_api_key:
+            return {}
+            
         try:
-            url = f"{self.cryptorank_base_url}/currencies"
-            headers = {
-                'api-key': self.cryptorank_api_key
-            }
-            params = {
-                'limit': 100  # Get top 100 coins
-            }
+            response = requests.get(
+                f"{self.cryptorank_base_url}/currencies", 
+                headers=self.headers
+            )
             
-            response = requests.get(url, headers=headers, params=params, timeout=10)
             if response.status_code != 200:
-                print(f"API Error: {response.status_code} - {response.text}")
+                print(f"Error fetching prices: {response.status_code}")
                 return {}
-            
+                
             data = response.json()
-            prices = {}
+            return {coin['symbol']: coin['price'] for coin in data.get('data', [])}
             
-            for coin in data.get('data', []):
-                symbol = coin.get('symbol')
-                if symbols is None or symbol in symbols:
-                    values = coin.get('values', {}).get('USD', {})
-                    prices[symbol] = {
-                        'price': float(values.get('price', 0)),
-                        'price_change_24h': float(values.get('percentChange24h', 0))
-                    }
-            
-            return prices
         except Exception as e:
-            print(f"Error getting live prices: {e}")
+            print(f"Error fetching prices: {e}")
             return {}
     
     def update_portfolio_value(self):
@@ -102,7 +95,7 @@ class PortfolioManager:
         
         for symbol, holding in self.portfolio['holdings'].items():
             if symbol in live_prices:
-                current_price = live_prices[symbol]['price']
+                current_price = live_prices[symbol]
                 value = holding['amount'] * current_price
                 total_value += value
                 
@@ -146,7 +139,7 @@ class PortfolioManager:
                 return False
                 
             holding = self.portfolio['holdings'][symbol]
-            exit_price = live_prices[symbol]['price']
+            exit_price = live_prices[symbol]
             profit = ((exit_price - holding['entry_price']) / holding['entry_price']) * 100
             
             # Add to cash balance
