@@ -17,9 +17,16 @@ class DataSources:
         load_dotenv()
         self.twitter = twitter_api
         
+        # Initialize LLM
+        from custom_llm import MetaLlamaComponent
+        self.llm = MetaLlamaComponent(
+            api_key=os.getenv('META_LLAMA_API_KEY'),
+            api_base=os.getenv('META_LLAMA_API_BASE')
+        )
+        
         # CryptoRank API configuration
         self.cryptorank_api_key = os.getenv('CRYPTORANK_API_KEY')
-        self.cryptorank_base_url = os.getenv('CRYPTORANK_BASE_URL', 'https://api.cryptorank.io/v2')
+        self.cryptorank_base_url = os.getenv('CRYPTORANK_BASE_URL', 'https://api.cryptorank.io/v1')
         
         # Initialize data caches with timestamps
         self.cache = {
@@ -130,3 +137,35 @@ class DataSources:
     def get_market_overview(self) -> Dict:
         """Get market overview data including price, volume, and market cap"""
         return self.get_market_alpha()
+
+    def get_alpha_opportunities(self) -> List[Dict]:
+        """Get potential alpha opportunities from various sources"""
+        try:
+            # Get trending coins
+            url = f"{self.cryptorank_base_url}/currencies"
+            params = {
+                'api_key': self.cryptorank_api_key,
+                'sort': 'price_change24h',
+                'limit': 10
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            opportunities = []
+            for coin in data.get('data', []):
+                if coin.get('price_change24h', 0) > 5:  # 5% or more gain
+                    opportunities.append({
+                        'symbol': coin['symbol'],
+                        'name': coin['name'],
+                        'price_change_24h': coin['price_change24h'],
+                        'volume_24h': coin.get('volume24h', 0),
+                        'reason': 'trending_up'
+                    })
+                    
+            return opportunities
+            
+        except Exception as e:
+            print(f"Error getting alpha opportunities: {e}")
+            return []

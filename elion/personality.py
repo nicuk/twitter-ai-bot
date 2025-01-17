@@ -342,32 +342,33 @@ class ElionPersonality:
         """Wrapper for enhance_with_persona specifically for tweets"""
         return self.enhance_with_persona(content, persona, context, user)
 
-    def generate(self, content_type: str, context: Dict = None) -> str:
-        """Generate a personality-enhanced response
+    def generate(self, content_type: str, context: str = "", **kwargs) -> str:
+        """Generate personality-enhanced content
         
         Args:
             content_type: Type of content to generate
-            context: Additional context for generation
-            
-        Returns:
-            Generated content string with personality
+            context: Content context
+            **kwargs: Additional arguments like interaction_type
         """
-        # Get personality components
-        hook = random.choice(self.character.get('hooks', {}).get(content_type, []))
-        style = self.character['traits']
+        if not content_type:
+            return context
+            
+        # Get templates for this content type
+        templates = self.templates.get(content_type, self.templates['default'])
+        if not templates:
+            return context
+            
+        # If it's an interaction, use interaction templates
+        if 'interaction_type' in kwargs:
+            interaction_templates = self.templates.get('interactions', {})
+            templates = interaction_templates.get(kwargs['interaction_type'], templates)
+            
+        # Select template
+        template = random.choice(templates) if templates else "{context}"
         
-        # Build response
-        response = []
-        if hook and style['confident'] > 0.5:
-            response.append(hook)
-            
-        # Add context-based elements
-        if context:
-            if 'market_mood' in context and style['empathetic'] > 0.5:
-                response.append(f"Market feeling {context['market_mood']}")
-                
-        # Add personality flair
-        if style['quirky'] > 0.7:
-            response.append("🤖✨")
-            
-        return "\n".join(response)
+        # Format with context
+        return template.format(
+            context=context,
+            emoji=random.choice(self.emojis) if self.emojis else "✨",
+            hashtag=random.choice(self.hashtags) if self.hashtags else "#crypto"
+        )
