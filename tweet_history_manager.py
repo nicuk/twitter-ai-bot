@@ -59,6 +59,9 @@ class TweetHistoryManager:
             
         if 'running_jokes' not in self.history:
             self.history['running_jokes'] = set()
+            
+        if 'hot_projects' not in self.history:
+            self.history['hot_projects'] = []
         
     def _load_history(self) -> Dict:
         """Load tweet history from file"""
@@ -283,10 +286,10 @@ class TweetHistoryManager:
 
     def get_tweet_type_for_next_post(self):
         """Determine next tweet type based on cycle position"""
-        total_tweets = self.history['metadata']['total_tweets']
+        total_tweets = self.history['metadata'].get('total_tweets', 0)
         
         # Portfolio updates every 200 posts
-        if total_tweets % 200 == 0:
+        if total_tweets > 0 and total_tweets % 200 == 0:
             self.history['tweet_types']['portfolio_update'] += 1
             return 'portfolio_update'
             
@@ -305,35 +308,33 @@ class TweetHistoryManager:
         elif position_in_cycle in [20, 40]:  # Posts 20 and 40 are controversial
             self.history['tweet_types']['controversial'] += 1
             return 'controversial'
-        elif position_in_cycle == 50:  # Last post in cycle is a giveaway
+        elif position_in_cycle == 0:  # Last post in cycle is a giveaway
             self.history['tweet_types']['giveaway'] += 1
             return 'giveaway'
-        else:
-            # For regular posts, check if we have any high-performing gems
-            high_performers = self.get_hot_projects(hours=24)
-            if high_performers and random.random() < 0.3:  # 30% chance to brag about winning calls
-                return 'gem_update'
             
-            self.history['tweet_types']['regular'] += 1
-            return 'regular'
+        # For regular posts, check if we have any high-performing gems
+        high_performers = self.get_hot_projects(hours=24)
+        if high_performers and random.random() < 0.3:  # 30% chance to brag about winning calls
+            self.history['tweet_types']['gem_update'] += 1
+            return 'gem_update'
+            
+        self.history['tweet_types']['regular'] += 1
+        return 'regular'
 
-    def get_hot_projects(self, hours: int = 24):
+    def get_hot_projects(self, hours: Optional[int] = None) -> List[Dict]:
         """Get currently hot projects based on engagement"""
-        cutoff = datetime.now() - timedelta(hours=hours)
-        active_projects = {}
-        
-        for project, stats in self.history['project_stats'].items():
-            if stats['last_mentioned']:
-                last_mention = datetime.fromisoformat(stats['last_mentioned'])
-                if last_mention > cutoff:
-                    engagement_rate = stats['total_engagement'] / stats['mentions']
-                    active_projects[project] = engagement_rate
-        
-        return sorted(
-            active_projects.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:5]  # Return top 5 projects
+        try:
+            now = datetime.now()
+            cutoff = now - timedelta(days=7 if hours is None else hours/24)
+            
+            return [
+                project for project in self.history['hot_projects']
+                if datetime.fromisoformat(project['timestamp']) > cutoff
+            ]
+            
+        except Exception as e:
+            print(f"Error getting hot projects: {e}")
+            return []
 
     def get_recent_engagement(self, hours: int = 24) -> float:
         """Calculate average engagement for recent tweets"""
@@ -538,3 +539,19 @@ class TweetHistoryManager:
     def get_running_jokes(self, limit: int = 3) -> list:
         """Get active running jokes to reference"""
         return list(self.history['running_jokes'])[:limit]
+
+    def add_hot_project(self, symbol: str, roi: float):
+        """Add hot project to tracking"""
+        try:
+            self.history['hot_projects'].append({
+                'symbol': symbol,
+                'roi': roi,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 10 hot projects
+            if len(self.history['hot_projects']) > 10:
+                self.history['hot_projects'] = self.history['hot_projects'][-10:]
+                
+        except Exception as e:
+            print(f"Error adding hot project: {e}")

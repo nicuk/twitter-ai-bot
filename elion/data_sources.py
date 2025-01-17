@@ -10,6 +10,7 @@ from collections import defaultdict
 import os
 from dotenv import load_dotenv
 from .data_storage import DataStorage
+from typing import List, Dict
 
 class DataSources:
     def __init__(self, twitter_api=None):
@@ -484,4 +485,185 @@ class DataSources:
             return None
         except Exception as e:
             print(f"Error fetching funding rounds: {str(e)}")
+            return None
+
+    def get_market_data(self):
+        """Get current market data including prices, volumes, and trends"""
+        try:
+            # Check cache first
+            if self._is_cache_valid('market_data'):
+                return self.cache['market_data']['data']
+                
+            # Fetch new data
+            market_data = self._get_market_overview()
+            if market_data:
+                self.cache['market_data'] = {
+                    'data': market_data,
+                    'timestamp': datetime.now()
+                }
+                return market_data
+            return None
+        except Exception as e:
+            print(f"Error getting market data: {e}")
+            return None
+
+    def get_onchain_data(self):
+        """Get onchain analytics data"""
+        try:
+            response = self._make_request('/analytics/onchain')
+            if response and isinstance(response, dict) and 'data' in response:
+                return {
+                    'active_addresses': response['data'].get('activeAddresses', 0),
+                    'transaction_volume': response['data'].get('transactionVolume', 0),
+                    'network_growth': response['data'].get('networkGrowth', 0),
+                    'defi_tvl': response['data'].get('defiTVL', 0)
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting onchain data: {e}")
+            return None
+
+    def _get_trending_coins(self, limit=10) -> List[Dict]:
+        """Get list of trending coins"""
+        try:
+            # For now, return a static list
+            return [
+                {'symbol': 'BTC', 'name': 'Bitcoin', 'price': 40000, 'volume_24h': 100000000, 'price_change_24h': 5},
+                {'symbol': 'ETH', 'name': 'Ethereum', 'price': 3000, 'volume_24h': 50000000, 'price_change_24h': 3},
+                {'symbol': 'SOL', 'name': 'Solana', 'price': 100, 'volume_24h': 20000000, 'price_change_24h': 10},
+                {'symbol': 'MATIC', 'name': 'Polygon', 'price': 1.5, 'volume_24h': 10000000, 'price_change_24h': 8},
+                {'symbol': 'AVAX', 'name': 'Avalanche', 'price': 80, 'volume_24h': 5000000, 'price_change_24h': 12}
+            ][:limit]
+        except Exception as e:
+            print(f"Error getting trending coins: {e}")
+            return []
+
+    def _analyze_whale_patterns(self) -> Dict:
+        """Analyze whale movement patterns"""
+        try:
+            # For demo purposes, return static data
+            return {
+                'avg_transaction': 1000000,  # $1M average transaction
+                'active_whales': 10,  # Number of active whales
+                'sentiment': 'bullish',
+                'analysis': 'Increased whale activity detected'
+            }
+        except Exception as e:
+            print(f"Error analyzing whale patterns: {e}")
+            return {
+                'avg_transaction': 0,
+                'active_whales': 0,
+                'sentiment': 'neutral',
+                'analysis': 'Error analyzing whale patterns'
+            }
+        except Exception as e:
+            print(f"Error getting onchain data: {e}")
+            return None
+
+    def _get_trending_coins(self, limit=10) -> List[Dict]:
+        """Get list of trending coins"""
+        try:
+            # For now, return a static list
+            return [
+                {'symbol': 'BTC', 'name': 'Bitcoin', 'price': 40000, 'volume_24h': 100000000, 'price_change_24h': 5},
+                {'symbol': 'ETH', 'name': 'Ethereum', 'price': 3000, 'volume_24h': 50000000, 'price_change_24h': 3},
+                {'symbol': 'SOL', 'name': 'Solana', 'price': 100, 'volume_24h': 20000000, 'price_change_24h': 10},
+                {'symbol': 'MATIC', 'name': 'Polygon', 'price': 1.5, 'volume_24h': 10000000, 'price_change_24h': 8},
+                {'symbol': 'AVAX', 'name': 'Avalanche', 'price': 80, 'volume_24h': 5000000, 'price_change_24h': 12}
+            ][:limit]
+        except Exception as e:
+            print(f"Error getting trending coins: {e}")
+            return []
+
+    def _analyze_whale_patterns(self) -> Dict:
+        """Analyze whale movement patterns"""
+        try:
+            # For demo purposes, return static data
+            return {
+                'avg_transaction': 1000000,  # $1M average transaction
+                'active_whales': 10,  # Number of active whales
+                'sentiment': 'bullish',
+                'analysis': 'Increased whale activity detected'
+            }
+        except Exception as e:
+            print(f"Error analyzing whale patterns: {e}")
+            return {
+                'avg_transaction': 0,
+                'active_whales': 0,
+                'sentiment': 'neutral',
+                'analysis': 'Error analyzing whale patterns'
+            }
+
+    def get_high_staking_yields(self, min_apy=20):
+        """Get tokens with high staking yields"""
+        try:
+            response = self._make_request('/staking')
+            if not response or 'data' not in response:
+                return None
+                
+            staking_opportunities = []
+            for token in response['data']:
+                apy = float(token.get('apy', 0))
+                if apy >= min_apy:
+                    staking_opportunities.append({
+                        'symbol': token.get('symbol'),
+                        'name': token.get('name'),
+                        'apy': apy,
+                        'tvl': token.get('tvl'),
+                        'min_stake': token.get('minStake'),
+                        'lockup_period': token.get('lockupPeriod'),
+                        'current_price': token.get('price'),
+                        'market_cap': token.get('marketCap')
+                    })
+            
+            return sorted(staking_opportunities, key=lambda x: x['apy'], reverse=True)
+            
+        except Exception as e:
+            print(f"Error getting staking yields: {str(e)}")
+            return None
+
+    def get_undervalued_gems(self, max_mcap_usd=50000000):
+        """Find potentially undervalued projects with strong fundamentals"""
+        try:
+            response = self._make_request('/tokens', {
+                'marketCapUsd': f"0..{max_mcap_usd}",
+                'hasMetrics': True,
+                'sort': 'developerActivity'  # Sort by developer activity
+            })
+            
+            if not response or 'data' not in response:
+                return None
+                
+            gems = []
+            for token in response['data']:
+                # Skip if missing key metrics
+                if not all(token.get(key) for key in ['symbol', 'marketCap', 'price']):
+                    continue
+                    
+                # Calculate a basic score based on fundamentals
+                dev_score = float(token.get('developerActivity', 0))
+                community_score = float(token.get('communityScore', 0))
+                liquidity_score = float(token.get('liquidityScore', 0))
+                
+                total_score = (dev_score * 0.4) + (community_score * 0.3) + (liquidity_score * 0.3)
+                
+                if total_score > 60:  # Only include high-scoring projects
+                    gems.append({
+                        'symbol': token['symbol'],
+                        'name': token['name'],
+                        'market_cap': token['marketCap'],
+                        'price': token['price'],
+                        'volume_24h': token.get('volume24h'),
+                        'dev_activity': dev_score,
+                        'community_score': community_score,
+                        'liquidity_score': liquidity_score,
+                        'total_score': total_score,
+                        'category': token.get('category', 'Unknown'),
+                        'description': token.get('description', '')
+                    })
+            
+            return sorted(gems, key=lambda x: x['total_score'], reverse=True)
+            
+        except Exception as e:
+            print(f"Error getting undervalued gems: {str(e)}")
             return None

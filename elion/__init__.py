@@ -1,12 +1,11 @@
 """
-Elion - AI-powered Twitter Bot for Crypto Trading
+Elion AI - Advanced AI Trading Bot
 """
 
 from .elion import Elion
-from .personality import ElionPersonality
-from .engagement import EngagementManager
-from .content_generation import ContentGenerator
-from .portfolio import Portfolio
 from .data_sources import DataSources
+from .portfolio import PortfolioManager
+from .content.generator import ContentGenerator
+from .personality import ElionPersonality
 
-__version__ = '1.0.0'
+__version__ = "0.1.0"

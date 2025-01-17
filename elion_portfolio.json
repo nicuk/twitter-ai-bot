@@ -11,7 +11,7 @@
                 "tier1"
             ],
             "current_price": 1.5,
-            "last_update": "2025-01-16T23:27:09.159535"
+            "last_update": "2025-01-17T11:02:04.958472"
         },
         "TEST2": {
             "amount": 5000,
@@ -21,7 +21,7 @@
             "conviction": "HIGH",
             "take_profit_hits": [],
             "current_price": 2.4,
-            "last_update": "2025-01-16T23:27:09.161462"
+            "last_update": "2025-01-17T11:02:04.958472"
         },
         "TEST": {
             "amount": 3136.0,
@@ -35,8 +35,8 @@
                 "tier3",
                 "tier4"
             ],
-            "current_price": 6.0,
-            "last_update": "2025-01-16T23:27:09.193101"
+            "current_price": 1.5,
+            "last_update": "2025-01-17T11:02:04.966662"
         },
         "TEST0": {
             "amount": 1000,

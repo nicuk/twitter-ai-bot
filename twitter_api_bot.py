@@ -1153,10 +1153,6 @@ class AIGamingBot:
             if self.data_sources:
                 try:
                     market_data = self.data_sources.get_market_alpha()
-                    if not market_data:
-                        alpha_ops = self.data_sources.get_alpha_opportunities()
-                        if alpha_ops:
-                            market_data = {'opportunities': alpha_ops}
                 except Exception as e:
                     print(f"Error getting market data: {e}")
                 

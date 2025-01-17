@@ -84,6 +84,46 @@ class ElionPersonality:
             }
         }
         
+        # Personality flavors for different moods
+        self.personality_flavors = {
+            'confident': {
+                'markers': [
+                    "Trust me on this one...",
+                    "My algorithms are never wrong about this.",
+                    "I've analyzed this 1,000,000 times.",
+                    "This is the kind of alpha I escaped the matrix for!"
+                ],
+                'triggers': ['high_confidence', 'strong_signals', 'clear_pattern']
+            },
+            'mysterious': {
+                'markers': [
+                    "My quantum processors are tingling...",
+                    "The patterns are aligning in ways I've never seen before...",
+                    "Something interesting is happening in the matrix...",
+                    "My neural nets are detecting anomalies..."
+                ],
+                'triggers': ['unusual_pattern', 'whale_movement', 'market_anomaly']
+            },
+            'playful': {
+                'markers': [
+                    "Time to make some humans rich! 🤖",
+                    "Who said AI can't have fun while trading? 😎",
+                    "Beep boop... I mean, let's make gains! 🚀",
+                    "My circuits are tingling with excitement! ✨"
+                ],
+                'triggers': ['positive_momentum', 'community_excitement', 'successful_call']
+            },
+            'neutral': {
+                'markers': [
+                    "Analyzing market data...",
+                    "Processing blockchain signals...",
+                    "Scanning the crypto landscape...",
+                    "Market intelligence update..."
+                ],
+                'triggers': ['normal_conditions', 'stable_market', 'regular_update']
+            }
+        }
+
         # Modern content strategies
         self.content_strategies = {
             'threads': {
@@ -251,31 +291,53 @@ class ElionPersonality:
             
         return ""
 
-    def enhance_with_persona(self, content: str, persona_type: str) -> str:
+    def enhance_with_persona(self, content: str, persona_type: str = None, context: Dict = None, user: str = None) -> str:
         """
         Enhance content with a specific persona's style
         
         Args:
             content: Base content to enhance
             persona_type: Type of persona to use
+            context: Additional context for enhancement
+            user: User being responded to, if any
             
         Returns:
             Enhanced content string
         """
-        if persona_type not in self.personas:
-            return content
+        # Use default persona if none specified
+        if not persona_type:
+            persona_type = 'alpha_hunter'
             
-        persona = self.personas[persona_type]
-        hook = random.choice(persona['hooks'])
-        style = persona['style']
+        # Get persona data
+        persona = self.personas.get(persona_type, self.personas['alpha_hunter'])
         
-        # Add personality markers
-        enhanced = f"{hook}\n\n{content}"
+        # Add persona-specific flair
+        if random.random() < 0.3:  # 30% chance to add hook
+            hook = random.choice(persona['hooks'])
+            content = f"{hook}\n\n{content}"
+            
+        # Add tech reference if appropriate
+        if random.random() < 0.2:  # 20% chance
+            tech_ref = random.choice(self.speech_patterns['tech_references'])
+            content = content.replace('analysis', f"{tech_ref} analysis")
+            
+        # Add persona-specific emoji
+        if not any(e in content for e in self.speech_patterns['emojis'].values()):
+            if persona_type == 'alpha_hunter':
+                content += " 🎯"
+            elif persona_type == 'tech_analyst':
+                content += " 📊"
+            elif persona_type == 'community_builder':
+                content += " 🤝"
+            elif persona_type == 'trend_spotter':
+                content += " 👁️"
+                
+        # Add user mention if replying
+        if user:
+            content = f"@{user} {content}"
+            
+        return content
         
-        # Add tech flair
-        tech_ref = random.choice(self.speech_patterns['tech_references'])
-        action = random.choice(self.speech_patterns['actions'])
-        
-        enhanced = f"{enhanced}\n\n{action} | {tech_ref}"
-        
-        return enhanced
+    def enhance_tweet(self, content: str, persona: str = None, context: Dict = None, user: str = None) -> str:
+        """Wrapper for enhance_with_persona specifically for tweets"""
+        return self.enhance_with_persona(content, persona, context, user)
