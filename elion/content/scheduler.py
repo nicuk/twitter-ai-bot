@@ -55,62 +55,53 @@ class TweetScheduler:
         if not available_types:
             self._reset_cycle()
             available_types = self.type_distribution
-        
-        # Adjust for time of day
-        if 0 <= current_hour < 6:  # Night hours
-            available_types = {
-                t: r * 0.5 for t, r in available_types.items()
-                if t not in ['market_analysis', 'portfolio_update']
-            }
-        elif 14 <= current_hour < 20:  # Peak hours
-            available_types = {
-                t: r * 1.5 for t, r in available_types.items()
-                if t in ['market_analysis', 'gem_alpha']
-            }
-        
-        # Calculate remaining posts
-        remaining = {
-            t: int(self.total_cycles * r) - self.type_counts[t]
-            for t, r in available_types.items()
+            
+        # Normalize probabilities
+        total_prob = sum(available_types.values())
+        normalized_types = {
+            t: r/total_prob for t, r in available_types.items()
         }
         
-        # Filter out completed types
-        remaining = {t: r for t, r in remaining.items() if r > 0}
-        
-        if not remaining:
-            return None
-        
-        # Select type weighted by remaining posts
-        total = sum(remaining.values())
-        weights = [r/total for r in remaining.values()]
-        tweet_type = random.choices(list(remaining.keys()), weights=weights)[0]
-        
-        # Update counts
-        self.type_counts[tweet_type] += 1
+        # Select type based on distribution
+        r = random.random()
+        cumsum = 0
+        for t, p in normalized_types.items():
+            cumsum += p
+            if r <= cumsum:
+                self.type_counts[t] += 1
+                self.cycle_count += 1
+                return t
+                
+        # Fallback to first available type
+        t = next(iter(available_types))
+        self.type_counts[t] += 1
         self.cycle_count += 1
+        return t
         
-        return tweet_type
-        
-    def handle_failed_tweet(self, tweet_type: str):
-        """Handle a failed tweet attempt"""
-        self.failed_types.add(tweet_type)
-        
-        # If too many failures, adjust distribution
-        if len(self.failed_types) > len(self.type_distribution) / 2:
-            self._adjust_distribution()
-
-    def _adjust_distribution(self):
-        """Adjust type distribution based on failures"""
-        working_types = set(self.type_distribution.keys()) - self.failed_types
-        if not working_types:
+    def boost_working_types(self):
+        """Boost probability of working tweet types"""
+        if not self.failed_types:
             return
-        
-        # Redistribute failed type percentages
+            
+        # Calculate boost amount
         failed_total = sum(self.type_distribution[t] for t in self.failed_types)
+        working_types = [t for t in self.type_distribution if t not in self.failed_types]
         boost = failed_total / len(working_types)
         
+        # Apply boost to working types
         for t in working_types:
             self.type_distribution[t] += boost
+
+    def mark_type_failed(self, tweet_type: str):
+        """Mark a tweet type as failed for this cycle"""
+        self.failed_types.add(tweet_type)
+        # Adjust distribution for remaining types
+        remaining_types = {t: r for t, r in self.type_distribution.items() 
+                         if t not in self.failed_types}
+        if remaining_types:
+            total_remaining = sum(remaining_types.values())
+            self.type_distribution = {t: r/total_remaining for t, r 
+                                    in remaining_types.items()}
 
     def get_cycle_progress(self) -> Dict:
         """Get current cycle progress"""
@@ -118,9 +109,5 @@ class TweetScheduler:
             'cycle_count': self.cycle_count,
             'total_cycles': self.total_cycles,
             'type_counts': self.type_counts,
-            'remaining_posts': {
-                tweet_type: int(self.total_cycles * ratio) - self.type_counts[tweet_type]
-                for tweet_type, ratio in self.type_distribution.items()
-            },
             'failed_types': list(self.failed_types)
         }
