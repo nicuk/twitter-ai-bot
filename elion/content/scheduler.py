@@ -14,6 +14,8 @@ class TweetScheduler:
         self.datetime = datetime
         self.cycle_count = 0
         self.total_cycles = 50
+        self.initial_tweets_count = 0  # Track number of initial tweets
+        self.initial_tweets_max = 5    # Number of initial self-aware tweets
         
         # Regular Scheduled Posts (50% of tweets)
         self.type_distribution = {
@@ -42,6 +44,14 @@ class TweetScheduler:
             'technical_alpha': 0.05     # 2-3 posts
         }
         
+        # Define non-market-data tweet types
+        self.non_market_types = {
+            'self_aware': 0.3,
+            'self_aware_thought': 0.3,
+            'controversial_thread': 0.2,
+            'giveaway': 0.2
+        }
+        
         self.type_counts = {t: 0 for t in self.type_distribution}
         self.failed_types = set()  # Track failed tweet types
         
@@ -54,6 +64,24 @@ class TweetScheduler:
     def get_next_tweet_type(self) -> str:
         """Get the next tweet type based on timing and distribution rules"""
         current_hour = self.datetime.now().hour
+        
+        # For the first few tweets, prioritize non-market-data tweets
+        if self.initial_tweets_count < self.initial_tweets_max:
+            self.initial_tweets_count += 1
+            # Use non-market distribution for initial tweets
+            r = random.random()
+            cumsum = 0
+            for t, p in self.non_market_types.items():
+                cumsum += p
+                if r <= cumsum:
+                    self.type_counts[t] += 1
+                    self.cycle_count += 1
+                    return t
+            # Fallback to first non-market type
+            t = next(iter(self.non_market_types))
+            self.type_counts[t] += 1
+            self.cycle_count += 1
+            return t
         
         # Reset cycle if completed
         if self.cycle_count >= self.total_cycles:

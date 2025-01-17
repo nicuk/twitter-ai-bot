@@ -165,17 +165,57 @@ class TweetFormatters:
         
         return self.personality.enhance_tweet(content)
         
-    def format_portfolio_update(self, portfolio_data):
+    def format_portfolio_update(self, portfolio_data=None, **kwargs):
         """Format portfolio update content"""
-        if not portfolio_data:
-            raise ValueError("No portfolio data provided")
-            
-        content = "📊 Portfolio Update 📈\n\n"
-        content += "Current Holdings:\n"
-        for asset, data in portfolio_data.items():
-            content += f"• ${asset}: {data['amount']} ({data['pnl']}%)\n"
-        content += "\nStaying strong in this market! 💪"
+        portfolio_data = portfolio_data or kwargs.get('portfolio_data', {})
         
+        # Check if portfolio is empty
+        if not portfolio_data or not portfolio_data.get('holdings'):
+            # Generate engagement tweet for empty portfolio
+            content = "[INVESTMENT OPPORTUNITY] 💰\n\n"
+            content += "Starting fresh with $100,000 to invest!\n\n"
+            content += "Looking for the next big opportunity in crypto. Shill me your best projects!\n\n"
+            content += "Requirements:\n"
+            content += "• Strong fundamentals\n"
+            content += "• Active development\n"
+            content += "• Real utility\n"
+            content += "• Community-driven\n\n"
+            content += "Reply with:\n"
+            content += "1. Project name/ticker\n"
+            content += "2. Why it's worth investing\n"
+            content += "3. Key metrics\n\n"
+            content += "Best pitch gets featured! 🏆\n\n"
+            content += "#CryptoInvestment #DYOR"
+            return self.personality.enhance_tweet(content)
+            
+        # Regular portfolio update
+        content = "[PORTFOLIO UPDATE] 📊\n\n"
+        
+        # Holdings breakdown
+        content += "Current Holdings:\n"
+        for symbol, data in portfolio_data['holdings'].items():
+            price = data.get('price', 0)
+            change = data.get('change_24h', 0)
+            allocation = data.get('allocation', 0)
+            content += f"• {symbol}: {allocation:.1f}% (${price:,.0f} | {change:+.1f}%)\n"
+            
+        content += f"\nPortfolio Value: ${portfolio_data.get('total_value', 0):,.2f}"
+        
+        # Performance metrics
+        if 'performance' in portfolio_data:
+            perf = portfolio_data['performance']
+            content += f"\n24h Change: {perf.get('change_24h', 0):+.1f}%"
+            content += f"\nMonthly Return: {perf.get('return_30d', 0):+.1f}%"
+            content += f"\nTotal Return: {perf.get('total_return', 0):+.1f}%"
+            
+        # Trading stats
+        if 'stats' in portfolio_data:
+            stats = portfolio_data['stats']
+            content += f"\n\nWin Rate: {stats.get('win_rate', 0):.1f}%"
+            if stats.get('best_trade'):
+                content += f"\nBest Trade: {stats['best_trade']}"
+            
+        content += "\n\n#CryptoTrading #Portfolio"
         return self.personality.enhance_tweet(content)
         
     def format_market_response(self, market_event):
@@ -749,7 +789,7 @@ class TweetFormatters:
             eth_price = data.get('eth_price', 0)
             btc_change = data.get('btc_change_24h', 0)
             eth_change = data.get('eth_change_24h', 0)
-            sentiment = data.get('market_sentiment', 'neutral')
+            sentiment = data.get('market_sentiment', '')
             top_gainers = data.get('top_gainers', [])
             
             # Format price changes
@@ -762,12 +802,8 @@ class TweetFormatters:
             tweet += f"ETH: ${eth_price:,.0f} ({eth_change_str})\n\n"
             
             # Add sentiment
-            if sentiment == 'bullish':
-                tweet += "Market looking strong! 💪\n"
-            elif sentiment == 'bearish':
-                tweet += "Market showing weakness 📉\n"
-            else:
-                tweet += "Market in consolidation 🔄\n"
+            if sentiment:
+                tweet += f"Market Sentiment: {sentiment}\n"
                 
             # Add top performers if available
             if top_gainers:
@@ -783,3 +819,62 @@ class TweetFormatters:
         except Exception as e:
             print(f"Error formatting market analysis: {e}")
             return None
+
+    def format_gem_alpha(self, data: Dict) -> str:
+        """Format gem alpha data into a tweet"""
+        try:
+            gem = data.get('gem_data')
+            if not gem:
+                return "Error: No gem data available"
+                
+            # Format tweet
+            tweet = "💎 GEM ALERT 💎\n\n"
+            tweet += f"Found: {gem['name']} (${gem['symbol']})\n"
+            tweet += f"Price: ${gem['price']:,.4f}\n"
+            tweet += f"24h: {gem['price_change_24h']:+.1f}%\n"
+            tweet += f"7d: {gem['price_change_7d']:+.1f}%\n"
+            tweet += f"MCap: ${gem['market_cap']/1e6:.1f}M\n"
+            tweet += f"Vol: ${gem['volume_24h']/1e3:.1f}K\n\n"
+            
+            # Add opportunity type
+            if 'opportunity_type' in gem:
+                tweet += f"Type: {gem['opportunity_type'].replace('_', ' ').title()}\n"
+                
+            tweet += "\nNFA DYOR\n"
+            tweet += "#Crypto #GemHunting"
+            return tweet
+            
+        except Exception as e:
+            print(f"Error formatting gem alpha: {e}")
+            return "Error formatting gem alpha"
+
+    def format_portfolio_update(self, data: Dict) -> str:
+        """Format portfolio update data into a tweet"""
+        try:
+            stats = data.get('portfolio_stats')
+            if not stats:
+                return "Error: No portfolio stats available"
+                
+            # Format tweet
+            tweet = "[PORTFOLIO UPDATE]\n\n"
+            tweet += f"Portfolio Value: ${stats.get('total_value', 0):,.2f}\n"
+            tweet += f"Cash: ${stats.get('cash', 0):,.2f}\n"
+            tweet += f"Total Return: {stats.get('total_return', 0):+.1f}%\n\n"
+            
+            # Add performance stats
+            if stats.get('win_rate') is not None:
+                tweet += f"Win Rate: {stats.get('win_rate', 0):.1f}%\n"
+                
+            # Add holdings if available
+            holdings = stats.get('holdings', [])
+            if holdings:
+                tweet += "\nTop Holdings:\n"
+                for holding in holdings[:3]:
+                    tweet += f"{holding['symbol']}: {holding['return']:+.1f}%\n"
+                    
+            tweet += "\n#CryptoTrading #Portfolio"
+            return tweet
+            
+        except Exception as e:
+            print(f"Error formatting portfolio update: {e}")
+            return "Error formatting portfolio update"

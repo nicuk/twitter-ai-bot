@@ -133,9 +133,13 @@ class AIGamingBot:
         # Check for optional CryptoRank API key
         cryptorank_api_key = os.getenv('CRYPTORANK_API_KEY')
         if not cryptorank_api_key:
-            logger.warning("CRYPTORANK_API_KEY not found. Market data functionality will be limited.")
+            logger.warning("CryptoRank API not available - Operating in Community Focus Mode")
+            logger.info("Elion will prioritize:")
+            logger.info("- Self-aware thoughts and discussions")
+            logger.info("- Community engagement and giveaways")
+            logger.info("- Controversial topics and AI insights")
         
-        self.elion = Elion(llm=llm)
+        self.elion = Elion(llm=llm, cryptorank_api_key=cryptorank_api_key)
         logger.info("Elion initialized")
         
         # Initialize tweet history manager

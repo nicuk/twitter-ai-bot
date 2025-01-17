@@ -11,7 +11,6 @@ from .personality import ElionPersonality
 from .engagement import EngagementManager
 from .content.generator import ContentGenerator
 from .content.scheduler import TweetScheduler
-from .market_analyzer import MarketAnalyzer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,20 +18,21 @@ logger = logging.getLogger(__name__)
 class Elion:
     """
     Main Elion class that coordinates between different components:
-    - MarketAnalyzer: Handles all market analysis
+    - DataSources: Handles all data fetching and analysis
     - ContentGenerator: Handles tweet generation
     - TweetScheduler: Handles tweet timing
     - EngagementManager: Handles community engagement
     - ElionPersonality: Handles personality and responses
     - PortfolioManager: Handles portfolio tracking
-    - DataSources: Handles data fetching
     """
     
-    def __init__(self, llm, data_sources=None):
+    def __init__(self, llm, cryptorank_api_key=None):
         """Initialize Elion with necessary components"""
         # Initialize core components
-        self.data_sources = data_sources or DataSources()
-        self.market_analyzer = MarketAnalyzer(self.data_sources)
+        self.llm = llm
+        self.data = DataSources(llm, cryptorank_api_key)
+        
+        # Initialize other components
         self.personality = ElionPersonality()
         self.engagement = EngagementManager()
         self.portfolio = PortfolioManager()
@@ -72,7 +72,7 @@ class Elion:
         """Generate a market analysis tweet"""
         try:
             print("Getting market data...")
-            data = self.data_sources.get_market_data()
+            data = self.data.get_market_data()
             
             print("Generating tweet...")
             tweet = self.content.generate('market_analysis', data)
@@ -91,7 +91,7 @@ class Elion:
         """Generate a shill review tweet"""
         try:
             print("Getting shill opportunities...")
-            data = self.data_sources.get_shill_opportunities()
+            data = self.data.get_shill_opportunities()
             
             print("Generating tweet...")
             tweet = self.content.generate('shill_review', data)
@@ -110,7 +110,7 @@ class Elion:
         """Generate a market search tweet"""
         try:
             print("Getting market search data...")
-            data = self.data_sources.get_market_search(query)
+            data = self.data.get_market_search(query)
             
             print("Generating tweet...")
             tweet = self.content.generate('market_search', data)
@@ -146,7 +146,7 @@ class Elion:
             if tweet_data.get('type') in ['market_analysis', 'market_search', 'gem_alpha']:
                 self.metrics['market_analysis'].append({
                     'tweet': tweet_data,
-                    'market_response': self.market_analyzer.analyze_market_conditions()
+                    'market_response': self.data.analyze_market_conditions()
                 })
                 
         except Exception as e:
@@ -198,7 +198,7 @@ class Elion:
     def get_next_tweet_type(self) -> str:
         """Determine the next type of tweet to generate"""
         # Check if market data is available
-        has_market_data = self.data_sources.cryptorank_api and self.data_sources.cryptorank_api.api_key
+        has_market_data = self.data.has_market_data()
         
         # Available tweet types based on data availability
         if has_market_data:
@@ -222,7 +222,7 @@ class Elion:
             ]
         
         # Use scheduler to pick the next type
-        return self.scheduler.get_next_type(tweet_types)
+        return self.scheduler.get_next_tweet_type()
 
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
         """Generate a tweet of the specified type"""
@@ -232,8 +232,8 @@ class Elion:
         try:
             # Handle market data dependent tweets
             if tweet_type in ['market_analysis', 'gem_alpha', 'shill_review', 'market_aware', 'technical_analysis']:
-                if not (self.data_sources.cryptorank_api and self.data_sources.cryptorank_api.api_key):
-                    logger.warning(f"Skipping {tweet_type} - CryptoRank API not available")
+                if not self.data.has_market_data():
+                    logger.warning(f"Skipping {tweet_type} - Market data not available")
                     # Fall back to a non-market tweet type
                     return self.generate_tweet('self_aware_thought')
             
@@ -268,11 +268,11 @@ class Elion:
     def process_market_alpha(self) -> Optional[str]:
         """Process market data and return alpha"""
         try:
-            market_data = self.data_sources.get_market_data()
+            market_data = self.data.get_market_data()
             if not market_data:
                 return None
                 
-            analysis = self.market_analyzer.analyze_market_conditions()
+            analysis = self.data.analyze_market_conditions()
             
             return self.content.generate('market_analysis', {
                 'market_data': market_data,
@@ -286,7 +286,7 @@ class Elion:
     def process_gem_alpha(self) -> Optional[str]:
         """Process gem data and return alpha call"""
         try:
-            gems = self.data_sources.get_undervalued_gems()
+            gems = self.data.get_undervalued_gems()
             if not gems or len(gems) == 0:
                 return None
                 
@@ -320,8 +320,8 @@ class Elion:
     def process_market_aware(self) -> Optional[str]:
         """Generate market awareness tweet"""
         try:
-            market_data = self.data_sources.get_market_data()
-            analysis = self.market_analyzer.analyze_market_conditions()
+            market_data = self.data.get_market_data()
+            analysis = self.data.analyze_market_conditions()
             
             return self.content.generate('market_aware', {
                 'market_data': market_data,
@@ -335,7 +335,7 @@ class Elion:
     def process_shill_review(self) -> Optional[str]:
         """Process shill review and generate tweet"""
         try:
-            projects = self.data_sources.get_projects()
+            projects = self.data.get_shill_opportunities()
             if not projects:
                 return None
                 
