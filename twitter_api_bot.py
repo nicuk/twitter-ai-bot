@@ -537,214 +537,84 @@ class AIGamingBot:
             print(f"Error updating rate limits: {e}")
 
     def get_tweet_content(self):
-        """Get content optimized for CT growth"""
+        """Get content for the next tweet"""
         try:
-            current_time = datetime.utcnow()
+            # Get market data if available
+            market_data = self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
             
-            # 1. Prime time alpha calls (13:00-22:00 UTC)
-            is_prime_time = 13 <= current_time.hour <= 22
-            if is_prime_time:
-                # 40% chance of alpha call during prime time
-                if random.random() < 0.4:
-                    alpha = self._generate_alpha_call()
-                    if alpha:
-                        return alpha
-                
-                # 30% chance of whale alert
-                elif random.random() < 0.3:
-                    whale_alert = self._generate_whale_alert()
-                    if whale_alert:
-                        return whale_alert
-                
-                # 20% chance of controversy
-                elif random.random() < 0.2:
-                    controversy = self._generate_controversy()
-                    if controversy:
-                        return controversy
+            # Get current market mood
+            market_mood = 'neutral'
+            if market_data:
+                if market_data.get('sentiment', 0) > 0.6:
+                    market_mood = 'confident'
+                elif market_data.get('sentiment', 0) < 0.4:
+                    market_mood = 'mysterious'
             
-            # 2. Technical analysis (any time)
-            if random.random() < 0.3:
-                tech_alpha = self._generate_technical_alpha()
-                if tech_alpha:
-                    return tech_alpha
+            # Generate tweet using Elion
+            tweet_content = self.elion.generate_tweet(market_data, market_mood)
             
-            # 3. Community engagement
-            if self._should_post_question():
-                return self._generate_ct_engagement()
+            if not tweet_content:
+                # If tweet generation fails, use a simple backup
+                tweet_content = "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
             
-            # 4. Market-aware backup
-            return self._generate_market_aware_tweet()
+            return tweet_content
             
         except Exception as e:
             print(f"Error getting tweet content: {e}")
-            return self._generate_backup_tweet()
-    
+            return "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
+
     def _generate_alpha_call(self):
         """Generate alpha call based on market data"""
         try:
-            # Get trending data
-            trending = self.intel_gatherer.get_trending_projects(limit=3)
-            if not trending:
-                return None
-            
-            project = trending[0]['name']
-            
-            # Compare to successful past projects
-            comparison_projects = ['PEPE', 'WOJAK', 'BONK', 'WIF']
-            
-            signals = [
-                "Unusual wallet accumulation",
-                "Dev wallet activity spike",
-                "Contract interactions +200%",
-                "Insider accumulation pattern",
-                "Whale wallet movement"
-            ]
-            
-            features = [
-                "Strong community growth",
-                "Innovative tokenomics",
-                "Unique use case",
-                "Experienced team",
-                "Strategic partnerships"
-            ]
-            
-            template = random.choice(self.elion.content_strategies['alpha_calls']['templates'])
-            return template.format(
-                project=project,
-                comparison_project=random.choice(comparison_projects),
-                signal1=random.choice(signals),
-                signal2=random.choice(signals),
-                signal3=random.choice(signals),
-                feature1=random.choice(features),
-                feature2=random.choice(features),
-                feature3=random.choice(features)
-            )
-            
+            # Use Elion's content generation with alpha call context
+            context = {
+                'content_type': 'alpha_call',
+                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            }
+            return self.elion.generate_content('alpha_call', context)
         except Exception as e:
             print(f"Error generating alpha call: {e}")
             return None
-    
+
     def _generate_whale_alert(self):
         """Generate whale movement alert"""
         try:
-            # Get market data
-            trending = self.intel_gatherer.get_trending_projects(limit=1)
-            if not trending:
-                return None
-            
-            project = trending[0]['name']
-            
-            amounts = [
-                "500 ETH",
-                "1.2M USDC",
-                "3000 BNB",
-                "2.5M tokens"
-            ]
-            
-            destinations = [
-                "CEX deposit address",
-                "fresh deployment wallet",
-                "staking contract",
-                "LP pool"
-            ]
-            
-            events = [
-                "major partnership announcement",
-                "CEX listing",
-                "product launch",
-                "token unlock"
-            ]
-            
-            template = random.choice(self.elion.content_strategies['whale_tracking']['templates'])
-            return template.format(
-                project=project,
-                amount=random.choice(amounts),
-                destination=random.choice(destinations),
-                event=random.choice(events),
-                previous_event=random.choice(events)
-            )
-            
+            # Use Elion's content generation with whale alert context
+            context = {
+                'content_type': 'whale_alert',
+                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            }
+            return self.elion.generate_content('whale_alert', context)
         except Exception as e:
             print(f"Error generating whale alert: {e}")
             return None
-    
+
     def _generate_controversy(self):
         """Generate controversial take for engagement"""
         try:
-            trending = self.intel_gatherer.get_trending_projects(limit=1)
-            if not trending:
-                return None
-            
-            project = trending[0]['name']
-            
-            takes = [
-                "heavily undervalued",
-                "a potential 100x",
-                "better than competitors",
-                "misunderstood by CT"
-            ]
-            
-            proofs = [
-                "Team's previous exits",
-                "Unique tech advantage",
-                "Market size potential",
-                "Community metrics",
-                "Partnership pipeline"
-            ]
-            
-            template = random.choice(self.elion.content_strategies['controversy']['templates'])
-            return template.format(
-                project=project,
-                controversial_take=random.choice(takes),
-                proof1=random.choice(proofs),
-                proof2=random.choice(proofs),
-                secret_insight=f"{project} is about to change the game. Insiders accumulating."
-            )
-            
+            # Use Elion's content generation with controversy context
+            context = {
+                'content_type': 'controversy',
+                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            }
+            return self.elion.generate_content('controversy', context)
         except Exception as e:
             print(f"Error generating controversy: {e}")
             return None
-    
+
     def _generate_technical_alpha(self):
         """Generate technical analysis"""
         try:
-            trending = self.intel_gatherer.get_trending_projects(limit=1)
-            if not trending:
-                return None
-            
-            project = trending[0]['name']
-            
-            metrics = [
-                "Gas optimization +40%",
-                "Unique holders +150%",
-                "Contract security 95/100",
-                "Dev activity +300%",
-                "TVL growth +80%"
-            ]
-            
-            insights = [
-                "Hidden mint function found",
-                "Unusual proxy pattern",
-                "New bridge integration",
-                "Optimized fee structure",
-                "Zero-knowledge proofs"
-            ]
-            
-            template = random.choice(self.elion.content_strategies['technical_alpha']['templates'])
-            return template.format(
-                project=project,
-                metric1=random.choice(metrics),
-                metric2=random.choice(metrics),
-                metric3=random.choice(metrics),
-                tech_insight1=random.choice(insights),
-                tech_insight2=random.choice(insights),
-                tech_insight3=random.choice(insights)
-            )
-            
+            # Use Elion's content generation with technical analysis context
+            context = {
+                'content_type': 'technical_analysis',
+                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            }
+            return self.elion.generate_content('technical_analysis', context)
         except Exception as e:
-            print(f"Error generating technical alpha: {e}")
+            print(f"Error generating technical analysis: {e}")
             return None
-    
+
     def _should_post_question(self):
         """Determine if we should post a new question"""
         try:
@@ -1054,7 +924,7 @@ class AIGamingBot:
             context = self._get_market_context()
             market_mood = self._get_market_mood()
             
-            # Generate tweet using Elion's personality
+            # Generate tweet using Elion
             content = self.elion.generate_tweet(context, market_mood)
             return content
             
@@ -1065,61 +935,71 @@ class AIGamingBot:
     def generate_engagement_reply(self, tweet):
         """Generate a personality-driven reply to a tweet"""
         try:
-            # Get engagement level
-            metrics = {
-                'likes': tweet.public_metrics['like_count'] if hasattr(tweet, 'public_metrics') else 0,
-                'retweets': tweet.public_metrics['retweet_count'] if hasattr(tweet, 'public_metrics') else 0,
-                'replies': tweet.public_metrics['reply_count'] if hasattr(tweet, 'public_metrics') else 0
+            # Use Elion's engagement system to generate a reply
+            context = {
+                'tweet_text': tweet.text,
+                'tweet_author': tweet.author_id,
+                'tweet_metrics': tweet.public_metrics if hasattr(tweet, 'public_metrics') else None,
+                'market_data': self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
             }
-            engagement_level = self._get_engagement_level(metrics)
-            
-            # Generate reply using Elion's personality
-            reply = self.elion.generate_reply(tweet.text, engagement_level)
-            return reply
-            
+            return self.elion.engagement.generate_reply(context)
         except Exception as e:
-            print(f"Error generating reply: {e}")
+            print(f"Error generating engagement reply: {e}")
             return None
 
     def post_engagement_reply(self):
         """Post a reply to a followed account's tweet"""
         try:
-            # Check if we've hit daily engagement limit
-            if self.rate_limits['timeline']['daily_engagement_posts'] >= self.rate_limits['timeline']['max_daily_engagement']:
-                print("Daily engagement post limit reached")
+            # Check if we can post
+            if not self._can_post_tweet():
+                print("\nCannot post engagement reply due to rate limits")
                 return False
             
-            # Get recent timeline tweets
-            timeline_tweets = self.get_timeline_tweets()
-            if not timeline_tweets:
+            # Get timeline tweets
+            tweets = self.get_timeline_tweets(max_results=10)
+            if not tweets:
                 return False
             
-            # Sort by engagement potential (likes + retweets)
-            timeline_tweets.sort(
-                key=lambda x: (x.public_metrics['like_count'] + x.public_metrics['retweet_count']) if hasattr(x, 'public_metrics') else 0,
-                reverse=True
-            )
+            # Filter and sort tweets by engagement
+            eligible_tweets = []
+            for tweet in tweets:
+                if hasattr(tweet, 'public_metrics'):
+                    engagement_score = tweet.public_metrics.get('reply_count', 0) + \
+                                     tweet.public_metrics.get('retweet_count', 0) * 2 + \
+                                     tweet.public_metrics.get('like_count', 0)
+                    eligible_tweets.append((tweet, engagement_score))
+                
+            if not eligible_tweets:
+                return False
             
-            # Try to generate replies until we find a good one
-            for tweet in timeline_tweets:
-                reply = self.generate_engagement_reply(tweet)
-                if reply:
-                    # Post the reply
-                    response = self.api.create_tweet(
-                        text=reply,
-                        in_reply_to_tweet_id=tweet['id']
-                    )
-                    
-                    if response:
-                        # Update engagement post count
-                        self.rate_limits['timeline']['daily_engagement_posts'] += 1
-                        print(f"\nPosted engagement reply ({self.rate_limits['timeline']['daily_engagement_posts']}/{self.rate_limits['timeline']['max_daily_engagement']} today)")
-                        return True
+            # Sort by engagement score and get top tweet
+            eligible_tweets.sort(key=lambda x: x[1], reverse=True)
+            target_tweet = eligible_tweets[0][0]
             
-            return False
+            # Generate reply using Elion's engagement system
+            reply_text = self.generate_engagement_reply(target_tweet)
+            if not reply_text:
+                return False
+            
+            # Post the reply
+            try:
+                response = self.api.create_tweet(
+                    text=reply_text,
+                    reply_settings="mentioning",
+                    in_reply_to_tweet_id=target_tweet.id
+                )
+                
+                # Update engagement metrics
+                self.rate_limits['timeline']['daily_engagement_posts'] += 1
+                print(f"\nSuccessfully posted engagement reply: {reply_text[:50]}...")
+                return True
+                
+            except Exception as e:
+                print(f"\nError posting engagement reply: {e}")
+                return False
             
         except Exception as e:
-            print(f"Error posting engagement reply: {e}")
+            print(f"Error in post_engagement_reply: {e}")
             return False
 
     def _should_reset_engagement_count(self):
@@ -1214,6 +1094,33 @@ class AIGamingBot:
         except Exception as e:
             print(f"\nCritical error in main loop: {e}")
             
+    def _generate_market_aware_tweet(self):
+        """Generate a tweet based on market conditions and intelligence"""
+        try:
+            # Get market intel and generate tweet using Elion
+            market_data = self.intel_gatherer.get_latest_intel() if self.has_market_intel else None
+            context = {
+                'content_type': 'market_aware',
+                'market_data': market_data
+            }
+            return self.elion.generate_content('market_aware', context)
+        except Exception as e:
+            print(f"Error generating market-aware tweet: {e}")
+            return None
+
+    def _generate_backup_tweet(self):
+        """Generate a backup tweet when market data is unavailable"""
+        try:
+            # Use Elion's content generation with minimal context
+            context = {
+                'content_type': 'backup',
+                'market_data': None
+            }
+            return self.elion.generate_content('backup', context)
+        except Exception as e:
+            print(f"Error generating backup tweet: {e}")
+            return "Exciting developments in #GameFi and #AI! What projects are you watching? 🎮🤖"
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
