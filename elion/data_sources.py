@@ -12,6 +12,7 @@ import tweepy
 from collections import defaultdict
 from .data_storage import DataStorage
 import sys
+import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from custom_llm import MetaLlamaComponent
 
@@ -20,43 +21,67 @@ class CryptoRankAPI:
     
     def __init__(self):
         """Initialize the API wrapper"""
-        load_dotenv()
+        try:
+            load_dotenv()  # Try to load .env file, but don't fail if it doesn't exist
+        except:
+            pass  # In Railway, env vars are already set
+            
         self.api_key = os.getenv('CRYPTORANK_API_KEY')
-        self.base_url = 'https://api.cryptorank.io/v2'
-        self.headers = {
-            'X-Api-Key': self.api_key  # Only use X-Api-Key header
-        }
+        if not self.api_key:
+            raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
+            
+        self.base_url = 'https://api.cryptorank.io/v1'  # Changed to v1
+        print(f"Using API key: {self.api_key[:10]}...")  # Print first 10 chars
+        self._cache = {}
 
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         """Make a request to the API"""
         url = f"{self.base_url}/{endpoint}"
         
+        # Add API key to params
+        if params is None:
+            params = {}
+        params['api_key'] = self.api_key
+        
         try:
-            print(f"\nMaking request to {url}")
-            print(f"Headers: {self.headers}")
-            print(f"Params: {params}")
+            # Make request
+            response = requests.get(url, params=params)
             
-            response = requests.get(url, headers=self.headers, params=params)
-            print(f"Response status: {response.status_code}")
+            # Print debug info
+            print(f"\nAPI Request:")
+            print(f"URL: {url}")
+            print(f"Status: {response.status_code}")
             
-            if response.status_code == 401:
-                print("API key is missing or invalid. Check your CRYPTORANK_API_KEY environment variable.")
+            # Check response
+            if response.status_code == 200:
+                data = response.json()
+                print(f"Got {len(data.get('data', []))} coins")
+                return data
+                
+            # Handle errors
+            print(f"Error: {response.text}")
+            return {'error': f'API error: {response.status_code}'}
             
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error making request to {url}: {e}")
-            if hasattr(e.response, 'text'):
-                print(f"Response text: {e.response.text}")
-            return {}
+        except Exception as e:
+            print(f"Request failed: {e}")
+            return {'error': str(e)}
+
+    def _get_cached_response(self, endpoint: str) -> Optional[Dict]:
+        """Get cached response for an endpoint"""
+        if endpoint in self._cache:
+            print(f"Using cached response for {endpoint}")
+            return self._cache[endpoint]
+        return None
+
+    def _cache_response(self, endpoint: str, data: Dict):
+        """Cache response data"""
+        self._cache[endpoint] = data
 
     def get_currencies(self, limit: int = 100) -> List[Dict]:
         """Get list of currencies with market data"""
         params = {
-            'limit': limit,  # Must be 100, 500, or 1000
-            'sortBy': 'rank',  # Not sort[by]
-            'sortDirection': 'ASC',  # Not sort[dir]
-            'include': ['percentChange']  # Include price change data
+            'limit': limit,
+            'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
         }
         
         response = self._make_request('currencies', params=params)
@@ -79,9 +104,7 @@ class CryptoRankAPI:
         # Get a larger sample size to filter from
         params = {
             'limit': 500,  # Get more coins to filter from
-            'sortBy': 'volume24h',
-            'sortDirection': 'DESC',
-            'include': ['percentChange']
+            'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
         }
         response = self._make_request('currencies', params)
         coins = response.get('data', [])
@@ -92,8 +115,8 @@ class CryptoRankAPI:
                 # Extract metrics
                 market_cap = float(coin.get('marketCap', 0))
                 volume_24h = float(coin.get('volume24h', 0))
-                price_change_24h = float(coin.get('percentChange', {}).get('h24', 0))
-                price_change_7d = float(coin.get('percentChange', {}).get('d7', 0))
+                price_change_24h = float(coin.get('percentChange24h', 0))
+                price_change_7d = float(coin.get('percentChange7d', 0))
                 
                 # Apply filters
                 if (1_000_000 <= market_cap <= 100_000_000 and  # Market cap between $1M and $100M
@@ -130,9 +153,7 @@ class CryptoRankAPI:
         # Get a larger sample size to filter from
         params = {
             'limit': 500,
-            'sortBy': 'marketCap',
-            'sortDirection': 'ASC',  # Start from smaller market caps
-            'include': ['percentChange']
+            'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
         }
         response = self._make_request('currencies', params)
         coins = response.get('data', [])
@@ -149,14 +170,14 @@ class CryptoRankAPI:
                     # Skip if no market cap or volume
                     if market_cap <= 0 or volume_24h <= 0:
                         continue
-                    
+                        
                     # Get percent changes safely
-                    changes = coin.get('percentChange', {})
+                    changes = coin.get('percentChange24h', 0), coin.get('percentChange7d', 0)
                     if not changes:
                         continue
                         
-                    price_change_24h = float(changes.get('h24', 0))
-                    price_change_7d = float(changes.get('d7', 0))
+                    price_change_24h = float(changes[0])
+                    price_change_7d = float(changes[1])
                 except (ValueError, TypeError):
                     continue
                 
@@ -189,9 +210,11 @@ class DataSources:
     
     def __init__(self):
         """Initialize data sources"""
-        # Load environment variables
-        load_dotenv()
-        
+        try:
+            load_dotenv()  # Try to load .env file, but don't fail if it doesn't exist
+        except:
+            pass  # In Railway, env vars are already set
+            
         # Initialize LLM with working configuration
         api_url = "https://api-user.ai.aitech.io/api/v1/user/products/209/use/chat/completions"
         model_name = "Meta-Llama-3.3-70B-Instruct"
@@ -204,7 +227,10 @@ class DataSources:
         
         # Initialize data sources
         self.crypto_rank_api_key = os.getenv('CRYPTORANK_API_KEY')
-        self.crypto_rank_base_url = "https://api.cryptorank.io/v2"  # Updated to v2
+        if not self.crypto_rank_api_key:
+            raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
+            
+        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"  # Updated to v1
         
         # Cache for API responses
         self._cache = {}
@@ -249,73 +275,101 @@ class DataSources:
 
     def _is_stablecoin(self, symbol: str, price: float, price_change_24h: float) -> bool:
         """Check if a coin is likely a stablecoin"""
-        # Common stablecoin indicators in symbol
-        stablecoin_indicators = ['USD', 'DAI', 'TUSD', 'USDT', 'USDC', 'BUSD', 'CUSD', 'USDD']
+        # Common stablecoin symbols
+        stablecoin_symbols = {'USDT', 'USDC', 'DAI', 'BUSD', 'UST', 'TUSD', 'USDP', 'USDD'}
         
         # Check symbol
-        if any(indicator in symbol.upper() for indicator in stablecoin_indicators):
+        if symbol.upper() in stablecoin_symbols:
             return True
             
-        # Check if price is pegged near $1 and has low volatility
-        if 0.95 <= price <= 1.05 and abs(price_change_24h) < 5:
-            return True
-            
+        # Check price and volatility
+        if price is not None and price_change_24h is not None:
+            if 0.95 <= price <= 1.05 and abs(price_change_24h) < 1:
+                return True
+                
         return False
 
-    def get_market_alpha(self) -> Dict:
-        """Get market alpha data including price, volume, and market cap"""
+    def get_market_data(self) -> Dict:
+        """Get market data from CryptoRank"""
         try:
-            # Try to get from cache first
-            if (self.cache['market_data']['data'] and 
-                self.cache['market_data']['timestamp'] > datetime.utcnow() - timedelta(minutes=5)):
-                return self.cache['market_data']['data']
-
-            # Get fresh data from v2 currencies endpoint
-            coins = self.cryptorank_api.get_currencies()
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 10,  # Just get top 10 for now
+                'convert': 'USD'
+            })
             
-            if not coins:
-                print("No coins found in response")
-                return {}
+            if 'error' in response:
+                return {'error': response['error']}
                 
-            # Process and format data
-            market_data = self._get_default_market_data()
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # Get BTC/ETH data
+            btc = next((c for c in data if c['symbol'] == 'BTC'), None)
+            eth = next((c for c in data if c['symbol'] == 'ETH'), None)
             
-            # Get the first coin (usually BTC) for market sentiment
-            if coins:
-                coin = coins[0]
-                try:
-                    market_data['price'] = float(coin.get('values', {}).get('USD', {}).get('price', 0))
-                    market_data['price_change_24h'] = float(coin.get('values', {}).get('USD', {}).get('percentChange', {}).get('24h', 0))
-                    market_data['volume_24h'] = float(coin.get('values', {}).get('USD', {}).get('volume24h', 0))
-                    market_data['market_cap'] = float(coin.get('values', {}).get('USD', {}).get('marketCap', 0))
-                except (ValueError, TypeError, AttributeError) as e:
-                    print(f"Error processing coin data: {e}")
+            if not btc or not eth:
+                return {'error': 'BTC or ETH data not found'}
+                
+            # Format BTC/ETH data
+            btc_data = {
+                'price': float(btc.get('values', {}).get('USD', {}).get('price', 0)),
+                'change_24h': float(btc.get('values', {}).get('USD', {}).get('percentChange24h', 0)),
+                'volume': float(btc.get('values', {}).get('USD', {}).get('volume24h', 0)),
+                'mcap': float(btc.get('values', {}).get('USD', {}).get('marketCap', 0))
+            }
+            eth_data = {
+                'price': float(eth.get('values', {}).get('USD', {}).get('price', 0)),
+                'change_24h': float(eth.get('values', {}).get('USD', {}).get('percentChange24h', 0))
+            }
             
-            # Update cache
-            self.cache['market_data'] = {
-                'data': market_data,
-                'timestamp': datetime.utcnow()
+            # Print debug info
+            print(f"\nBTC Data: {btc_data}")
+            print(f"ETH Data: {eth_data}")
+            
+            # Format market data
+            market_data = {
+                'btc_price': btc_data['price'],
+                'eth_price': eth_data['price'],
+                'btc_change_24h': btc_data['change_24h'],
+                'eth_change_24h': eth_data['change_24h'],
+                'total_mcap': sum(float(c.get('values', {}).get('USD', {}).get('marketCap', 0)) for c in data),
+                'total_volume': sum(float(c.get('values', {}).get('USD', {}).get('volume24h', 0)) for c in data),
+                'market_sentiment': self._get_market_sentiment(btc_data),
+                'top_gainers': []  # Skip for now
             }
             
             return market_data
             
         except Exception as e:
-            print(f"Error getting market alpha: {e}")
-            return {}
+            print(f"Error getting market data: {e}")
+            return {'error': str(e)}
+
+    def _get_market_sentiment(self, btc_data: Dict) -> str:
+        """Get market sentiment based on BTC performance"""
+        try:
+            change_24h = float(btc_data.get('change_24h', 0))
+            volume_24h = float(btc_data.get('volume', 0))
+            market_cap = float(btc_data.get('mcap', 0))
             
-    def _get_default_market_data(self) -> Dict:
-        """Get default market data structure"""
-        return {
-            'price': 0.0,
-            'price_change_24h': 0.0,
-            'volume_24h': 0.0,
-            'market_cap': 0.0,
-            'social_sentiment': 0.5  # Neutral sentiment
-        }
+            # Volume to market cap ratio
+            volume_mcap_ratio = volume_24h / market_cap if market_cap > 0 else 0
             
-    def get_market_overview(self) -> Dict:
-        """Get market overview data including price, volume, and market cap"""
-        return self.get_market_alpha()
+            # Determine sentiment
+            if change_24h >= 5 and volume_mcap_ratio >= 0.1:
+                return 'BULLISH'
+            elif change_24h <= -5 and volume_mcap_ratio >= 0.1:
+                return 'BEARISH'
+            elif abs(change_24h) >= 2:
+                return 'VOLATILE'
+            else:
+                return 'NEUTRAL'
+                
+        except Exception as e:
+            print(f"Error getting market sentiment: {e}")
+            return 'NEUTRAL'
 
     def get_alpha_opportunities(self) -> List[Dict]:
         """Get potential alpha opportunities from CryptoRank"""
@@ -323,9 +377,7 @@ class DataSources:
             # Get top 500 coins by volume
             params = {
                 'limit': 500,
-                'sortBy': 'volume24h',
-                'sortDirection': 'DESC',
-                'include': ['percentChange']
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
             }
             
             response = self.cryptorank_api._make_request('currencies', params)
@@ -339,18 +391,21 @@ class DataSources:
                     # Extract basic info
                     name = coin.get('name', '').encode('ascii', 'ignore').decode()  # Remove non-ASCII chars
                     symbol = coin.get('symbol', '').encode('ascii', 'ignore').decode()
-                    price = float(coin.get('price', 0) or 0)
-                    market_cap = float(coin.get('marketCap', 0) or 0)
-                    volume_24h = float(coin.get('volume24h', 0) or 0)
+                    price = float(coin.get('price', 0))
+                    market_cap = float(coin.get('marketCap', 0))
+                    volume_24h = float(coin.get('volume24h', 0))
                     
                     # Skip if missing essential data
                     if not all([name, symbol, price > 0, market_cap > 0, volume_24h > 0]):
                         continue
                         
                     # Extract price changes (already in percentage)
-                    changes = coin.get('percentChange', {})
-                    price_change_24h = float(changes.get('h24', 0) or 0)
-                    price_change_7d = float(changes.get('d7', 0) or 0)
+                    changes = coin.get('percentChange24h', 0), coin.get('percentChange7d', 0)
+                    if not changes:
+                        continue
+                        
+                    price_change_24h = float(changes[0])
+                    price_change_7d = float(changes[1])
                     
                     # Skip stablecoins
                     if self._is_stablecoin(symbol, price, price_change_24h):
@@ -394,166 +449,142 @@ class DataSources:
             return []
             
     def _get_market_condition(self, data: List[Dict]) -> Tuple[str, float, float]:
-        """Determine market condition based on BTC performance
-        Returns: (condition, btc_24h_change, btc_7d_change)
-        where condition is one of: 'hot', 'neutral', 'cold'
-        """
-        # Try to find BTC in the first few entries (more reliable data)
-        btc_entries = []
-        for coin in data[:20]:  # Look in first 20 entries
-            if coin.get('symbol', '').upper() == 'BTC':
-                try:
-                    changes = coin.get('percentChange', {})
-                    # Values are already percentages, no need to multiply by 100
-                    change_24h = float(changes.get('h24', 0) or 0)
-                    change_7d = float(changes.get('d7', 0) or 0)
-                    
-                    # Only accept reasonable values
-                    if -20 <= change_24h <= 20 and -40 <= change_7d <= 40:
-                        btc_entries.append((change_24h, change_7d))
-                except (TypeError, ValueError):
-                    continue
-        
-        # Use median if we have multiple entries
-        if btc_entries:
-            if len(btc_entries) > 1:
-                # Sort by 24h change and take median
-                btc_entries.sort(key=lambda x: x[0])
-                median_idx = len(btc_entries) // 2
-                change_24h, change_7d = btc_entries[median_idx]
-            else:
-                change_24h, change_7d = btc_entries[0]
-                
-            # Determine market condition based on real-world thresholds
-            if change_24h >= 4 or change_7d >= 8:  # Hot: BTC up >4% 24h or >8% weekly
-                return 'hot', change_24h, change_7d
-            elif change_24h <= -4 or change_7d <= -8:  # Cold: BTC down >4% 24h or >8% weekly
-                return 'cold', change_24h, change_7d
-            else:
-                return 'neutral', change_24h, change_7d
-                    
-        return 'neutral', 0, 0  # Default if no valid BTC data found
-
-    def get_shill_opportunities(self) -> List[Dict]:
-        """Get potential shill opportunities from CryptoRank based on market conditions"""
+        """Determine market condition based on BTC performance"""
         try:
-            # Get top 500 coins by volume
-            params = {
-                'limit': 500,
-                'sortBy': 'volume24h',
-                'sortDirection': 'DESC',
-                'include': ['percentChange']
-            }
+            # Get BTC data
+            btc_data = next((coin for coin in data if coin['symbol'] == 'BTC'), None)
+            if not btc_data:
+                return 'NEUTRAL', 0, 0
+                
+            # Get price changes
+            btc_24h = btc_data.get('priceChange24h', 0)
+            btc_7d = btc_data.get('priceChange7d', 0)
             
-            response = self.cryptorank_api._make_request('currencies', params)
-            if not response or 'data' not in response:
-                print("No data received from API")
-                return []
-                
             # Determine market condition
-            market_condition, btc_24h, btc_7d = self._get_market_condition(response['data'])
-            print(f"\nMarket Condition: {market_condition.upper()}")
-            print(f"BTC 24h Change: {btc_24h:.2f}%")
-            print(f"BTC 7d Change: {btc_7d:.2f}%\n")
+            if btc_24h >= 5 or btc_7d >= 10:
+                condition = 'HOT'
+            elif btc_24h <= -5 or btc_7d <= -10:
+                condition = 'COLD'
+            else:
+                condition = 'NEUTRAL'
                 
-            opportunities = []
-            for coin in response['data']:
-                try:
-                    # Extract basic info
-                    name = coin.get('name', '').encode('ascii', 'ignore').decode()  # Remove non-ASCII chars
-                    symbol = coin.get('symbol', '').encode('ascii', 'ignore').decode()
-                    price = float(coin.get('price', 0) or 0)
-                    market_cap = float(coin.get('marketCap', 0) or 0)
-                    volume_24h = float(coin.get('volume24h', 0) or 0)
-                    
-                    # Skip if missing essential data
-                    if not all([name, symbol, price > 0, market_cap > 0, volume_24h > 0]):
-                        continue
-                        
-                    # Extract price changes (already in percentage)
-                    changes = coin.get('percentChange', {})
-                    price_change_24h = float(changes.get('h24', 0) or 0)
-                    price_change_7d = float(changes.get('d7', 0) or 0)
-                    price_change_30d = float(changes.get('d30', 0) or 0)
-                    
-                    # Skip stablecoins
-                    if self._is_stablecoin(symbol, price, price_change_24h):
-                        continue
-                        
-                    # Calculate volume to market cap ratio
-                    volume_to_mcap = volume_24h / market_cap if market_cap > 0 else 0
-                    
-                    # Base criteria for all market conditions
-                    if not (5_000_000 <= market_cap <= 100_000_000 and    # $5M to $100M mcap
-                           volume_24h >= 1_000_000 and                     # >$1M volume
-                           volume_to_mcap >= 0.05):                        # Decent trading activity
-                        continue
-                        
-                    # Market condition specific criteria
-                    is_opportunity = False
-                    
-                    if market_condition == 'hot':
-                        # Look for coins consolidating after gains
-                        # - Daily move less than BTC
-                        # - Weekly stronger than BTC
-                        # - Good volume
-                        if (0 <= price_change_24h <= btc_24h and      # Not outperforming BTC today
-                            price_change_7d >= btc_7d * 1.2 and       # But stronger weekly trend
-                            price_change_30d >= -30 and               # Not heavily dumped
-                            volume_to_mcap >= 0.10):                  # Good volume
-                            is_opportunity = True
-                            
-                    elif market_condition == 'neutral':
-                        # Look for steady gainers
-                        # - Consistent positive moves
-                        # - Weekly stronger than daily
-                        if (5 <= price_change_24h <= 20 and          # Steady daily growth
-                            price_change_7d >= price_change_24h and   # Building momentum
-                            price_change_30d >= -30):                 # Not heavily dumped
-                            is_opportunity = True
-                            
-                    else:  # cold market
-                        # Look for strength in weakness
-                        # - Positive while BTC negative
-                        # - Showing relative strength
-                        if (price_change_24h > abs(btc_24h/2) and    # Outperforming BTC
-                            price_change_7d > abs(btc_7d/2) and      # Sustained outperformance
-                            price_change_24h <= 25):                  # Not overheated
-                            is_opportunity = True
-                            
-                    if is_opportunity:
-                        opportunities.append({
-                            'name': name,
-                            'symbol': symbol,
-                            'price': price,
-                            'market_cap': market_cap,
-                            'volume_24h': volume_24h,
-                            'price_change_24h': price_change_24h,
-                            'price_change_7d': price_change_7d,
-                            'price_change_30d': price_change_30d,
-                            'volume_to_mcap': volume_to_mcap
-                        })
-                        
-                except (TypeError, ValueError) as e:
-                    print(f"Error processing coin {coin.get('symbol', 'UNKNOWN')}: {str(e)}")
-                    continue
-                    
-            # Sort based on market condition
-            if market_condition == 'hot':
-                # Prioritize strong weekly gainers that are calm today
-                opportunities.sort(key=lambda x: (x['price_change_7d'] * (1 - x['price_change_24h']/100)), reverse=True)
-            elif market_condition == 'neutral':
-                # Prioritize steady gainers with good volume
-                opportunities.sort(key=lambda x: (x['price_change_7d'] * x['volume_to_mcap']), reverse=True)
-            else:  # cold
-                # Prioritize strongest relative performers
-                opportunities.sort(key=lambda x: (x['price_change_24h'] + x['price_change_7d']), reverse=True)
-                
-            return opportunities[:10]  # Return top 10
+            return condition, btc_24h, btc_7d
             
         except Exception as e:
-            print(f"Error in get_shill_opportunities: {str(e)}")
-            return []
+            print(f"Error getting market condition: {e}")
+            return 'NEUTRAL', 0, 0
+
+    def get_shill_opportunities(self) -> Dict:
+        """Get shill review opportunities"""
+        try:
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 100,
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
+            })
+            
+            if 'error' in response:
+                return {'error': response['error']}
+                
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # If symbol provided, find that specific coin
+            coins = sorted(data, key=lambda x: float(x.get('priceChange24h', 0)), reverse=True)[:5]
+                
+            # Format review data
+            reviews = []
+            for coin in coins:
+                if self._is_stablecoin(coin['symbol'], float(coin.get('price', 0)), float(coin.get('priceChange24h', 0))):
+                    continue
+                    
+                review = {
+                    'project': {
+                        'symbol': coin['symbol'],
+                        'name': coin.get('name', '')
+                    },
+                    'metrics': {
+                        'price': float(coin.get('price', 0)),
+                        'price_change_24h': float(coin.get('priceChange24h', 0)),
+                        'price_change_7d': float(coin.get('priceChange7d', 0)),
+                        'market_cap': float(coin.get('marketCap', 0)) / 1e6,  # Convert to millions
+                        'volume_24h': float(coin.get('volume24h', 0)) / 1e6,  # Convert to millions
+                        'volume_to_mcap': float(coin.get('volume24h', 0)) / float(coin.get('marketCap', 1))
+                    }
+                }
+                reviews.append(review)
+                
+            return reviews[0] if reviews else {'error': 'No suitable tokens found'}
+            
+        except Exception as e:
+            print(f"Error getting shill opportunities: {e}")
+            return {'error': str(e)}
+
+    def get_market_search(self, query: str) -> Dict:
+        """Search for market data"""
+        try:
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 200,  # Increased limit for better search
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
+            })
+            
+            if 'error' in response:
+                return {'error': response['error']}
+                
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # Filter results by query
+            query = query.lower()
+            results = []
+            for coin in data:
+                try:
+                    # Check if coin matches query
+                    symbol = coin['symbol'].lower()
+                    name = coin.get('name', '').lower()
+                    category = coin.get('category', '').lower()
+                    
+                    if (query in symbol or query in name or query in category):
+                        # Skip stablecoins
+                        if self._is_stablecoin(coin['symbol'], float(coin.get('price', 0)), float(coin.get('priceChange24h', 0))):
+                            continue
+                            
+                        # Format coin data
+                        results.append({
+                            'symbol': coin['symbol'],
+                            'name': coin.get('name', ''),
+                            'price': float(coin.get('price', 0)),
+                            'price_change_24h': float(coin.get('priceChange24h', 0)),
+                            'volume_24h': float(coin.get('volume24h', 0)),
+                            'market_cap': float(coin.get('marketCap', 0)),
+                            'category': coin.get('category', '')
+                        })
+                except (ValueError, TypeError) as e:
+                    print(f"Error processing coin {coin.get('symbol')}: {e}")
+                    continue
+                    
+            # Sort by combination of market cap and volume
+            results.sort(key=lambda x: (x['market_cap'] * x['volume_24h']), reverse=True)
+            
+            # Print debug info
+            print(f"\nSearch Results for '{query}':")
+            for coin in results[:5]:
+                print(f"{coin['symbol']}: ${coin['price']:.4f} | {coin['price_change_24h']:+.1f}% | MCap: ${coin['market_cap']:,.0f}")
+            
+            return {
+                'query': query,
+                'results': results[:5],  # Return top 5 results
+                'total_found': len(results)
+            }
+            
+        except Exception as e:
+            print(f"Error searching market data: {e}")
+            return {'error': str(e)}
 
     def get_latest_news(self) -> List[Dict]:
         """Get latest news from RSS feeds and cache"""
@@ -667,3 +698,103 @@ class DataSources:
         except Exception as e:
             print(f"Error searching tweets: {e}")
             return []
+
+    def get_market_search(self, query: str) -> Dict:
+        """Search for market data"""
+        try:
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 100,
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
+            })
+            
+            if 'error' in response:
+                return {'error': response['error']}
+                
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # Filter results by query
+            query = query.lower()
+            results = []
+            for coin in data:
+                if (query in coin['symbol'].lower() or 
+                    query in coin.get('name', '').lower()):
+                    results.append({
+                        'symbol': coin['symbol'],
+                        'name': coin.get('name', ''),
+                        'price': float(coin.get('price', 0)),
+                        'price_change_24h': float(coin.get('priceChange24h', 0)),
+                        'volume_24h': float(coin.get('volume24h', 0)) / 1e6,  # Convert to millions
+                        'market_cap': float(coin.get('marketCap', 0)) / 1e6  # Convert to millions
+                    })
+                    
+            # Sort by market cap
+            results.sort(key=lambda x: x['market_cap'], reverse=True)
+            
+            return {
+                'query': query,
+                'results': results[:5],  # Return top 5 results
+                'total_found': len(results)
+            }
+            
+        except Exception as e:
+            print(f"Error searching market data: {e}")
+            return {'error': str(e)}
+            
+    def get_shill_review(self, symbol: str = None) -> Dict:
+        """Get shill review data for a token"""
+        try:
+            # Get currencies data from CryptoRank
+            response = self.cryptorank_api._make_request('currencies', {
+                'limit': 100,
+                'includeFields': 'price,marketCap,volume24h,percentChange24h,percentChange7d'
+            })
+            
+            if 'error' in response:
+                return {'error': response['error']}
+                
+            # Extract data
+            data = response.get('data', [])
+            if not data:
+                return {'error': 'No data found'}
+                
+            # If symbol provided, find that specific coin
+            if symbol:
+                coin = next((c for c in data if c['symbol'].lower() == symbol.lower()), None)
+                if not coin:
+                    return {'error': f'Token {symbol} not found'}
+                coins = [coin]
+            else:
+                # Otherwise get top gainers
+                coins = sorted(data, key=lambda x: float(x.get('priceChange24h', 0)), reverse=True)[:5]
+                
+            # Format review data
+            reviews = []
+            for coin in coins:
+                if self._is_stablecoin(coin['symbol'], float(coin.get('price', 0)), float(coin.get('priceChange24h', 0))):
+                    continue
+                    
+                review = {
+                    'project': {
+                        'symbol': coin['symbol'],
+                        'name': coin.get('name', '')
+                    },
+                    'metrics': {
+                        'price': float(coin.get('price', 0)),
+                        'price_change_24h': float(coin.get('priceChange24h', 0)),
+                        'price_change_7d': float(coin.get('priceChange7d', 0)),
+                        'market_cap': float(coin.get('marketCap', 0)) / 1e6,  # Convert to millions
+                        'volume_24h': float(coin.get('volume24h', 0)) / 1e6,  # Convert to millions
+                        'volume_to_mcap': float(coin.get('volume24h', 0)) / float(coin.get('marketCap', 1))
+                    }
+                }
+                reviews.append(review)
+                
+            return reviews[0] if reviews else {'error': 'No suitable tokens found'}
+            
+        except Exception as e:
+            print(f"Error getting shill review: {e}")
+            return {'error': str(e)}

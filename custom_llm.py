@@ -6,77 +6,61 @@ import json
 import requests
 
 class MetaLlamaComponent:
-    """Custom LLM component for Meta Llama model"""
+    """Custom LLM component for Meta-Llama"""
     
     def __init__(self, api_key: str, api_base: str):
         """Initialize Meta Llama component"""
         self.api_key = api_key
         self.api_base = api_base
-        self.model_name = "Meta-Llama-3.3-70B-Instruct"
+        self.model = "Meta-Llama-3.3-70B-Instruct"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
         self.display_name = "Meta-Llama"
 
-    def generate(self, prompt: str, **kwargs) -> str:
+    def generate(self, prompt: str, max_tokens: int = 150) -> str:
         """Generate text from prompt"""
         try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
+            # Format prompt for Llama
+            messages = [
+                {"role": "system", "content": "You are Elion, an AI crypto trading bot. Keep your responses concise and focused on market analysis."},
+                {"role": "user", "content": prompt}
+            ]
             
-            data = {
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant"},
-                    {"role": "user", "content": prompt}
-                ],
-                "model": self.model_name,
-                "stop": ["<|eot_id|>"],
-                "stream": True,
-                "stream_options": {"include_usage": True}
-            }
-            
-            print(f"\nMaking LLM request to: {self.api_base}")
-            print(f"Headers: {headers}")
-            print(f"Data: {data}\n")
-            
+            # Make API request
             response = requests.post(
                 self.api_base,
-                headers=headers,
-                json=data,
-                stream=True
+                headers=self.headers,
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7,
+                    "stream": False
+                },
+                timeout=30  # Add timeout
             )
             
-            if response.status_code not in [200, 201]:
-                print(f"API Error: {response.status_code} - {response.text}")
-                return ""
+            # Check response
+            if response.status_code != 200:
+                return f"Error: API returned status {response.status_code}"
                 
-            # Handle streaming response
-            full_response = ""
-            for line in response.iter_lines():
-                if line:
-                    line = line.decode('utf-8')
-                    if line.startswith("data: "):
-                        try:
-                            json_str = line[6:]  # Remove "data: " prefix
-                            if json_str == "[DONE]":
-                                continue
-                            
-                            chunk = json.loads(json_str)
-                            if "choices" in chunk and chunk["choices"]:
-                                delta = chunk["choices"][0].get("delta", {})
-                                if "content" in delta:
-                                    content = delta["content"]
-                                    print(content, end="", flush=True)
-                                    full_response += content
-                        except json.JSONDecodeError as e:
-                            print(f"Error decoding JSON: {e}")
-                            continue
-            
-            print("\n")  # Add newline after streaming
-            return full_response.strip()
-            
+            # Extract text from response
+            try:
+                result = response.json()
+                if 'choices' in result and len(result['choices']) > 0:
+                    return result['choices'][0]['message']['content'].strip()
+                return "Error: No response generated"
+            except Exception as e:
+                return f"Error: Failed to parse response - {str(e)}"
+                
+        except requests.exceptions.Timeout:
+            return "Error: API request timed out"
+        except requests.exceptions.RequestException as e:
+            return f"Error: API request failed - {str(e)}"
         except Exception as e:
-            print(f"Error in LLM generation: {str(e)}")
-            return ""
+            return f"Error: Unexpected error - {str(e)}"
 
     def __call__(self, prompt: str, **kwargs) -> str:
         """Make the class callable"""

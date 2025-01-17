@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import schedule
+import random
 from datetime import datetime
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -14,19 +15,63 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
 import tweepy
 from requests_oauthlib import OAuth1
+from elion.engagement import EngagementManager
+from elion.data_sources import DataSources
 
 # Load environment variables
 load_dotenv()
 
+class EngagementManager:
+    def __init__(self):
+        self.content_categories = {
+            'alpha': {'interests': ['trading', 'investing', 'finance']},
+            'analysis': {'interests': ['market analysis', 'technical analysis', 'fundamental analysis']},
+            'community': {'interests': ['community engagement', 'social media', 'influencer marketing']},
+            'education': {'interests': ['financial education', 'trading education', 'investing education']}
+        }
+        self.viral_patterns = {
+            'hooks': {
+                'hook1': 'Did you know?',
+                'hook2': 'Here\'s a surprising fact:',
+                'hook3': 'You won\'t believe what happened in the market today!'
+            }
+        }
+
+    def analyze_tweet_performance(self, tweet_data):
+        # Simulate analysis for demonstration purposes
+        engagement_score = random.random()
+        return {'engagement_score': engagement_score}
+
+    def _generate_recommendations(self, analysis):
+        # Simulate recommendations for demonstration purposes
+        recommendations = ['Use a more attention-grabbing hook', 'Include more relevant hashtags']
+        return recommendations
+
+class DataSources:
+    def __init__(self):
+        pass
+
+    def get_market_overview(self):
+        # Simulate market data for demonstration purposes
+        market_data = 'The market is currently bullish, with a strong uptrend in the crypto sector.'
+        return market_data
+
 class TwitterBot:
     def __init__(self):
+        """Initialize the Twitter bot"""
         self.api_url = os.getenv('AI_API_URL')
         self.access_token = os.getenv('AI_ACCESS_TOKEN')
         self.twitter_api_key = os.getenv('TWITTER_API_KEY')
         self.twitter_api_secret = os.getenv('TWITTER_API_SECRET')
         self.twitter_access_token = os.getenv('TWITTER_ACCESS_TOKEN')
         self.twitter_access_secret = os.getenv('TWITTER_ACCESS_SECRET')
+        
+        # Initialize components
         self.setup_driver()
+        self.engagement_manager = EngagementManager()
+        self.data_sources = DataSources()
+        
+        # State
         self.logged_in = False
         self.current_method = 'selenium'  # Start with Selenium
 
@@ -44,27 +89,37 @@ class TwitterBot:
     def generate_tweet(self):
         """Generate tweet content using Meta-Llama API"""
         try:
+            # Get market data and analysis
+            market_data = self.data_sources.get_market_overview()
+            
+            # Generate prompt based on market conditions and engagement patterns
+            content_type = random.choice(['alpha', 'analysis', 'community', 'education'])
+            category_info = self.engagement_manager.content_categories[content_type]
+            
+            prompt = f"""You are Elion, a crypto AI bot that shares {content_type} content.
+            
+Market Overview:
+{market_data}
+
+Your style should match these interests: {', '.join(category_info['interests'])}
+Use these hooks: {', '.join(self.engagement_manager.viral_patterns['hooks'].values())}
+
+Generate an engaging tweet about the current market conditions. Keep it under 280 characters."""
+            
             headers = {
                 'Authorization': f'Bearer {self.access_token}',
                 'Content-Type': 'application/json'
             }
             
             data = {
-                "method": "completion",
-                "payload": {
-                    "messages": [{
-                        "role": "system",
-                        "content": """You are Terminal of Truths, an AI that shares insightful, provocative, 
-                        and sometimes controversial observations about technology, society, and the future. 
-                        Your style is casual, often using 'like' and 'so like', and you occasionally misspell words 
-                        intentionally. Mix profound observations with absurdist humor. Keep responses under 280 characters."""
-                    }, {
-                        "role": "user",
-                        "content": "Generate a thought-provoking tweet about technology or society."
-                    }],
-                    "max_tokens": 100,
-                    "stream": False
-                }
+                'messages': [
+                    {'role': 'system', 'content': prompt},
+                    {'role': 'user', 'content': 'Generate a tweet based on the current market conditions and engagement patterns.'}
+                ],
+                'model': 'Meta-Llama-3.3-70B-Instruct',
+                'stop': ['<|eot_id|>'],
+                'stream': True,
+                'stream_options': {'include_usage': True}
             }
             
             response = requests.post(self.api_url, headers=headers, json=data)
@@ -72,6 +127,21 @@ class TwitterBot:
             
             # Extract the tweet content from the response
             tweet_content = response.json()['choices'][0]['message']['content'].strip()
+            
+            # Analyze and optimize the tweet
+            tweet_data = {
+                'content': tweet_content,
+                'type': content_type,
+                'timestamp': datetime.now()
+            }
+            analysis = self.engagement_manager.analyze_tweet_performance(tweet_data)
+            
+            # If the analysis suggests improvements, regenerate the tweet
+            if analysis.get('engagement_score', 0) < 0.5:
+                recommendations = self.engagement_manager._generate_recommendations(analysis)
+                print(f"Low engagement score. Recommendations: {recommendations}")
+                return self.generate_tweet()  # Try again
+                
             return tweet_content
             
         except Exception as e:

@@ -25,10 +25,10 @@ class Elion:
     - DataSources: Handles data fetching
     """
     
-    def __init__(self, llm):
+    def __init__(self, llm, data_sources=None):
         """Initialize Elion with necessary components"""
         # Initialize core components
-        self.data_sources = DataSources()
+        self.data_sources = data_sources or DataSources()
         self.market_analyzer = MarketAnalyzer(self.data_sources)
         self.personality = ElionPersonality()
         self.engagement = EngagementManager()
@@ -45,20 +45,82 @@ class Elion:
             'market_analysis': []
         }
         
-    def generate_market_analysis(self) -> str:
+    def _validate_tweet(self, tweet: str) -> bool:
+        """Validate if a tweet is well-formed and ready to post"""
+        if not tweet or not isinstance(tweet, str):
+            return False
+            
+        # Check for error messages
+        if tweet.startswith('Error:') or 'error' in tweet.lower():
+            return False
+            
+        # Check minimum length (a reasonable tweet should be at least 20 chars)
+        if len(tweet) < 20:
+            return False
+            
+        # Check for placeholder or default content
+        placeholder_phrases = ['undefined', 'null', 'nan', '0.0', 'error']
+        if any(phrase in tweet.lower() for phrase in placeholder_phrases):
+            return False
+            
+        return True
+
+    def generate_market_analysis(self) -> Optional[str]:
         """Generate a market analysis tweet"""
-        data = self.market_analyzer.analyze_market_conditions()
-        return self.content.generate('market_analysis', data)
+        try:
+            print("Getting market data...")
+            data = self.data_sources.get_market_data()
+            
+            print("Generating tweet...")
+            tweet = self.content.generate('market_analysis', data)
+            
+            # Only return valid tweets
+            if self._validate_tweet(tweet):
+                print(f"Generated tweet: {tweet}")
+                return tweet
+            return None
+            
+        except Exception as e:
+            print(f"Error generating market analysis: {e}")
+            return f"Error: {str(e)}"
     
-    def generate_shill_review(self) -> str:
+    def generate_shill_review(self) -> Optional[str]:
         """Generate a shill review tweet"""
-        data = self.data_sources.get_shill_opportunities()
-        return self.content.generate('shill_review', data)
-    
-    def generate_market_search(self) -> str:
+        try:
+            print("Getting shill opportunities...")
+            data = self.data_sources.get_shill_opportunities()
+            
+            print("Generating tweet...")
+            tweet = self.content.generate('shill_review', data)
+            
+            # Only return valid tweets
+            if self._validate_tweet(tweet):
+                print(f"Generated tweet: {tweet}")
+                return tweet
+            return None
+            
+        except Exception as e:
+            print(f"Error generating shill review: {e}")
+            return f"Error: {str(e)}"
+            
+    def generate_market_search(self, query: str) -> Optional[str]:
         """Generate a market search tweet"""
-        data = self.market_analyzer.analyze_market_conditions()
-        return self.content.generate('market_search', data)
+        try:
+            print("Getting market search data...")
+            data = self.data_sources.get_market_search(query)
+            
+            print("Generating tweet...")
+            tweet = self.content.generate('market_search', data)
+            
+            # Only return valid tweets
+            if self._validate_tweet(tweet):
+                print(f"Generated tweet: {tweet}")
+                return tweet
+            return None
+            
+        except Exception as e:
+            print(f"Error generating market search: {e}")
+            return f"Error: {str(e)}"
         
     def analyze_performance(self, tweet_data: Dict) -> None:
         """Analyze tweet performance and optimize strategy"""
@@ -256,8 +318,9 @@ class Elion:
             if data:
                 content = self.content.generate(tweet_type, data)
                 if content and not content.startswith("Error"):
-                    return content
-                    
+                    # Only return valid tweets
+                    if self._validate_tweet(content):
+                        return content
             # If we get here, the tweet type failed
             self.scheduler.mark_type_failed(tweet_type)
             return None

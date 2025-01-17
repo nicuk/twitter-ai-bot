@@ -74,6 +74,66 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/elion-ai.git
+cd elion-ai
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up environment variables:
+```bash
+cp .env.template .env
+# Edit .env with your API keys and configuration
+```
+
+Required API Keys:
+- Twitter API (v2)
+- Meta Llama API
+- CryptoRank API
+
+### Usage
+
+1. Test the setup:
+```bash
+python test_twitter_api.py  # Test Twitter API connection
+python demo_tweets.py       # Test tweet generation
+```
+
+2. Run Elion:
+```bash
+python main.py
+```
+
+### Development
+
+1. Run tests:
+```bash
+pytest
+```
+
+2. Format code:
+```bash
+black .
+isort .
+```
+
+3. Type checking:
+```bash
+mypy .
+```
+
+### Documentation
+- [Setup Guide](docs/SETUP.md)
+- [API Integration & Security](docs/API_INTEGRATION.md)
+- [Development Status](DEVELOPMENT_STATUS.md)
+
 ### Deployment
 
 #### Prerequisites
@@ -175,19 +235,6 @@ python -m pytest --cov=elion tests/
 # Start the bot
 python main.py
 ```
-
-### Next Steps
-1. Implement comprehensive test suite
-2. Set up CI/CD pipeline
-3. Configure Railway deployment
-4. Add monitoring and logging
-5. Document API endpoints
-6. Set up backup and recovery procedures
-
-### Known Issues
-- Need to implement `get_onchain_metrics` in DataSources
-- Missing test coverage for market analysis components
-- Need to validate Railway configuration
 
 ### Contributing
 1. Fork the repository

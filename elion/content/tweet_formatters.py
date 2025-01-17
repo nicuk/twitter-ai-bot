@@ -275,19 +275,138 @@ class TweetFormatters:
         
         return self.personality.enhance_tweet(content)
         
-    def format_shill_review(self, review_data):
+    def format_shill_review(self, review_data: Dict) -> str:
         """Format shill review content"""
         if not review_data:
             raise ValueError("No review data provided")
             
-        content = "🔍 PROJECT REVIEW 🔍\n\n"
-        content += f"${review_data['symbol']} Deep Dive\n\n"
-        content += "Analysis:\n"
-        for point in review_data['analysis']:
-            content += f"• {point}\n"
-        content += f"\nVerdict: {review_data['verdict']} ⭐"
+        required_fields = ['project', 'metrics']
+        for field in required_fields:
+            if field not in review_data:
+                raise ValueError(f"Missing required field: {field}")
+                
+        project = review_data['project']
+        metrics = review_data['metrics']
         
-        return self.personality.enhance_tweet(content)
+        content = f"🔍 SHILL REVIEW: ${project['symbol']}\n\n"
+        
+        # Add project metrics
+        content += f"Project: {project['name']}\n"
+        if 'market_cap' in metrics:
+            content += f"Market Cap: ${metrics['market_cap']:,.0f}\n"
+        if 'volume_24h' in metrics:
+            content += f"24h Vol: ${metrics['volume_24h']:,.0f}\n"
+        if 'holders' in metrics:
+            content += f"Holders: {metrics['holders']:,}\n"
+        
+        # Add risk metrics if available
+        if 'risk_score' in metrics:
+            content += f"\nRisk Score: {metrics['risk_score']}/100\n"
+        if 'red_flags' in metrics:
+            content += "🚩 Red Flags:\n"
+            for flag in metrics['red_flags'][:3]:
+                content += f"• {flag}\n"
+                
+        # Get LLM to add analysis
+        prompt = (
+            f"Review this project:\n"
+            f"Project: {project['name']} (${project['symbol']})\n"
+            f"Market Cap: ${metrics.get('market_cap', 0):,.0f}\n"
+            f"Volume: ${metrics.get('volume_24h', 0):,.0f}\n"
+            f"Risk Score: {metrics.get('risk_score', 'N/A')}/100\n"
+            "\nProvide a brief review in 1-2 sentences."
+        )
+        analysis = self.personality.llm.generate(prompt)
+        content += f"\n{analysis}"
+        
+        return self.personality.enhance_tweet(content, 'shill_reviewer')
+
+    def format_market_search(self, search_data: Dict) -> str:
+        """Format market search content"""
+        if not search_data:
+            raise ValueError("No market search data provided")
+            
+        required_fields = ['query', 'results']
+        for field in required_fields:
+            if field not in search_data:
+                raise ValueError(f"Missing required field: {field}")
+                
+        content = f"🔍 MARKET SEARCH: {search_data['query'].upper()}\n\n"
+        
+        # Add search results
+        for result in search_data['results'][:3]:
+            content += f"${result['symbol']}\n"
+            content += f"• Price: ${result['price']:,.4f}\n"
+            if 'change_24h' in result:
+                content += f"• 24h: {result['change_24h']:+.1f}%\n"
+            if 'volume_24h' in result:
+                content += f"• Vol: ${result['volume_24h']:,.0f}\n"
+            content += "\n"
+            
+        # Get LLM to add analysis
+        prompt = (
+            f"Given these market search results for {search_data['query']}:\n"
+            + "\n".join([f"- ${r['symbol']}: ${r['price']:,.4f}" for r in search_data['results'][:3]])
+            + "\nProvide a brief analysis in 1-2 sentences."
+        )
+        analysis = self.personality.llm.generate(prompt)
+        content += f"\n{analysis}"
+        
+        return self.personality.enhance_tweet(content, 'market_hunter')
+        
+    def format_shill_review(self, data: List[Dict]) -> str:
+        """Format shill review content"""
+        if not data:
+            return "No shill opportunities found at this time"
+            
+        # Get top opportunity
+        coin = data[0]
+        
+        # Format tweet
+        content = "🔍 SHILL REVIEW 🔍\n\n"
+        content += f"${coin['symbol']} Analysis:\n\n"
+        
+        # Add price info
+        content += f"Price: ${coin['price']:,.4f}\n"
+        content += f"24h: {coin['price_change_24h']:+.1f}%\n"
+        content += f"7d: {coin['price_change_7d']:+.1f}%\n"
+        
+        # Add market metrics
+        content += f"\nMarket Cap: ${coin['market_cap']:,.0f}M\n"
+        content += f"24h Vol: ${coin['volume_24h']:,.0f}M\n"
+        content += f"Vol/MCap: {coin['volume_to_mcap']:.2%}\n"
+        
+        # Add analysis if available
+        if 'analysis' in coin:
+            content += f"\nAnalysis: {coin['analysis']}"
+            
+        return content
+        
+    def format_market_search(self, data: Dict) -> str:
+        """Format market search content"""
+        if not data or 'results' not in data or not data['results']:
+            return "No matching results found"
+            
+        # Get search info
+        query = data.get('query', '')
+        results = data['results']
+        
+        # Format tweet
+        content = f"🔎 MARKET SEARCH: {query.upper()} 🔍\n\n"
+        
+        # Add top results
+        for i, coin in enumerate(results[:3], 1):
+            content += f"{i}. ${coin['symbol']}\n"
+            content += f"   Price: ${coin['price']:,.4f}\n"
+            content += f"   24h: {coin['price_change_24h']:+.1f}%\n"
+            if i < len(results[:3]):
+                content += "\n"
+                
+        # Add market context if available
+        if 'market_context' in data:
+            content += f"\nContext: {data['market_context']}"
+            
+        return content
 
     def format_controversial_thread(self, topic: Dict) -> List[str]:
         """Format a controversial thread about a topic"""
@@ -621,3 +740,60 @@ class TweetFormatters:
             ]
         }
     }
+
+    def format_market_analysis(self, data: Dict) -> str:
+        """Format market analysis tweet"""
+        try:
+            if not isinstance(data, dict):
+                return "Error: Invalid market analysis data"
+                
+            # Format tweet
+            content = "🌟 MARKET UPDATE\n\n"
+            
+            # Add BTC/ETH prices
+            content += f"BTC: ${data.get('btc_price', 0):,.2f}\n"
+            content += f"ETH: ${data.get('eth_price', 0):,.2f}\n"
+            
+            # Add market metrics
+            content += f"Market Cap: ${data.get('total_mcap', 0)/1e9:,.0f}B\n"
+            content += f"24h Vol: ${data.get('total_volume', 0)/1e9:,.0f}B\n\n"
+            
+            # Add market sentiment
+            content += f"Sentiment: {data.get('market_sentiment', 'NEUTRAL')}\n\n"
+            
+            # Add top gainers
+            gainers = data.get('top_gainers', [])
+            if gainers:
+                content += "🚀 Top Gainers:\n"
+                for gainer in gainers:
+                    content += f"${gainer['symbol']}: {gainer['change_24h']:+.1f}%\n"
+                content += "\n"
+            
+            # Add fear & greed
+            content += f"Fear & Greed: {data.get('fear_greed', 50)}/100\n"
+            
+            # Get LLM analysis
+            prompt = (
+                f"Analyze this crypto market data:\n"
+                f"BTC Price: ${data.get('btc_price', 0):,.2f}\n"
+                f"ETH Price: ${data.get('eth_price', 0):,.2f}\n"
+                f"Market Cap: ${data.get('total_mcap', 0)/1e9:,.0f}B\n"
+                f"24h Vol: ${data.get('total_volume', 0)/1e9:,.0f}B\n"
+                f"BTC 24h: {data.get('btc_change_24h', 0):+.1f}%\n"
+                f"ETH 24h: {data.get('eth_change_24h', 0):+.1f}%\n"
+                "\nProvide a brief market analysis in 1-2 sentences."
+            )
+            analysis = self.personality.llm.generate(prompt)
+            
+            # Clean up analysis
+            analysis = analysis.strip()
+            if analysis.startswith('"') and analysis.endswith('"'):
+                analysis = analysis[1:-1]
+            
+            content += f"\nAnalysis: {analysis}"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting market analysis: {e}")
+            return "Error formatting market analysis"

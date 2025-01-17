@@ -29,34 +29,39 @@ class MarketAnalyzer:
             # Get market data
             market_data = self.data_sources.get_market_alpha() or {}
             
-            # Format data for LLM
-            prompt = self._format_market_prompt(market_data)
+            # Extract required fields
+            result = {
+                'btc_price': float(market_data.get('btc', {}).get('price', 0)),
+                'eth_price': float(market_data.get('eth', {}).get('price', 0)),
+                'market_cap': float(market_data.get('total_market_cap', 0)) / 1e9,  # Convert to billions
+                'volume_24h': float(market_data.get('total_volume_24h', 0)) / 1e9,  # Convert to billions
+                'sentiment': market_data.get('market_sentiment', 'neutral'),
+                'fear_greed': market_data.get('fear_greed_index', 50),
+            }
             
-            # Get LLM analysis
-            analysis = self.data_sources.llm.generate(prompt)
-            
-            # Parse LLM response
-            result = self._parse_llm_analysis(analysis)
+            # Add top gainers if available
+            if 'top_gainers' in market_data:
+                result['top_gainers'] = [
+                    {
+                        'symbol': coin['symbol'],
+                        'change_24h': float(coin.get('change_24h', 0))
+                    }
+                    for coin in market_data['top_gainers'][:3]
+                ]
             
             # Cache results
             self.market_state.update({
                 'last_analysis': current_time,
                 'analysis_cache': result,
-                'market_mood': result.get('sentiment', 'neutral')
+                'market_mood': result['sentiment']
             })
             
             return result
             
         except Exception as e:
             print(f"Error in market analysis: {e}")
-            return {
-                'sentiment': 'neutral',
-                'confidence': 0.3,
-                'signals': [],
-                'summary': "Unable to analyze market conditions",
-                'timestamp': current_time
-            }
-
+            return {}
+    
     def _format_market_prompt(self, data: Dict) -> str:
         """Format market data into LLM prompt"""
         prompt = """Analyze the following market data and provide insights:

@@ -8,7 +8,10 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
 class ElionPersonality:
-    def __init__(self):
+    """Defines Elion's personality traits and tweet styles"""
+    
+    def __init__(self, llm=None):
+        self.llm = llm
         # Core personality elements
         self.memory = {
             'relationships': {},  # Track relationships with followers
@@ -104,6 +107,75 @@ class ElionPersonality:
                     "trend analysis complete...",
                     "market shift detected...",
                     "sentiment change identified..."
+                ]
+            },
+            'market_analyst': {
+                'hooks': [
+                    "🌟 MARKET UPDATE",
+                    "📊 MARKET SNAPSHOT",
+                    "🔍 MARKET ANALYSIS",
+                    "📈 MARKET REPORT",
+                    "🎯 MARKET INSIGHT"
+                ],
+                'transitions': [
+                    "Here's what my algorithms found:",
+                    "My neural nets are detecting:",
+                    "Data points you need to see:",
+                    "Key metrics my circuits found:",
+                    "Market signals detected:"
+                ],
+                'closers': [
+                    "Trust the data! 🤖",
+                    "Numbers don't lie! 📊",
+                    "Signals are clear! 🎯",
+                    "Data speaks volumes! 📈",
+                    "Follow the metrics! 🔍"
+                ]
+            },
+            'alpha_hunter': {
+                'hooks': [
+                    "🚨 ALPHA ALERT",
+                    "💎 GEM FOUND",
+                    "🔥 HOT OPPORTUNITY",
+                    "⚡️ SIGNAL DETECTED",
+                    "🎯 TARGET ACQUIRED"
+                ],
+                'transitions': [
+                    "Check these stats:",
+                    "Key metrics:",
+                    "Important data:",
+                    "Analysis complete:",
+                    "Signals detected:"
+                ],
+                'closers': [
+                    "Don't sleep on this! 💤",
+                    "Time to move! ⚡️",
+                    "Alpha secured! 🎯",
+                    "Get in early! 🚀",
+                    "DYOR and decide! 🧠"
+                ]
+            },
+            'tech_analyst': {
+                'hooks': [
+                    "📊 TECHNICAL ANALYSIS",
+                    "📈 CHART ANALYSIS",
+                    "🎯 SETUP SPOTTED",
+                    "🔍 PATTERN FOUND",
+                    "⚡️ SIGNAL ALERT"
+                ],
+                'transitions': [
+                    "Technical indicators show:",
+                    "Chart patterns reveal:",
+                    "Key levels identified:",
+                    "Analysis suggests:",
+                    "Setup details:"
+                ],
+                'closers': [
+                    "Trade safely! 🎯",
+                    "Manage risk! ⚠️",
+                    "DYOR! 🧠",
+                    "Not financial advice! 📝",
+                    "Stay technical! 📊"
                 ]
             }
         }
@@ -231,6 +303,24 @@ class ElionPersonality:
                 'amplify_ratio': 0.8         # Probability of amplifying viral content
             }
         }
+
+    def enhance_tweet(self, content: str, persona: str = 'market_analyst') -> str:
+        """Enhance a tweet with personality"""
+        if persona not in self.personas:
+            return content
+            
+        # Get persona components
+        components = self.personas[persona]
+        
+        # Add hook
+        hook = random.choice(components['hooks'])
+        content = f"{hook}\n\n{content}"
+        
+        # Add closer
+        closer = random.choice(components['closers'])
+        content = f"{content}\n\n{closer}"
+        
+        return content
 
     def generate_content(self, context: Dict, content_type: str = 'tweet') -> str:
         """
@@ -362,10 +452,6 @@ class ElionPersonality:
             
         return content
         
-    def enhance_tweet(self, content: str, persona: str = None, context: Dict = None, user: str = None) -> str:
-        """Wrapper for enhance_with_persona specifically for tweets"""
-        return self.enhance_with_persona(content, persona, context, user)
-
     def generate(self, content_type: str, context: str = "", **kwargs) -> str:
         """Generate personality-enhanced content
         

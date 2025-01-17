@@ -13,6 +13,9 @@ class ContentGenerator:
         self.llm = llm
         self.formatters = TweetFormatters(personality)
         
+        # Pass LLM to personality
+        self.personality.llm = llm
+        
     def generate(self, content_type: str, data: Dict) -> Optional[str]:
         """Generate tweet content based on type and data"""
         try:
@@ -62,33 +65,41 @@ class ContentGenerator:
             print(f"Error generating {content_type}: {e}")
             return "Error generating tweet"
 
-    def _format_market_analysis(self, data: Dict) -> str:
+    def _format_market_analysis(self, data: Dict) -> Optional[str]:
         """Format market analysis tweet"""
         try:
-            if not isinstance(data, dict):
-                return "Error: Invalid market data format"
-                
-            market_data = data.get('market_data', {})
-            analysis = data.get('analysis', {})
+            # Get formatted content
+            content = self.formatters.format_market_analysis(data)
             
-            content = "[MARKET ANALYSIS]\n\n"
-            content += f"${market_data.get('symbol', 'BTC')} Update:\n"
-            content += f"* Price: ${market_data.get('price', 0):,.2f}\n"
-            content += f"* Trend: {market_data.get('trend', 'neutral').upper()}\n"
+            # Get LLM analysis
+            prompt = (
+                f"Analyze this crypto market data:\n"
+                f"BTC Price: ${data.get('btc_price', 0):,.2f}\n"
+                f"ETH Price: ${data.get('eth_price', 0):,.2f}\n"
+                f"Market Cap: ${data.get('total_mcap', 0)/1e9:,.0f}B\n"
+                f"24h Vol: ${data.get('total_volume', 0)/1e9:,.0f}B\n"
+                f"BTC 24h: {data.get('btc_change_24h', 0):+.1f}%\n"
+                f"ETH 24h: {data.get('eth_change_24h', 0):+.1f}%\n"
+                "\nProvide a brief market analysis in 1-2 sentences."
+            )
+            analysis = self.llm.generate(prompt)
             
-            if isinstance(market_data.get('indicators'), dict):
-                content += "* Indicators:\n"
-                for name, value in market_data['indicators'].items():
-                    content += f"  - {name}: {value}\n"
+            # Clean up analysis
+            analysis = analysis.strip()
+            if analysis.startswith('"') and analysis.endswith('"'):
+                analysis = analysis[1:-1]
             
-            if analysis.get('summary'):
-                content += f"\nAnalysis: {analysis['summary']}"
+            # Add analysis to content
+            content += f"\nAnalysis: {analysis}"
+            
+            # Add personality
+            content = self.personality.enhance_tweet(content, 'market_analyst')
             
             return content
             
         except Exception as e:
             print(f"Error formatting market analysis: {e}")
-            return "Error formatting market analysis"
+            return None
     
     def _format_gem_alpha(self, data: Dict) -> str:
         """Format gem alpha tweet"""
@@ -109,20 +120,34 @@ class ContentGenerator:
                 symbol = opp.get('symbol', 'UNKNOWN')
                 name = opp.get('name', 'Unknown')
                 price_change = opp.get('price_change_24h', 0)
-                volume = opp.get('volume_24h', 0)
                 
-                content += f"${symbol} ({name})\n"
-                content += f"* 24h Change: {price_change:+.1f}%\n"
-                if volume > 0:
-                    content += f"* Volume: ${volume:,.0f}\n"
-                content += f"* Reason: {opp.get('reason', 'trending').replace('_', ' ').title()}\n\n"
+                content += f"${symbol}\n"
+                content += f"Name: {name}\n"
+                content += f"24h Change: {price_change:+.1f}%\n\n"
+                
+            # Get LLM analysis
+            prompt = (
+                f"Analyze these gem opportunities:\n"
+                + "\n".join([
+                    f"${opp.get('symbol', 'UNKNOWN')}: {opp.get('price_change_24h', 0):+.1f}%"
+                    for opp in data[:3]
+                ])
+                + "\nProvide a brief analysis in 1-2 sentences."
+            )
+            analysis = self.llm.generate(prompt)
             
-            content += "#CryptoGems #Trading"
-            return content
+            # Clean up analysis
+            analysis = analysis.strip()
+            if analysis.startswith('"') and analysis.endswith('"'):
+                analysis = analysis[1:-1]
+            
+            content += f"Analysis: {analysis}"
+            
+            return self.personality.enhance_tweet(content, 'alpha_hunter')
             
         except Exception as e:
             print(f"Error formatting gem alpha: {e}")
-            return "Error formatting gem alpha"
+            return f"Error formatting gem alpha: {str(e)}"
     
     def _format_portfolio_update(self, data: Dict) -> str:
         """Format portfolio update tweet"""
@@ -192,30 +217,48 @@ class ContentGenerator:
             return "Error formatting market awareness"
     
     def _format_market_search(self, data: Dict) -> str:
-        """Format market search tweet based on Twitter data"""
+        """Format market search tweet"""
         try:
-            if not isinstance(data, list):
+            if not isinstance(data, dict):
                 return "Error: Invalid market search data format"
                 
-            content = "[MARKET PULSE]\n\n"
+            if 'error' in data:
+                return f"Error: {data['error']}"
+                
+            query = data.get('query', '')
+            results = data.get('results', [])
             
-            # Add viral tweets analysis
-            if data:
-                content += "Trending Topics:\n"
-                for tweet in data[:3]:  # Top 3 viral tweets
-                    username = tweet.get('username', 'Unknown')
-                    text = tweet.get('text', '').split('\n')[0][:100]  # First line, truncated
-                    engagement = tweet.get('engagement_score', 0)
-                    content += f"* @{username}: {text}...\n"
-                    content += f"  Engagement: {engagement:,}\n\n"
-            else:
-                content += "No significant market movements detected."
+            if not results:
+                return f"No results found for '{query}'"
+                
+            # Format tweet
+            content = f"🔎 MARKET SEARCH: {query.upper()} 🔍\n\n"
             
-            return content
+            # Add top results
+            for i, coin in enumerate(results[:3], 1):
+                content += f"{i}. ${coin['symbol']}\n"
+                content += f"   Price: ${coin['price']:,.4f}\n"
+                content += f"   24h: {coin['price_change_24h']:+.1f}%\n"
+                if i < len(results[:3]):
+                    content += "\n"
+                    
+            # Get LLM analysis
+            prompt = (
+                f"Analyze these market search results for '{query}':\n"
+                + "\n".join([
+                    f"- ${r['symbol']}: ${r['price']:,.4f} ({r['price_change_24h']:+.1f}%)"
+                    for r in results[:3]
+                ])
+                + "\nProvide a brief market analysis in 1-2 sentences."
+            )
+            analysis = self.llm.generate(prompt)
+            content += f"\nAnalysis: {analysis}"
+            
+            return self.personality.enhance_tweet(content, 'market_hunter')
             
         except Exception as e:
             print(f"Error formatting market search: {e}")
-            return "Error formatting market search"
+            return f"Error formatting market search: {str(e)}"
     
     def _format_shill_review(self, data: Dict) -> str:
         """Format shill review tweet"""
@@ -223,32 +266,50 @@ class ContentGenerator:
             if not isinstance(data, dict):
                 return "Error: Invalid shill review data"
                 
-            projects = data.get('projects', [])
-            if not projects or not isinstance(projects, list):
-                return "No projects to review"
+            if 'error' in data:
+                return f"Error: {data['error']}"
                 
-            content = "[PROJECT REVIEW]\n\n"
-            project = projects[0]  # Take first project
+            project = data.get('project', {})
+            metrics = data.get('metrics', {})
             
-            if isinstance(project, dict):
-                content += f"Project: {project.get('name', 'Unknown')}\n"
-                content += f"Symbol: ${project.get('symbol', 'XXX')}\n\n"
+            if not project or not metrics:
+                return "Error: Missing project or metrics data"
                 
-                if project.get('description'):
-                    content += f"About: {project['description']}\n\n"
-                    
-                if isinstance(project.get('metrics'), dict):
-                    metrics = project['metrics']
-                    content += "Metrics:\n"
-                    for key, value in metrics.items():
-                        content += f"* {key}: {value}\n"
+            # Format tweet
+            content = "🔍 SHILL REVIEW 🔍\n\n"
+            content += f"${project['symbol']} Analysis:\n\n"
             
-            return content
+            # Add price info
+            content += f"Price: ${metrics['price']:,.4f}\n"
+            content += f"24h: {metrics['price_change_24h']:+.1f}%\n"
+            if 'price_change_7d' in metrics:
+                content += f"7d: {metrics['price_change_7d']:+.1f}%\n"
+            
+            # Add market metrics
+            content += f"\nMarket Cap: ${metrics['market_cap']:,.0f}M\n"
+            content += f"24h Vol: ${metrics['volume_24h']:,.0f}M\n"
+            if 'volume_to_mcap' in metrics:
+                content += f"Vol/MCap: {metrics['volume_to_mcap']:.2%}\n"
+            
+            # Get LLM analysis
+            prompt = (
+                f"Analyze this crypto project:\n"
+                f"Symbol: {project['symbol']}\n"
+                f"Price: ${metrics['price']:,.4f}\n"
+                f"24h Change: {metrics['price_change_24h']:+.1f}%\n"
+                f"Market Cap: ${metrics['market_cap']:,.0f}M\n"
+                f"Volume: ${metrics['volume_24h']:,.0f}M\n"
+                "\nProvide a brief analysis in 1-2 sentences."
+            )
+            analysis = self.llm.generate(prompt)
+            content += f"\nAnalysis: {analysis}"
+            
+            return self.personality.enhance_tweet(content, 'shill_reviewer')
             
         except Exception as e:
             print(f"Error formatting shill review: {e}")
-            return "Error formatting shill review"
-
+            return f"Error formatting shill review: {str(e)}"
+            
     def _format_breaking_alpha(self, data: Dict) -> str:
         """Format breaking alpha tweet"""
         try:

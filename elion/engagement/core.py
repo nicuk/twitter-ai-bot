@@ -355,3 +355,36 @@ class EngagementManager:
             adjustments.append(f"Increase {', '.join(t[0] for t in top_types)} content")
         
         return adjustments
+
+    def generate_reply(self, tweet_data: Dict) -> str:
+        """Generate a reply to a tweet based on engagement patterns"""
+        # Identify content type and sentiment
+        content_type = self._identify_content_type(tweet_data.get('content', ''))
+        
+        # Get relevant interests for this content type
+        interests = self.content_categories.get(content_type, {}).get('interests', [])
+        
+        # Select appropriate reply style based on engagement factors
+        engagement_factors = self._identify_engagement_factors(tweet_data)
+        
+        # Build reply template based on factors
+        if 'high_likes' in engagement_factors or 'high_retweets' in engagement_factors:
+            template = "Thanks for the engagement! {insight}"
+        elif 'thread' in engagement_factors:
+            template = "Great thread! Here's another perspective: {insight}"
+        elif 'alpha_content' in engagement_factors:
+            template = "Interesting alpha! Have you considered {insight}"
+        else:
+            template = "Thanks for sharing! {insight}"
+        
+        # Generate insight based on content type
+        if content_type == 'alpha':
+            insight = "Let's keep tracking this signal."
+        elif content_type == 'analysis':
+            insight = "Your analysis aligns with recent market patterns."
+        elif content_type == 'community':
+            insight = "The community's input is valuable here."
+        else:
+            insight = "Looking forward to more updates."
+        
+        return template.format(insight=insight)
