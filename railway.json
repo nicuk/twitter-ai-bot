@@ -1,8 +1,8 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "PYTHON",
-    "buildCommand": "pip install -r requirements.txt"
+    "builder": "NIXPACKS",
+    "buildCommand": "mkdir -p ~/.pip && cp pip.conf ~/.pip/ && pip install -r requirements.txt"
   },
   "deploy": {
     "startCommand": "python twitter_api_bot.py",
