@@ -26,57 +26,38 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 logger.info("Loading environment variables...")
-try:
-    # Try to load from .env file first
-    load_dotenv(override=True)
-    logger.info("Environment variables loaded from .env file")
-except Exception as e:
-    logger.info(f"No .env file found or error loading it: {e}")
-    logger.info("Using system environment variables")
-
-# Debug: Print environment variable presence
-logger.info("Environment variable status:")
-required_vars = [
-    'TWITTER_CLIENT_ID',
-    'TWITTER_CLIENT_SECRET',
-    'TWITTER_ACCESS_TOKEN',
-    'TWITTER_ACCESS_TOKEN_SECRET',
-    'TWITTER_BEARER_TOKEN',
-    'AI_ACCESS_TOKEN',
-    'AI_API_URL',
-    'AI_MODEL_NAME',
-    'CRYPTORANK_API_KEY'
-]
-for var in required_vars:
-    val = os.getenv(var)
-    logger.info(f"- {var}: {'✓ Present' if val else '✗ Missing'}")
+load_dotenv('.env.test')  # Load test environment first
+load_dotenv('.env', override=True)  # Then load production env if it exists
+logger.info("Environment variables loaded")
 
 def check_environment_variables():
     """Check if all required environment variables are set"""
     logger.info("Checking required environment variables...")
     
-    # Define required variables and their friendly names
     required_vars = {
-        'TWITTER_CLIENT_ID': 'Twitter Client ID',
-        'TWITTER_CLIENT_SECRET': 'Twitter Client Secret',
+        'TWITTER_CLIENT_ID': 'Twitter API Key',
+        'TWITTER_CLIENT_SECRET': 'Twitter API Secret',
         'TWITTER_ACCESS_TOKEN': 'Twitter Access Token',
         'TWITTER_ACCESS_TOKEN_SECRET': 'Twitter Access Token Secret',
         'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
-        'AI_ACCESS_TOKEN': 'AI Access Token',
-        'AI_API_URL': 'AI API URL',
-        'AI_MODEL_NAME': 'AI Model Name'
+        'AI_ACCESS_TOKEN': 'AI API Access Token',
+        'AI_API_URL': 'AI API Base URL',
+        'AI_MODEL_NAME': 'AI Model Name',
+        'CRYPTORANK_API_KEY': 'CryptoRank API Key'
     }
     
     missing_vars = []
-    for var, name in required_vars.items():
+    for var, desc in required_vars.items():
         if not os.getenv(var):
-            missing_vars.append(f"- {name} ({var})")
-    
+            missing_vars.append(f"{desc} ({var})")
+            
     if missing_vars:
-        error_msg = "Missing required environment variables:\n" + "\n".join(missing_vars)
+        error_msg = "Missing required environment variables:\n"
+        error_msg += "\n".join(f"- {var}" for var in missing_vars)
         logger.error(error_msg)
         raise ValueError(error_msg)
-    
+        
+    logger.info("All required environment variables present")
     return True
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -105,7 +86,7 @@ def start_healthcheck(port=8080):
         pass
 
 class AIGamingBot:
-    def __init__(self, cryptorank_api_key: str = ''):
+    def __init__(self):
         """Initialize the Twitter bot"""
         logger.info("\nInitializing Twitter bot...")
         
@@ -155,7 +136,7 @@ class AIGamingBot:
             api_key=os.getenv('AI_ACCESS_TOKEN'),
             api_base=os.getenv('AI_API_URL')
         )
-        self.elion = Elion(llm=llm, cryptorank_api_key=cryptorank_api_key)
+        self.elion = Elion(llm=llm)
         logger.info("Elion initialized")
         
         # Initialize tweet history manager
@@ -517,11 +498,8 @@ def main():
         start_healthcheck()
         
         logger.info("Creating bot instance...")
-        cryptorank_api_key = os.getenv('CRYPTORANK_API_KEY', '').strip()
-        if not cryptorank_api_key:
-            logger.warning("CRYPTORANK_API_KEY not found. Some market data functionality may be limited.")
-            
-        bot = AIGamingBot(cryptorank_api_key)
+        # Start bot
+        bot = AIGamingBot()
         logger.info("Starting bot...")
         bot.run()
     except KeyboardInterrupt:
