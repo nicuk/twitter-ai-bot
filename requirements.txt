@@ -7,3 +7,4 @@ webdriver-manager==4.0.1
 python-dateutil==2.8.2
 beautifulsoup4==4.12.2
 feedparser==6.0.10
+-e .
