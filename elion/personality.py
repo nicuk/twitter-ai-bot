@@ -4,7 +4,7 @@ Enhanced with modern engagement features and better LLM integration
 """
 
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
 class ElionPersonality:
@@ -372,3 +372,57 @@ class ElionPersonality:
             emoji=random.choice(self.emojis) if self.emojis else "✨",
             hashtag=random.choice(self.hashtags) if self.hashtags else "#crypto"
         )
+
+    def get_current_state(self) -> Dict:
+        """Get current personality state including mood, relationships, and experiences"""
+        try:
+            # Get current time to determine mood
+            current_hour = datetime.utcnow().hour
+            
+            # Determine current mood based on time and recent experiences
+            if 0 <= current_hour < 6:
+                mood = 'mysterious'  # Late night/early morning
+            elif 6 <= current_hour < 12:
+                mood = 'confident'   # Morning
+            elif 12 <= current_hour < 18:
+                mood = 'playful'     # Afternoon
+            else:
+                mood = 'analytical'  # Evening
+                
+            # Get relevant personality markers
+            markers = []
+            if mood in self.personality_flavors:
+                markers = self.personality_flavors[mood]['markers']
+            
+            # Get current trait levels
+            traits = self.character['traits'].copy()
+            
+            # Get recent experiences
+            recent_experiences = self.memory['experiences'][-5:] if self.memory['experiences'] else []
+            
+            # Get active relationships
+            active_relationships = {
+                user: data 
+                for user, data in self.memory['relationships'].items()
+                if data.get('last_interaction', datetime.min) > datetime.utcnow() - timedelta(days=7)
+            }
+            
+            return {
+                'mood': mood,
+                'markers': markers,
+                'traits': traits,
+                'recent_experiences': recent_experiences,
+                'active_relationships': active_relationships,
+                'core_values': self.character['core_values']
+            }
+            
+        except Exception as e:
+            print(f"Error getting personality state: {e}")
+            return {
+                'mood': 'neutral',
+                'markers': [],
+                'traits': self.character['traits'].copy(),
+                'recent_experiences': [],
+                'active_relationships': {},
+                'core_values': self.character['core_values']
+            }

@@ -48,15 +48,16 @@ def check_environment_variables():
         'TWITTER_CLIENT_SECRET',
         'TWITTER_ACCESS_TOKEN',
         'TWITTER_ACCESS_TOKEN_SECRET',
-        'TWITTER_BEARER_TOKEN'
+        'TWITTER_BEARER_TOKEN',
+        'CRYPTORANK_API_KEY'  # Add CryptoRank API key as critical
     ]
     
     missing_vars = [var for var in critical_vars if not os.getenv(var)]
     if missing_vars:
-        logger.error("Error: Missing critical environment variables: %s", ', '.join(missing_vars))
-        return False
-    
-    logger.info("[OK] All critical environment variables are set")
+        logger.error("Missing required environment variables: %s", missing_vars)
+        raise ValueError(f"Missing required environment variables: {missing_vars}")
+        
+    logger.info("All required environment variables present")
     return True
 
 class HealthCheckHandler(BaseHTTPRequestHandler):

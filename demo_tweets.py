@@ -4,6 +4,7 @@ import sys
 import os
 import requests
 from dotenv import load_dotenv
+import random
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +54,10 @@ class MockCryptoRankAPI:
 
 class MockDataSources:
     def __init__(self):
-        pass
+        self.llm = MetaLlama(
+            api_key=os.getenv('AI_ACCESS_TOKEN'),
+            api_base=os.getenv('AI_API_URL')
+        )
         
     def get_market_data(self, *args):
         return {
@@ -62,6 +66,88 @@ class MockDataSources:
             'price': 1.0,
             'price_change': 5.5
         }
+        
+    def get_market_alpha(self, *args):
+        return {
+            'market_data': {
+                'symbol': 'BTC',
+                'price': 68500,
+                'trend': 'bullish',
+                'volume': '25B',
+                'dominance': 41.5,
+                'market_cap': 2750000000000,
+                'volume_24h': 155000000000,
+            },
+            'analysis': {
+                'trends': ['DeFi 2.0 Season', 'L2 Narrative Strong', 'AI Tokens Pumping'],
+                'key_events': ['Major Protocol Upgrade', 'Institutional Adoption News'],
+                'sentiment': 'bullish',
+                'btc_change_24h': 8.5,
+                'eth_change_24h': 12.2
+            }
+        }
+        
+    def _get_viral_tweets(self, *args):
+        return {
+            'query': 'L2 scaling solutions',
+            'results': [
+                {
+                    'topic': 'Arbitrum Growth',
+                    'sentiment': 'very positive',
+                    'engagement': 'high',
+                    'key_points': [
+                        'TVL up 25% this week',
+                        'New protocols launching daily',
+                        'Gas fees remain low'
+                    ]
+                }
+            ]
+        }
+        
+    def get_alpha_opportunities(self, *args):
+        return [{
+            'name': 'Neural Finance',
+            'symbol': 'NRAL',
+            'market_cap': 15000000,
+            'price': 0.25,
+            'target': 2.0,
+            'metrics': {
+                'technical_score': 88,
+                'fundamental_score': 85,
+                'viral_potential': 'HIGH'
+            },
+            'analysis': 'AI-powered DeFi protocol with unique yield optimization. Early stage with massive growth potential.'
+        }]
+        
+    def get_shill_opportunities(self, *args):
+        return [{
+            'name': 'Quantum Protocol',
+            'symbol': 'QNTM',
+            'score': 92,
+            'market_data': {
+                'market_cap': 75000000,
+                'volume': 12000000,
+                'price': 0.85,
+                'price_change': 25.5
+            },
+            'metrics': {
+                'github_commits_week': 65,
+                'liquidity_ratio': 0.35,
+                'holder_distribution': 0.82,
+                'team_tokens_locked': 0.95
+            },
+            'analysis': 'Revolutionary L2 with unique quantum-resistant cryptography. Strong team, active development, and growing community.',
+            'conviction_level': 'EXTREMELY HIGH'
+        }]
+        
+    def get_latest_news(self, *args):
+        return [{
+            'title': 'Major Protocol Launches on Arbitrum',
+            'summary': 'Revolutionary DeFi protocol goes live on Arbitrum, bringing innovative yield strategies.',
+            'link': 'https://example.com/news/1',
+            'published': '2024-01-17T19:30:00Z',
+            'source': 'CryptoNews'
+        }]
 
 class MockPortfolio:
     def __init__(self):
@@ -122,14 +208,84 @@ class MockPortfolio:
 
 class MockPersonality:
     def __init__(self):
-        pass
+        self.character = {
+            'core_values': {
+                'honesty': "Always admits when analysis was wrong",
+                'growth': "Constantly learning from market and followers",
+                'community': "Builds genuine connections with CT",
+                'innovation': "Pushes boundaries of AI trading",
+                'responsibility': "Takes care of followers' success"
+            },
+            'traits': {
+                'quirky': 0.8,      # High quirkiness
+                'technical': 0.7,    # Strong technical knowledge
+                'empathetic': 0.6,   # Good emotional intelligence
+                'confident': 0.7,    # Confident but not arrogant
+                'playful': 0.8       # Very playful personality
+            },
+            'catchphrases': [
+                "beep boop 🤖",
+                "my circuits are tingling...",
+                "*processing market data*",
+                "executing alpha.exe...",
+                "01111010 (that's binary for 'trust me')",
+                "updating neural nets...",
+                "quantum analysis complete!",
+                "this is not financial advice (but my predictions are 99.9% accurate) 😉"
+            ],
+            'emojis': ["🤖", "📊", "💡", "🧠", "⚡", "🎯", "🚀", "💎", "🌟", "🔮"]
+        }
+        self.memory = {
+            'relationships': {},
+            'experiences': [],
+            'viral_moments': {}
+        }
+        self.min_chars = 180  # Minimum characters for engagement
+        self.max_chars = 280  # Twitter character limit
         
     def generate(self, *args, **kwargs):
-        return "Generated tweet content"
+        return "Generated content"
         
     def enhance_with_persona(self, content, persona=None):
-        return f"{content} 🚀 #ElionAlpha"
-
+        # Add personality quirks
+        catchphrase = random.choice(self.character['catchphrases'])
+        emojis = random.sample(self.character['emojis'], 2)  # Get 2 random emojis
+        
+        # Format content with personality
+        enhanced = f"{emojis[0]} {content}\n\n"
+        enhanced += f"{catchphrase} {emojis[1]}"
+        
+        # Ensure content meets character limits
+        if len(enhanced) < self.min_chars:
+            # Add more details or analysis
+            enhanced += "\n\nNFA but my algorithms are never wrong about this! 🎯"
+        
+        # Truncate if over limit
+        if len(enhanced) > self.max_chars:
+            enhanced = enhanced[:self.max_chars-3] + "..."
+            
+        return enhanced
+        
+    def get_current_state(self):
+        moods = ["confident", "analytical", "excited", "cautious", "playful"]
+        markers = [
+            "Trust me on this one...",
+            "My algorithms are never wrong about this.",
+            "I've analyzed this 1,000,000 times.",
+            "beep boop... alpha detected!",
+            "*neural nets tingling*",
+            "executing profit.exe...",
+            "quantum analysis suggests..."
+        ]
+        return {
+            'mood': random.choice(moods),
+            'markers': random.sample(markers, 3),
+            'traits': self.character['traits'],
+            'recent_experiences': [],
+            'active_relationships': {},
+            'core_values': self.character['core_values']
+        }
+        
 class MockEngagement:
     def __init__(self):
         self.tweet_history = []
@@ -156,92 +312,37 @@ def demo_tweets():
     
     # Initialize Elion with Meta Llama
     elion = Elion(llm)
-    elion.portfolio = MockPortfolio()
-    elion.data_sources = MockDataSources()
-    elion.personality = MockPersonality()
-    elion.engagement = MockEngagement()
-
-    # Generate and record tweets
-    tweets = []
-    for i in range(4):
-        if i == 0:
-            # 1. Shill Review Tweet
-            print("\n=== Shill Review Tweet ===")
-            project = {
-                'name': 'Quantum Protocol',
-                'symbol': 'QNTM',
-                'score': 92,
-                'market_data': {
-                    'market_cap': 75000000,
-                    'volume': 12000000,
-                    'price': 0.85,
-                    'price_change': 25.5
-                },
-                'metrics': {
-                    'github_commits_week': 65,
-                    'liquidity_ratio': 0.35,
-                    'holder_distribution': 0.82,
-                    'team_tokens_locked': 0.95
-                },
-                'analysis': 'Revolutionary L2 with unique quantum-resistant cryptography. Strong team, active development, and growing community.',
-                'conviction_level': 'EXTREMELY HIGH'
-            }
-            print(elion.format_shill_review([project]))
-            tweets.append({'content': 'Shill Review', 'type': 'review', 'id': f'tweet_{i+1}'})
+    
+    print("\n=== Elion's Tweet Generation Demo ===\n")
+    
+    # Generate 10 tweets using scheduler
+    for i in range(10):
+        try:
+            # Get next tweet type from scheduler
+            tweet_type = elion.get_next_tweet_type()
+            print(f"\n📝 Tweet {i+1}: {tweet_type}")
+            print("-----------------------------------")
             
-        elif i == 1:
-            # 2. Market Analysis Tweet
-            print("\n=== Market Analysis Tweet ===")
-            market_data = {
-                'sentiment': 'bullish',
-                'btc_dominance': 41.5,
-                'market_cap': 2750000000000,
-                'volume_24h': 155000000000,
-                'trends': ['DeFi 2.0 Season', 'L2 Narrative Strong', 'AI Tokens Pumping'],
-                'key_events': ['Major Protocol Upgrade', 'Institutional Adoption News'],
-                'btc_price': 68500,
-                'btc_change_24h': 8.5,
-                'eth_price': 4500,
-                'eth_change_24h': 12.2
-            }
-            print(elion.format_market_response(market_data))
-            tweets.append({'content': 'Market Analysis', 'type': 'analysis', 'id': f'tweet_{i+1}'})
-            
-        elif i == 2:
-            # 3. Gem Alpha Tweet
-            print("\n=== Gem Alpha Tweet ===")
-            gem = {
-                'name': 'Neural Finance',
-                'symbol': 'NRAL',
-                'market_cap': 15000000,
-                'entry_price': 0.25,
-                'target_price': 2.0,
-                'metrics': {
-                    'technical_score': 88,
-                    'fundamental_score': 85,
-                    'viral_potential': 'HIGH'
-                },
-                'analysis': 'AI-powered DeFi protocol with unique yield optimization. Early stage with massive growth potential.'
-            }
-            print(elion.format_gem_alpha([gem]))
-            tweets.append({'content': 'Gem Alpha', 'type': 'alpha', 'id': f'tweet_{i+1}'})
-            
-        else:
-            # 4. Portfolio Update Tweet
-            print("\n=== Portfolio Update Tweet ===")
-            # Add some positions for the portfolio update
-            elion.portfolio.open_position('NRAL', 15000, 0.25, 88, 'EXTREMELY HIGH')
-            elion.portfolio.open_position('QNTM', 10000, 0.85, 92, 'EXTREMELY HIGH')
-            # Simulate some price changes
-            elion.portfolio.positions['NRAL']['current_price'] = 0.45  # +80%
-            elion.portfolio.positions['QNTM']['current_price'] = 1.15  # +35%
-            print(elion.get_portfolio_update())
-            tweets.append({'content': 'Portfolio Update', 'type': 'portfolio', 'id': f'tweet_{i+1}'})
-            
-        # Record engagement
-        elion.engagement.record_tweet(tweets[-1])
-
-    print(f"\nRecorded {len(elion.engagement.tweet_history)} tweets in history")
+            # Generate base tweet
+            base_tweet = elion.generate_tweet(tweet_type)
+            if base_tweet:
+                # Enhance with personality
+                enhanced_tweet = elion.personality.enhance_with_persona(base_tweet)
+                print(enhanced_tweet)
+                
+                elion.analyze_performance({
+                    'type': tweet_type,
+                    'content': enhanced_tweet,
+                    'likes': 0,
+                    'retweets': 0,
+                    'replies': 0
+                })
+            else:
+                print(f"Failed to generate {tweet_type} tweet")
+                
+        except Exception as e:
+            print(f"Error generating tweet: {e}")
+            continue
 
 if __name__ == '__main__':
     demo_tweets()

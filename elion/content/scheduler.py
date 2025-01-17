@@ -14,22 +14,35 @@ class TweetScheduler:
         self.datetime = datetime
         self.cycle_count = 0
         self.total_cycles = 50
+        
+        # Regular Scheduled Posts (50% of tweets)
         self.type_distribution = {
-            'portfolio_update': 0.2,  # 10 posts
-            'market_analysis': 0.1,   # 5 posts
-            'market_search': 0.1,     # 5 posts
-            'gem_alpha': 0.2,         # 10 posts
-            'shill_review': 0.2,      # 10 posts
-            'market_aware': 0.2       # 10 posts
+            # Regular Scheduled Posts (50%)
+            'portfolio_update': 0.1,   # 5 posts
+            'market_analysis': 0.05,   # 2-3 posts
+            'market_search': 0.05,     # 2-3 posts
+            'gem_alpha': 0.1,          # 5 posts
+            'shill_review': 0.1,       # 5 posts
+            'market_aware': 0.1,       # 5 posts
+            
+            # Special Event Posts (30%)
+            'breaking_alpha': 0.05,    # 2-3 posts
+            'whale_alert': 0.05,       # 2-3 posts
+            'technical_analysis': 0.05, # 2-3 posts
+            'controversial_thread': 0.05, # 2-3 posts
+            'giveaway': 0.025,         # 1-2 posts
+            'self_aware': 0.025,       # 1-2 posts
+            'ai_market_analysis': 0.05, # 2-3 posts
+            'self_aware_thought': 0.025, # 1-2 posts
+            
+            # Reactive Posts (20%)
+            'market_response': 0.05,    # 2-3 posts
+            'engagement_reply': 0.05,   # 2-3 posts
+            'alpha_call': 0.05,        # 2-3 posts
+            'technical_alpha': 0.05     # 2-3 posts
         }
-        self.type_counts = {
-            'portfolio_update': 0,
-            'market_analysis': 0,
-            'market_search': 0,
-            'gem_alpha': 0,
-            'shill_review': 0,
-            'market_aware': 0
-        }
+        
+        self.type_counts = {t: 0 for t in self.type_distribution}
         self.failed_types = set()  # Track failed tweet types
         
     def _reset_cycle(self):
@@ -99,9 +112,11 @@ class TweetScheduler:
         remaining_types = {t: r for t, r in self.type_distribution.items() 
                          if t not in self.failed_types}
         if remaining_types:
-            total_remaining = sum(remaining_types.values())
-            self.type_distribution = {t: r/total_remaining for t, r 
-                                    in remaining_types.items()}
+            # Redistribute failed type's probability
+            failed_prob = self.type_distribution[tweet_type]
+            boost = failed_prob / len(remaining_types)
+            for t in remaining_types:
+                self.type_distribution[t] += boost
 
     def get_cycle_progress(self) -> Dict:
         """Get current cycle progress"""
