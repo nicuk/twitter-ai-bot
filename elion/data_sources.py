@@ -31,7 +31,7 @@ class CryptoRankAPI:
             raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
             
         self.base_url = 'https://api.cryptorank.io/v1'  # Changed to v1
-        print(f"Using API key: {self.api_key[:10]}...")  # Print first 10 chars
+        print(f"CryptoRank API Key: {self.api_key}")  # Temporarily print full key for debugging
         self._cache = {}
 
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
