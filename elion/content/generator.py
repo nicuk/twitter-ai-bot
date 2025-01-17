@@ -35,113 +35,150 @@ class ContentGenerator:
             
     def _format_market_analysis(self, data: Dict) -> str:
         """Format market analysis tweet"""
-        market_data = data.get('market_data', {})
-        analysis = data.get('analysis', {})
-        
-        content = "🔍 Market Analysis\n\n"
-        content += f"${market_data.get('symbol', 'BTC')} Update:\n"
-        content += f"• Price: ${market_data.get('price', 0):,.2f}\n"
-        content += f"• Trend: {market_data.get('trend', 'neutral').upper()}\n"
-        
-        if 'indicators' in market_data:
-            content += "• Indicators:\n"
-            for name, value in market_data['indicators'].items():
-                content += f"  - {name}: {value}\n"
-        
-        if 'summary' in analysis:
-            content += f"\nAnalysis: {analysis['summary']}"
-        
-        return content
+        try:
+            if not isinstance(data, dict):
+                return "Error: Invalid market data format"
+                
+            market_data = data.get('market_data', {})
+            analysis = data.get('analysis', {})
+            
+            content = "🔍 Market Analysis\n\n"
+            content += f"${market_data.get('symbol', 'BTC')} Update:\n"
+            content += f"• Price: ${market_data.get('price', 0):,.2f}\n"
+            content += f"• Trend: {market_data.get('trend', 'neutral').upper()}\n"
+            
+            if isinstance(market_data.get('indicators'), dict):
+                content += "• Indicators:\n"
+                for name, value in market_data['indicators'].items():
+                    content += f"  - {name}: {value}\n"
+            
+            if analysis.get('summary'):
+                content += f"\nAnalysis: {analysis['summary']}"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting market analysis: {e}")
+            return "Error formatting market analysis"
     
     def _format_gem_alpha(self, data: Dict) -> str:
         """Format gem alpha tweet"""
-        gem_data = data.get('gem_data', {})
-        
-        content = "💎 GEM ALERT 💎\n\n"
-        content += f"Found a hidden gem: ${gem_data.get('symbol', 'UNKNOWN')}\n\n"
-        content += "Key Metrics:\n"
-        
-        if 'market_cap' in gem_data:
-            content += f"• MCap: ${gem_data['market_cap']:,.0f}\n"
-        if 'volume' in gem_data:
-            content += f"• 24h Vol: ${gem_data['volume']:,.0f}\n"
-        if 'holders' in gem_data:
-            content += f"• Holders: {gem_data['holders']:,}\n"
-        
-        if 'analysis' in gem_data:
-            content += f"\nAnalysis: {gem_data['analysis']}"
-        
-        return content
+        try:
+            if not isinstance(data, dict):
+                return "Error: Invalid gem data format"
+                
+            gem_data = data.get('gem_data', {})
+            
+            content = "💎 GEM ALERT 💎\n\n"
+            content += f"Found a hidden gem: ${gem_data.get('symbol', 'UNKNOWN')}\n\n"
+            content += "Key Metrics:\n"
+            
+            if isinstance(gem_data.get('market_cap'), (int, float)):
+                content += f"• MCap: ${gem_data['market_cap']:,.0f}\n"
+            if isinstance(gem_data.get('volume'), (int, float)):
+                content += f"• 24h Vol: ${gem_data['volume']:,.0f}\n"
+            if isinstance(gem_data.get('holders'), (int, float)):
+                content += f"• Holders: {gem_data['holders']:,}\n"
+            
+            if gem_data.get('analysis'):
+                content += f"\nAnalysis: {gem_data['analysis']}"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting gem alpha: {e}")
+            return "Error formatting gem alpha"
     
     def _format_portfolio_update(self, data: Dict) -> str:
         """Format portfolio update tweet"""
-        stats = data.get('portfolio_stats', {})
-        performance = stats.get('performance', {})
-        metrics = stats.get('stats', {})
-        
-        content = "📊 Portfolio Update 📊\n\n"
-        content += "Performance:\n"
-        content += f"• Daily: {performance.get('daily', 0):+.1f}%\n"
-        content += f"• Weekly: {performance.get('weekly', 0):+.1f}%\n"
-        content += f"• Monthly: {performance.get('monthly', 0):+.1f}%\n"
-        
-        content += "\nStats:\n"
-        content += f"• Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
-        content += f"• Avg Profit: {metrics.get('avg_profit', 0):+.1f}%\n"
-        
-        if metrics.get('best_trade'):
-            content += f"\n🏆 Best: ${metrics['best_trade']}"
-        if metrics.get('worst_trade'):
-            content += f"\n💩 Worst: ${metrics['worst_trade']}"
-        
-        return content
+        try:
+            if not isinstance(data, dict) or not isinstance(data.get('portfolio_stats'), dict):
+                return "Error: Invalid portfolio data format"
+
+            stats = data.get('portfolio_stats', {})
+            performance = stats.get('performance', {})
+            metrics = stats.get('stats', {})
+            
+            content = "📊 Portfolio Update 📊\n\n"
+            content += "Performance:\n"
+            content += f"• Daily: {performance.get('daily', 0):+.1f}%\n"
+            content += f"• Weekly: {performance.get('weekly', 0):+.1f}%\n"
+            content += f"• Monthly: {performance.get('monthly', 0):+.1f}%\n"
+            
+            content += "\nStats:\n"
+            content += f"• Win Rate: {metrics.get('win_rate', 0):.1f}%\n"
+            content += f"• Avg Profit: {metrics.get('avg_profit', 0):+.1f}%\n"
+            
+            if metrics.get('best_trade'):
+                content += f"\n🏆 Best: ${metrics['best_trade']}"
+            if metrics.get('worst_trade'):
+                content += f"\n💩 Worst: ${metrics['worst_trade']}"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting portfolio update: {e}")
+            return "Error formatting portfolio update"
     
     def _format_market_awareness(self, data: Dict) -> str:
         """Format market awareness tweet"""
-        market_data = data.get('market_data', {})
-        analysis = data.get('analysis', {})
-        
-        content = "👁️ Market Watch 👁️\n\n"
-        
-        if 'sentiment' in analysis:
-            content += f"Sentiment: {analysis['sentiment'].upper()}\n"
-        if 'confidence' in analysis:
-            content += f"Confidence: {analysis['confidence']}%\n"
-        
-        if 'signals' in analysis:
-            signals = analysis['signals']
-            if 'market' in signals:
-                content += f"\nMarket Signals:\n{signals['market']}"
-            if 'onchain' in signals:
-                content += f"\nOn-chain:\n{signals['onchain']}"
-            if 'whales' in signals:
-                content += f"\nWhale Activity:\n{signals['whales']}"
-        
-        return content
+        try:
+            if not isinstance(data, dict):
+                return "Error: Invalid market awareness data"
+                
+            market_data = data.get('market_data', {})
+            analysis = data.get('analysis', {})
+            
+            content = "👁️ Market Watch 👁️\n\n"
+            
+            if analysis.get('sentiment'):
+                content += f"Sentiment: {analysis['sentiment'].upper()}\n"
+            if isinstance(analysis.get('confidence'), (int, float)):
+                content += f"Confidence: {analysis['confidence']}%\n"
+            
+            signals = analysis.get('signals', {})
+            if isinstance(signals, dict):
+                if signals.get('market'):
+                    content += f"\nMarket Signals:\n{signals['market']}"
+                if signals.get('onchain'):
+                    content += f"\nOn-chain:\n{signals['onchain']}"
+                if signals.get('whales'):
+                    content += f"\nWhale Activity:\n{signals['whales']}"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting market awareness: {e}")
+            return "Error formatting market awareness"
     
     def _format_shill_review(self, data: Dict) -> str:
         """Format shill review tweet"""
-        projects = data.get('projects', [])
-        if not projects:
-            return None
+        try:
+            if not isinstance(data, dict):
+                return "Error: Invalid shill review data"
+                
+            projects = data.get('projects', [])
+            if not projects or not isinstance(projects, list):
+                return "No projects to review"
+                
+            content = "🔍 Project Review 🔍\n\n"
+            project = projects[0]  # Take first project
             
-        content = "🔍 Project Review 🔍\n\n"
-        project = projects[0]  # Take first project
-        
-        content += f"Project: {project.get('name', 'Unknown')}\n"
-        content += f"Symbol: ${project.get('symbol', 'XXX')}\n\n"
-        
-        if 'metrics' in project:
-            metrics = project['metrics']
-            content += "Key Metrics:\n"
-            if 'tvl' in metrics:
-                content += f"• TVL: ${metrics['tvl']:,.0f}\n"
-            if 'volume' in metrics:
-                content += f"• Volume: ${metrics['volume']:,.0f}\n"
-            if 'growth' in metrics:
-                content += f"• Growth: {metrics['growth']:+.1f}%\n"
-        
-        if 'review' in project:
-            content += f"\nVerdict: {project['review']}"
-        
-        return content
+            if isinstance(project, dict):
+                content += f"Project: {project.get('name', 'Unknown')}\n"
+                content += f"Symbol: ${project.get('symbol', 'XXX')}\n\n"
+                
+                if project.get('description'):
+                    content += f"About: {project['description']}\n\n"
+                    
+                if isinstance(project.get('metrics'), dict):
+                    metrics = project['metrics']
+                    content += "Metrics:\n"
+                    for key, value in metrics.items():
+                        content += f"• {key}: {value}\n"
+            
+            return content
+            
+        except Exception as e:
+            print(f"Error formatting shill review: {e}")
+            return "Error formatting shill review"

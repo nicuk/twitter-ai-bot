@@ -155,7 +155,8 @@ class Elion:
         """Process portfolio data and return update"""
         try:
             stats = self.portfolio.get_portfolio_stats()
-            if not stats:
+            if not stats or not isinstance(stats, dict):
+                print("Invalid portfolio stats returned")
                 return None
                 
             return self.content.generate('portfolio_update', {
