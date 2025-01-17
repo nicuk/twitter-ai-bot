@@ -56,6 +56,77 @@ class DataSources:
             'news': timedelta(hours=1)
         }
 
+    def get_market_alpha(self) -> Dict:
+        """Get market alpha data including price, volume, and market cap"""
+        try:
+            # Try to get from cache first
+            if (self.cache['market_data']['data'] and 
+                self.cache['market_data']['timestamp'] > datetime.utcnow() - timedelta(minutes=5)):
+                return self.cache['market_data']['data']
+
+            # Get fresh data
+            url = f"{self.cryptorank_base_url}/coins"
+            params = {
+                'api_key': self.cryptorank_api_key,
+                'limit': 100
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Process and format data
+            market_data = {
+                'price': data['data'][0]['price'],
+                'price_change_24h': data['data'][0]['priceChange24h'],
+                'volume_24h': data['data'][0]['volume24h'],
+                'market_cap': data['data'][0]['marketCap'],
+                'social_sentiment': self._get_social_sentiment()
+            }
+            
+            # Update cache
+            self.cache['market_data'] = {
+                'data': market_data,
+                'timestamp': datetime.utcnow()
+            }
+            
+            return market_data
+            
+        except Exception as e:
+            print(f"Error getting market alpha: {e}")
+            return {}
+            
+    def _get_social_sentiment(self) -> float:
+        """Get social sentiment score from Twitter"""
+        try:
+            if not self.twitter:
+                return 0.5
+                
+            # Get tweets from key influencers
+            tweets = []
+            for influencer in self.key_influencers[:3]:  # Limit to avoid rate limits
+                try:
+                    user_tweets = self.twitter.user_timeline(screen_name=influencer, count=5)
+                    tweets.extend(user_tweets)
+                except Exception as e:
+                    print(f"Error getting tweets for {influencer}: {e}")
+                    
+            if not tweets:
+                return 0.5  # Neutral if no data
+                
+            # Simple sentiment based on likes/retweets ratio
+            total_sentiment = 0
+            for tweet in tweets:
+                ratio = tweet.favorite_count / (tweet.retweet_count + 1)  # Avoid division by zero
+                sentiment = min(ratio / 100, 1.0)  # Normalize to 0-1
+                total_sentiment += sentiment
+                
+            return total_sentiment / len(tweets)
+            
+        except Exception as e:
+            print(f"Error calculating social sentiment: {e}")
+            return 0.5
+
     def get_market_overview(self) -> Dict:
         """Get market overview data including price, volume, and market cap"""
         return self.get_market_alpha()
