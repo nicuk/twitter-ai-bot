@@ -22,7 +22,11 @@ class TweetHistoryManager:
                 'regular': 0,
                 'controversial': 0,
                 'giveaway': 0,
-                'ai_aware': 0
+                'ai_aware': 0,
+                'gem_alpha': 0,
+                'gem_update': 0,
+                'shill_review': 0,
+                'portfolio_update': 0
             }
         
         # Initialize core tracking features
@@ -278,21 +282,38 @@ class TweetHistoryManager:
         )
 
     def get_tweet_type_for_next_post(self):
-        """Determine next tweet type based on 50-post cycle"""
+        """Determine next tweet type based on cycle position"""
         total_tweets = self.history['metadata']['total_tweets']
+        
+        # Portfolio updates every 200 posts
+        if total_tweets % 200 == 0:
+            self.history['tweet_types']['portfolio_update'] += 1
+            return 'portfolio_update'
+            
         position_in_cycle = total_tweets % 50
         
         # Update tweet type counts
-        if position_in_cycle in [15, 35]:  # Posts 15 and 35 are controversial
-            self.history['tweet_types']['controversial'] += 1
-            return 'controversial'
-        elif position_in_cycle in [25, 45]:  # Posts 25 and 45 are giveaways
-            self.history['tweet_types']['giveaway'] += 1
-            return 'giveaway'
+        if position_in_cycle in [5, 15, 25, 35, 45]:  # Every 10th post is a gem call
+            self.history['tweet_types']['gem_alpha'] += 1
+            return 'gem_alpha'
+        elif position_in_cycle in [8, 18, 28, 38, 48]:  # Review user suggestions
+            self.history['tweet_types']['shill_review'] += 1
+            return 'shill_review'
         elif position_in_cycle in [10, 30]:  # Posts 10 and 30 are AI self-aware
             self.history['tweet_types']['ai_aware'] += 1
             return 'ai_aware'
+        elif position_in_cycle in [20, 40]:  # Posts 20 and 40 are controversial
+            self.history['tweet_types']['controversial'] += 1
+            return 'controversial'
+        elif position_in_cycle == 50:  # Last post in cycle is a giveaway
+            self.history['tweet_types']['giveaway'] += 1
+            return 'giveaway'
         else:
+            # For regular posts, check if we have any high-performing gems
+            high_performers = self.get_hot_projects(hours=24)
+            if high_performers and random.random() < 0.3:  # 30% chance to brag about winning calls
+                return 'gem_update'
+            
             self.history['tweet_types']['regular'] += 1
             return 'regular'
 

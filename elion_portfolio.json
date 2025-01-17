@@ -1,0 +1,190 @@
+{
+    "available_cash": 82844.0,
+    "positions": {
+        "TEST1": {
+            "amount": 7000.0,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.158537",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [
+                "tier1"
+            ],
+            "current_price": 1.5,
+            "last_update": "2025-01-16T23:27:09.159535"
+        },
+        "TEST2": {
+            "amount": 5000,
+            "entry_price": 2.0,
+            "entry_time": "2025-01-16T23:27:09.159535",
+            "score": 80,
+            "conviction": "HIGH",
+            "take_profit_hits": [],
+            "current_price": 2.4,
+            "last_update": "2025-01-16T23:27:09.161462"
+        },
+        "TEST": {
+            "amount": 3136.0,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.164032",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [
+                "tier1",
+                "tier2",
+                "tier3",
+                "tier4"
+            ],
+            "current_price": 6.0,
+            "last_update": "2025-01-16T23:27:09.193101"
+        },
+        "TEST0": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.168029",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.168029"
+        },
+        "TEST3": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.170437",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.170437"
+        },
+        "TEST4": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.171718",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.171718"
+        },
+        "TEST5": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.172938",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.172938"
+        },
+        "TEST6": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.174537",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.174537"
+        },
+        "TEST7": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.175627",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.175627"
+        },
+        "TEST8": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.177258",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.177258"
+        },
+        "TEST9": {
+            "amount": 1000,
+            "entry_price": 1.0,
+            "entry_time": "2025-01-16T23:27:09.178670",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH",
+            "take_profit_hits": [],
+            "current_price": 1.0,
+            "last_update": "2025-01-16T23:27:09.178670"
+        }
+    },
+    "closed_positions": [
+        {
+            "symbol": "TEST1",
+            "entry_price": 1.0,
+            "exit_price": 1.5,
+            "amount": 3000.0,
+            "roi": 0.5,
+            "profit": 1500.0,
+            "entry_time": "2025-01-16T23:27:09.158537",
+            "exit_time": "2025-01-16T23:27:09.159535",
+            "reason": "Take profit tier1",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH"
+        },
+        {
+            "symbol": "TEST",
+            "entry_price": 1.0,
+            "exit_price": 1.5,
+            "amount": 3000.0,
+            "roi": 0.5,
+            "profit": 1500.0,
+            "entry_time": "2025-01-16T23:27:09.164032",
+            "exit_time": "2025-01-16T23:27:09.181509",
+            "reason": "Take profit tier1",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH"
+        },
+        {
+            "symbol": "TEST",
+            "entry_price": 1.0,
+            "exit_price": 2.0,
+            "amount": 2100.0,
+            "roi": 1.0,
+            "profit": 2100.0,
+            "entry_time": "2025-01-16T23:27:09.164032",
+            "exit_time": "2025-01-16T23:27:09.184901",
+            "reason": "Take profit tier2",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH"
+        },
+        {
+            "symbol": "TEST",
+            "entry_price": 1.0,
+            "exit_price": 3.0,
+            "amount": 980.0,
+            "roi": 2.0,
+            "profit": 1960.0,
+            "entry_time": "2025-01-16T23:27:09.164032",
+            "exit_time": "2025-01-16T23:27:09.189039",
+            "reason": "Take profit tier3",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH"
+        },
+        {
+            "symbol": "TEST",
+            "entry_price": 1.0,
+            "exit_price": 6.0,
+            "amount": 784.0,
+            "roi": 5.0,
+            "profit": 3920.0,
+            "entry_time": "2025-01-16T23:27:09.164032",
+            "exit_time": "2025-01-16T23:27:09.193101",
+            "reason": "Take profit tier4",
+            "score": 90,
+            "conviction": "EXTREMELY HIGH"
+        }
+    ],
+    "portfolio_history": []
+}
