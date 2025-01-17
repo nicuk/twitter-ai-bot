@@ -190,3 +190,5 @@ LICENSE
 
 # PyPI configuration file
 .pypirc
+
+docs/cryptorank_integration.md

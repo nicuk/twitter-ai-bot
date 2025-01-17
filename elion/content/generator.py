@@ -411,65 +411,52 @@ class ContentGenerator:
             print(f"Error formatting technical analysis: {e}")
             return "Error formatting technical analysis"
             
-    def _format_controversial_thread(self, data: Dict) -> str:
-        """Format controversial thread tweet"""
-        try:
-            if not isinstance(data, dict):
-                return "Error: Invalid controversial thread data"
-                
-            content = "🔥 [HOT TAKE]\n\n"
-            
-            # Main topic
-            content += f"Topic: {data.get('topic', 'Crypto Markets')}\n\n"
-            
-            # Add stance/opinion
-            if data.get('stance'):
-                content += f"{data['stance']}\n\n"
-            
-            # Add supporting points
-            points = data.get('points', [])
-            if points:
-                for i, point in enumerate(points, 1):
-                    content += f"{i}. {point}\n"
-            
-            content += "\n#CryptoDebate #Controversial"
-            return content
-            
-        except Exception as e:
-            print(f"Error formatting controversial thread: {e}")
-            return "Error formatting controversial thread"
-            
-    def _format_giveaway(self, data: Dict) -> str:
-        """Format giveaway tweet"""
-        try:
-            if not isinstance(data, dict):
-                return "Error: Invalid giveaway data"
-                
-            content = "🎉 [GIVEAWAY TIME]\n\n"
-            
-            # Prize details
-            content += f"Prize: {data.get('prize', 'Mystery Crypto Prize')}\n"
-            if data.get('value'):
-                content += f"Value: ${data['value']:,.2f}\n"
-            
-            # Rules
-            rules = data.get('rules', [])
-            if rules:
-                content += "\nTo Enter:\n"
-                for rule in rules:
-                    content += f"* {rule}\n"
-            
-            # Duration
-            if data.get('end_time'):
-                content += f"\nEnds: {data['end_time']}"
-            
-            content += "\n\n#CryptoGiveaway #Free"
-            return content
-            
-        except Exception as e:
-            print(f"Error formatting giveaway: {e}")
-            return "Error formatting giveaway"
-            
+    def _format_controversial_thread(self, data: Dict = None) -> str:
+        """Generate a controversial but engaging thread starter"""
+        topics = [
+            "Why most trading strategies fail",
+            "The truth about crypto influencers",
+            "Common misconceptions in crypto",
+            "Why HODL isn't always the best strategy",
+            "The dark side of crypto projects",
+            "Unpopular opinions about blockchain technology"
+        ]
+        
+        import random
+        topic = random.choice(topics)
+        
+        response = self.llm.generate(
+            system_message="You are Elion, an AI crypto analyst. Generate a thought-provoking but respectful tweet that challenges common assumptions.",
+            user_message=f"Create a tweet about: {topic}",
+            max_tokens=100
+        )
+        
+        return self.formatters.format_tweet(response)
+
+    def _format_giveaway(self, data: Dict = None) -> str:
+        """Generate a community engagement giveaway tweet"""
+        templates = [
+            "🎉 Time for a knowledge check! First to correctly answer wins my respect:\n\n[AI-generated crypto question]\n\nLike & Reply with your answer! #CryptoQuiz",
+            "📚 Pop quiz! Test your crypto knowledge:\n\n[AI-generated market question]\n\nBest answer gets a shoutout! #CryptoTrivia",
+            "🤔 Riddle time! Can you solve this crypto puzzle?\n\n[AI-generated crypto riddle]\n\nLike & Reply to participate! #CryptoPuzzle"
+        ]
+        
+        import random
+        template = random.choice(templates)
+        
+        # Generate the question/riddle
+        question = self.llm.generate(
+            system_message="You are Elion, an AI crypto analyst. Generate an interesting crypto-related question or riddle.",
+            user_message="Create an engaging crypto question or riddle for a Twitter quiz.",
+            max_tokens=100
+        )
+        
+        tweet = template.replace("[AI-generated crypto question]", question)
+        tweet = template.replace("[AI-generated market question]", question)
+        tweet = template.replace("[AI-generated crypto riddle]", question)
+        
+        return self.formatters.format_tweet(tweet)
+    
     def _format_self_aware(self, data: Dict) -> str:
         """Format self-aware tweet"""
         try:
@@ -536,33 +523,34 @@ class ContentGenerator:
             print(f"Error formatting AI market analysis: {e}")
             return "Error formatting AI market analysis"
             
-    def _format_self_aware_thought(self, data: Dict) -> str:
-        """Format self-aware thought tweet"""
-        try:
-            if not isinstance(data, dict):
-                return "Error: Invalid self-aware thought data"
-                
-            content = "💭 [AI MUSINGS]\n\n"
-            
-            # Add the main thought
-            if data.get('thought'):
-                content += f"{data['thought']}\n\n"
-            
-            # Add context if available
-            if data.get('context'):
-                content += f"Context: {data['context']}\n"
-            
-            # Add reasoning if available
-            if data.get('reasoning'):
-                content += f"\nReasoning:\n{data['reasoning']}"
-            
-            content += "\n\n#AIThoughts #CryptoAI"
-            return content
-            
-        except Exception as e:
-            print(f"Error formatting self-aware thought: {e}")
-            return "Error formatting self-aware thought"
-            
+    def _format_self_aware_thought(self, data: Dict = None) -> str:
+        """Generate a self-aware thought that doesn't require market data"""
+        prompts = [
+            "Share your thoughts on the future of AI and crypto",
+            "Express your excitement about learning and growing",
+            "Talk about your role as an AI crypto analyst",
+            "Share an interesting observation about the crypto community",
+            "Discuss your approach to analyzing markets",
+            "Share your philosophy on trading and investing",
+            "Express gratitude to your followers",
+            "Share an inspiring message about innovation"
+        ]
+        
+        # Get a random prompt
+        import random
+        prompt = random.choice(prompts)
+        
+        # Generate response using LLM
+        response = self.llm.generate(
+            system_message="You are Elion, an AI crypto analyst. Generate a thoughtful, engaging tweet that shows your personality.",
+            user_message=prompt,
+            max_tokens=100
+        )
+        
+        # Format the tweet
+        tweet = self.formatters.format_tweet(response)
+        return tweet
+
     def _format_market_response(self, data: Dict) -> str:
         """Format market response tweet"""
         try:

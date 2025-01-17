@@ -196,51 +196,74 @@ class Elion:
             return False
 
     def get_next_tweet_type(self) -> str:
-        """Get the next tweet type to generate"""
-        # Get available types based on data availability
-        available_types = ['shill_review', 'market_search']  # These don't need market data
+        """Determine the next type of tweet to generate"""
+        # Check if market data is available
+        has_market_data = self.data_sources.cryptorank_api and self.data_sources.cryptorank_api.api_key
         
-        # Add market analysis if we have market data
-        if self.data_sources.crypto_rank_api_key:
-            available_types.append('market_analysis')
-            
-        # Get the least recently used type
-        type_times = self.scheduler.get_type_times()
-        available_types.sort(key=lambda t: type_times.get(t, 0))
+        # Available tweet types based on data availability
+        if has_market_data:
+            tweet_types = [
+                'market_analysis',
+                'gem_alpha',
+                'shill_review',
+                'market_aware',
+                'technical_analysis',
+                'self_aware',
+                'ai_market_analysis',
+                'self_aware_thought'
+            ]
+        else:
+            # Types that don't require market data
+            tweet_types = [
+                'self_aware',
+                'self_aware_thought',
+                'controversial_thread',
+                'giveaway'
+            ]
         
-        return available_types[0]
+        # Use scheduler to pick the next type
+        return self.scheduler.get_next_type(tweet_types)
 
-    def generate_tweet(self, tweet_type: str) -> Optional[str]:
+    def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
         """Generate a tweet of the specified type"""
-        try:
-            # Skip market analysis if we don't have market data
-            if tweet_type == 'market_analysis' and not self.data_sources.crypto_rank_api_key:
-                logger.info("Skipping market analysis - no market data available")
-                return None
-                
-            # Get data for tweet
-            data = None
-            if tweet_type == 'market_analysis':
-                data = self.data_sources.get_market_data()
-            elif tweet_type == 'market_search':
-                data = {'query': 'defi'}  # Default search query
-                
-            # Generate tweet content
-            if data:
-                content = self.content.generate(tweet_type, data)
-                if content and not content.startswith("Error"):
-                    # Only return valid tweets
-                    if self._validate_tweet(content):
-                        return content
-                        
-            # If we get here, the tweet type failed
-            self.scheduler.mark_type_failed(tweet_type)
-            return None
+        if tweet_type is None:
+            tweet_type = self.get_next_tweet_type()
             
+        try:
+            # Handle market data dependent tweets
+            if tweet_type in ['market_analysis', 'gem_alpha', 'shill_review', 'market_aware', 'technical_analysis']:
+                if not (self.data_sources.cryptorank_api and self.data_sources.cryptorank_api.api_key):
+                    logger.warning(f"Skipping {tweet_type} - CryptoRank API not available")
+                    # Fall back to a non-market tweet type
+                    return self.generate_tweet('self_aware_thought')
+            
+            # Generate based on type
+            if tweet_type == 'market_analysis':
+                return self.generate_market_analysis()
+            elif tweet_type == 'shill_review':
+                return self.generate_shill_review()
+            elif tweet_type == 'gem_alpha':
+                return self.generate_gem_alpha()
+            elif tweet_type == 'market_aware':
+                return self.generate_market_aware()
+            elif tweet_type == 'technical_analysis':
+                return self.generate_technical_analysis()
+            elif tweet_type == 'self_aware':
+                return self.generate_self_aware()
+            elif tweet_type == 'self_aware_thought':
+                return self.generate_self_aware_thought()
+            elif tweet_type == 'controversial_thread':
+                return self.generate_controversial_thread()
+            elif tweet_type == 'giveaway':
+                return self.generate_giveaway()
+            else:
+                logger.warning(f"Unknown tweet type: {tweet_type}")
+                return self.generate_self_aware_thought()
+                
         except Exception as e:
-            logger.error(f"Error generating {tweet_type} tweet: {e}")
-            self.scheduler.mark_type_failed(tweet_type)
-            return None
+            logger.error(f"Error generating {tweet_type} tweet: {str(e)}")
+            # Fall back to self-aware thought as it doesn't require external data
+            return self.generate_self_aware_thought()
 
     def process_market_alpha(self) -> Optional[str]:
         """Process market data and return alpha"""

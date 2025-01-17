@@ -19,21 +19,22 @@ from custom_llm import MetaLlamaComponent
 class CryptoRankAPI:
     """CryptoRank API wrapper"""
     
-    def __init__(self):
+    def __init__(self, api_key=None):
         """Initialize the API wrapper"""
         try:
             load_dotenv()  # Try to load .env file, but don't fail if it doesn't exist
         except:
             pass  # In Railway, env vars are already set
             
-        self.api_key = os.getenv('CRYPTORANK_API_KEY', '').strip()
+        self.api_key = api_key or os.getenv('CRYPTORANK_API_KEY', '').strip()
         if not self.api_key:
-            raise ValueError("CRYPTORANK_API_KEY environment variable is not set")
+            print("Warning: CRYPTORANK_API_KEY not found. Some functionality may be limited.")
             
         self.base_url = 'https://api.cryptorank.io/v1'  # Using v1 API as it's working
         
-        # Test v1 API
-        self.test_v1()
+        # Test v1 API only if we have an API key
+        if self.api_key:
+            self.test_v1()
         
     def test_v1(self):
         """Test v1 API endpoint"""
@@ -212,7 +213,7 @@ class CryptoRankAPI:
 class DataSources:
     """Data sources for Elion"""
     
-    def __init__(self):
+    def __init__(self, cryptorank_api_key=None):
         """Initialize data sources"""
         try:
             load_dotenv()  # Try to load .env file, but don't fail if it doesn't exist
@@ -229,18 +230,15 @@ class DataSources:
             api_base=api_url
         )
         
-        # Initialize CryptoRank API (optional)
-        self.crypto_rank_api_key = os.getenv('CRYPTORANK_API_KEY')
-        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"  # Using v1 API as it's working
+        # Initialize CryptoRank API with provided key or from env
+        self.crypto_rank_api_key = cryptorank_api_key or os.getenv('CRYPTORANK_API_KEY')
+        self.crypto_rank_base_url = "https://api.cryptorank.io/v1"
         
         # Cache for API responses
         self._cache = {}
         
         # Initialize CryptoRank API
-        if self.crypto_rank_api_key:
-            self.cryptorank_api = CryptoRankAPI()
-        else:
-            self.cryptorank_api = None
+        self.cryptorank_api = CryptoRankAPI(api_key=self.crypto_rank_api_key)
         
         # Initialize data caches with timestamps
         self.cache = {
