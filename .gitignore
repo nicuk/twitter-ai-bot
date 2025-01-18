@@ -7,9 +7,8 @@ __pycache__/
 
 # Environment files
 .env
-.env.*
-!.env.example
 .env.test
+!.env.example
 
 # IDE files
 .vscode/
