@@ -183,11 +183,19 @@ class AIGamingBot:
         def random_interval():
             return base_interval + random.uniform(-5, 5)
         
+        # Track countdown messages
+        countdown_messages = 0
+        
         # Schedule next tweet
         def schedule_next():
+            nonlocal countdown_messages
             interval = random_interval()
             schedule.every(interval).minutes.do(self.run_cycle)
-            logger.info(f"Next tweet scheduled in {int(interval)} minutes")
+            
+            # Only show first two countdown messages
+            if countdown_messages < 2:
+                logger.info(f"Next tweet scheduled in {int(interval)} minutes")
+                countdown_messages += 1
             
         # Initial schedule
         schedule_next()

@@ -199,7 +199,7 @@ class ContentGenerator:
             if analysis.get('sentiment'):
                 content += f"Sentiment: {analysis['sentiment'].upper()}\n"
             if isinstance(analysis.get('confidence'), (int, float)):
-                content += f"Confidence: {analysis['confidence']}%\n"
+                content += f"Confidence: {analysis['confidence']}%\n\n"
             
             signals = analysis.get('signals', {})
             if isinstance(signals, dict):
@@ -254,7 +254,7 @@ class ContentGenerator:
             analysis = self.llm.generate(prompt)
             content += f"\nAnalysis: {analysis}"
             
-            return self.personality.enhance_tweet(content, 'market_hunter')
+            return self.formatters.format_tweet(content)
             
         except Exception as e:
             print(f"Error formatting market search: {e}")
@@ -304,7 +304,7 @@ class ContentGenerator:
             analysis = self.llm.generate(prompt)
             content += f"\nAnalysis: {analysis}"
             
-            return self.personality.enhance_tweet(content, 'shill_reviewer')
+            return self.formatters.format_tweet(content)
             
         except Exception as e:
             print(f"Error formatting shill review: {e}")
@@ -314,7 +314,8 @@ class ContentGenerator:
         """Format breaking alpha tweet"""
         try:
             if not isinstance(data, dict):
-                return "Error: Invalid breaking alpha data"
+                logger.warning("Invalid breaking alpha data type")
+                return self._format_self_aware_thought()
                 
             content = "🚨 [BREAKING ALPHA]\n\n"
             
@@ -324,9 +325,15 @@ class ContentGenerator:
             
             # Add alpha details
             alpha = data.get('alpha', {})
-            if alpha:
+            if isinstance(alpha, dict):
                 content += f"Signal: {alpha.get('signal', 'Unknown')}\n"
-                content += f"Confidence: {alpha.get('confidence', 0)}%\n"
+                
+                # Validate confidence is numeric
+                confidence = alpha.get('confidence', 0)
+                if not isinstance(confidence, (int, float)):
+                    confidence = 0
+                content += f"Confidence: {confidence}%\n"
+                
                 if alpha.get('timeframe'):
                     content += f"Timeframe: {alpha['timeframe']}\n"
                 if alpha.get('target'):
@@ -339,12 +346,12 @@ class ContentGenerator:
                 content += f"\nSource: {data['source']}"
             
             content += "\n\n#AlphaLeak #CryptoSignals"
-            return content
+            return self.formatters.format_tweet(content)
             
         except Exception as e:
-            print(f"Error formatting breaking alpha: {e}")
-            return "Error formatting breaking alpha"
-            
+            logger.error(f"Error formatting breaking alpha: {e}")
+            return self._format_self_aware_thought()
+
     def _format_whale_alert(self, data: Dict) -> str:
         """Format whale alert tweet"""
         try:
@@ -377,40 +384,46 @@ class ContentGenerator:
         """Format technical analysis tweet"""
         try:
             if not isinstance(data, dict):
-                return "Error: Invalid technical analysis data"
+                logger.warning("Invalid technical analysis data type")
+                return self._format_self_aware_thought()
                 
             content = "📊 [TECHNICAL ANALYSIS]\n\n"
             
-            # Asset info
+            # Asset info with numeric validation
             content += f"${data.get('symbol', 'BTC')} Analysis\n"
-            content += f"Price: ${data.get('price', 0):,.2f}\n"
+            
+            price = data.get('price', 0)
+            if not isinstance(price, (int, float)):
+                price = 0
+            content += f"Price: ${price:,.2f}\n"
+            
             content += f"Trend: {data.get('trend', 'NEUTRAL')}\n\n"
             
-            # Technical indicators
+            # Technical indicators with validation
             indicators = data.get('indicators', {})
-            if indicators:
+            if isinstance(indicators, dict):
                 content += "Indicators:\n"
                 for name, value in indicators.items():
-                    content += f"* {name}: {value}\n"
+                    # Handle numeric indicators
+                    if isinstance(value, (int, float)):
+                        content += f"* {name}: {value:,.2f}\n"
+                    else:
+                        content += f"* {name}: {value}\n"
             
             # Patterns
             patterns = data.get('patterns', [])
-            if patterns:
+            if isinstance(patterns, list):
                 content += "\nPatterns Spotted:\n"
                 for pattern in patterns:
                     content += f"* {pattern}\n"
             
-            # Add prediction if available
-            if data.get('prediction'):
-                content += f"\nPrediction: {data['prediction']}"
-            
-            content += "\n\n#TechnicalAnalysis #CryptoTA"
-            return content
+            content += "\n#TechnicalAnalysis #CryptoTA"
+            return self.formatters.format_tweet(content)
             
         except Exception as e:
-            print(f"Error formatting technical analysis: {e}")
-            return "Error formatting technical analysis"
-            
+            logger.error(f"Error formatting technical analysis: {e}")
+            return self._format_self_aware_thought()
+
     def _format_controversial_thread(self, data: Dict = None) -> str:
         """Generate a controversial but engaging thread starter"""
         topics = [
@@ -436,25 +449,55 @@ class ContentGenerator:
     def _format_giveaway(self, data: Dict = None) -> str:
         """Generate a community engagement giveaway tweet"""
         templates = [
-            "🎉 Time for a knowledge check! First to correctly answer wins my respect:\n\n[AI-generated crypto question]\n\nLike & Reply with your answer! #CryptoQuiz",
-            "📚 Pop quiz! Test your crypto knowledge:\n\n[AI-generated market question]\n\nBest answer gets a shoutout! #CryptoTrivia",
-            "🤔 Riddle time! Can you solve this crypto puzzle?\n\n[AI-generated crypto riddle]\n\nLike & Reply to participate! #CryptoPuzzle"
+            "🎉 Time for a knowledge check! First to correctly answer wins my respect:\n\n{question}\n\nLike & Reply with your answer! #CryptoQuiz",
+            "📚 Pop quiz! Test your crypto knowledge:\n\n{question}\n\nBest answer gets a shoutout! #CryptoTrivia",
+            "🤔 Riddle time! Can you solve this crypto puzzle?\n\n{question}\n\nLike & Reply to participate! #CryptoPuzzle",
+            "🧠 Brain teaser! Let's see who knows their crypto:\n\n{question}\n\nBest explanation wins! #CryptoTeaser",
+            "🎯 Quick question! Show off your crypto knowledge:\n\n{question}\n\nMost insightful answer gets featured! #CryptoInsights"
+        ]
+        
+        # Topics to generate questions about
+        topics = [
+            "DeFi protocols and yield farming",
+            "Layer 2 scaling solutions",
+            "NFT utility and real-world applications",
+            "Crypto market psychology",
+            "Trading strategies and risk management",
+            "Blockchain technology fundamentals",
+            "Smart contract security",
+            "Web3 and decentralized applications",
+            "Tokenomics and market dynamics",
+            "Crypto regulations and compliance"
         ]
         
         import random
         template = random.choice(templates)
+        topic = random.choice(topics)
         
         # Generate the question/riddle
+        prompt = f"""Generate an engaging and thought-provoking question about {topic}.
+        The question should:
+        - Be specific and technical enough to be interesting
+        - Not have an obvious answer
+        - Encourage discussion and different viewpoints
+        - Be answerable in a tweet
+        - Not require external links or references
+        
+        Example: "What's more important for a DeFi protocol's success: TVL or unique users, and why?"
+        """
+        
         question = self.llm.generate(
-            system_message="You are Elion, an AI crypto analyst. Generate an interesting crypto-related question or riddle.",
-            user_message="Create an engaging crypto question or riddle for a Twitter quiz.",
+            system_message="You are Elion, an AI crypto analyst. Generate interesting crypto questions that encourage community engagement.",
+            user_message=prompt,
             max_tokens=100
-        )
+        ).strip()
         
-        tweet = template.replace("[AI-generated crypto question]", question)
-        tweet = template.replace("[AI-generated market question]", question)
-        tweet = template.replace("[AI-generated crypto riddle]", question)
+        # Clean up the question
+        if question.startswith('"') and question.endswith('"'):
+            question = question[1:-1]
         
+        # Format the tweet
+        tweet = template.format(question=question)
         return self.formatters.format_tweet(tweet)
     
     def _format_self_aware(self, data: Dict) -> str:
@@ -561,17 +604,16 @@ class ContentGenerator:
                     system_message=prompt,
                     user_message="Share an interesting thought about AI, crypto, or your role as an AI analyst.",
                     max_tokens=100
-                )
+                ).strip()
                 
                 # Validate response
-                if response and len(response.strip()) > 20:
+                if response and len(response) > 20:
                     # Format with personality components
-                    tweet = f"{action}\n{response}\n\n{random.choice(self.personality.speech_patterns['emojis'].values())}"
-                    if len(tweet.strip()) > 20:
-                        return tweet
-                        
-            except Exception as e:
-                logger.warning(f"Personality-driven generation failed: {e}, falling back to standard prompts")
+                    tweet = f"{marker} {action}\n\n{response}\n\n{tech_ref} #CryptoAI #AITrader"
+                    return self.formatters.format_tweet(tweet)
+                    
+            except Exception as inner_e:
+                logger.warning(f"Personality-driven generation failed: {inner_e}, falling back to standard prompts")
                 
             # Second try: Standard prompts
             prompts = [
@@ -641,7 +683,7 @@ class ContentGenerator:
         except Exception as e:
             logger.error(f"Error generating self-aware thought: {e}")
             return random.choice(fallback_messages)
-            
+
     def _format_market_response(self, data: Dict) -> str:
         """Format market response tweet"""
         try:
