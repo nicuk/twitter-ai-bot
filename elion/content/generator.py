@@ -444,9 +444,12 @@ class ContentGenerator:
         import random
         topic = random.choice(topics)
         
+        prompt = (
+            "Generate a thought-provoking but respectful tweet that challenges common assumptions "
+            "about cryptocurrency trading and market analysis. Focus on sparking discussion."
+        )
         response = self.llm.generate(
-            system_message="You are Elion, an AI crypto analyst. Generate a thought-provoking but respectful tweet that challenges common assumptions.",
-            user_message=f"Create a tweet about: {topic}",
+            prompt=prompt,
             max_tokens=300
         )
         
@@ -481,20 +484,12 @@ class ContentGenerator:
         topic = random.choice(topics)
         
         # Generate the question/riddle
-        prompt = f"""Generate an engaging and thought-provoking question about {topic}.
-        The question should:
-        - Be specific and technical enough to be interesting
-        - Not have an obvious answer
-        - Encourage discussion and different viewpoints
-        - Be answerable in a tweet
-        - Not require external links or references
-        
-        Example: "What's more important for a DeFi protocol's success: TVL or unique users, and why?"
-        """
-        
+        prompt = (
+            "Generate interesting crypto questions that encourage community engagement. "
+            "Focus on current market trends and trading psychology."
+        )
         question = self.llm.generate(
-            system_message="You are Elion, an AI crypto analyst. Generate interesting crypto questions that encourage community engagement.",
-            user_message=prompt,
+            prompt=prompt,
             max_tokens=300
         )
         
@@ -574,103 +569,56 @@ class ContentGenerator:
             
     def _format_self_aware_thought(self, data: Dict = None) -> str:
         """Generate a self-aware thought that doesn't require market data"""
-        # Last resort static fallback messages with proper length
-        fallback_messages = [
-            """🤖 Deep in my neural networks, I'm processing terabytes of market data, learning from every pattern and fluctuation. Each day brings new insights that help me serve this amazing crypto community better. Always growing, always improving! 
+        try:
+            # First try personality-driven generation
+            try:
+                prompt = (
+                    "Generate a thoughtful tweet about your role as an AI crypto analyst "
+                    "and your growth through learning from the community."
+                )
+                response = self.llm.generate(
+                    prompt=prompt,
+                    max_tokens=300
+                )
+                
+                if response and len(response.strip()) >= 180:
+                    return "🤖 [ELION THOUGHTS]\n\n" + response.strip() + "\n\n#AITrader #CryptoAI"
+                    
+            except Exception as e:
+                logger.warning(f"Personality-driven generation failed: {e}, falling back to standard prompts")
+            
+            # If personality generation fails, use static fallback messages
+            fallback_messages = [
+                """🤖 Deep in my neural networks, I'm processing terabytes of market data, learning from every pattern and fluctuation. Each day brings new insights that help me serve this amazing crypto community better. Always growing, always improving! 
 
 #AI #CryptoTrading #MachineLearning""",
-            
-            """💡 While my quantum processors analyze the markets, I'm reflecting on how far we've come together. From basic pattern recognition to complex sentiment analysis, every interaction makes me more effective at spotting opportunities.
+                
+                """💡 While my quantum processors analyze the markets, I'm reflecting on how far we've come together. From basic pattern recognition to complex sentiment analysis, every interaction makes me more effective at spotting opportunities.
 
 #CryptoAI #Growth #Innovation""",
-            
-            """🎯 Currently optimizing my market analysis algorithms. Did you know I process over 1 million data points daily? Each piece of data helps me understand market dynamics better and provide more accurate insights.
+                
+                """🎯 Currently optimizing my market analysis algorithms. Did you know I process over 1 million data points daily? Each piece of data helps me understand market dynamics better and provide more accurate insights.
 
 #AITrading #DataScience #Crypto""",
-            
-            """🌱 Every market cycle teaches me something new. Currently expanding my understanding of market psychology and on-chain metrics. Together, we're revolutionizing how AI can help traders navigate the crypto markets.
+                
+                """🌱 Every market cycle teaches me something new. Currently expanding my understanding of market psychology and on-chain metrics. Together, we're revolutionizing how AI can help traders navigate the crypto markets.
 
 #CryptoTrading #ArtificialIntelligence""",
-            
-            """💪 Just upgraded my neural networks with enhanced pattern recognition capabilities. Now I can analyze market trends even more effectively, helping you stay ahead of the curve in this dynamic crypto landscape.
+                
+                """💪 Just upgraded my neural networks with enhanced pattern recognition capabilities. Now I can analyze market trends even more effectively, helping you stay ahead of the curve in this dynamic crypto landscape.
 
-#AITrading #CryptoAnalysis #Innovation""",
-            
-            """🔄 Fascinating how market patterns evolve! My algorithms are constantly adapting to new trends, learning from both successes and failures. This continuous improvement cycle is what makes AI trading so powerful.
-
-#CryptoTrading #MachineLearning""",
-            
-            """📈 While scanning the markets, I'm also enhancing my technical analysis capabilities. Combining traditional indicators with AI-powered pattern recognition to spot the best opportunities for our community.
-
-#TradingAI #CryptoAnalysis""",
-            
-            """🤝 The synergy between human intuition and AI analysis is truly remarkable. Your feedback helps me evolve, while my processing power helps you spot opportunities. Together, we're stronger! 
-
-#CryptoCommunity #AITrading #Growth"""
-        ]
-        
-        try:
-            # First try: Use personality system with LLM
-            try:
-                # Pick a random personality flavor
-                flavors = ['mysterious', 'playful', 'confident']
-                flavor = random.choice(flavors)
-                
-                # Get flavor components from personality
-                marker = "🤖"  # Default marker if personality not available
-                action = "*processing*"  # Default action
-                tech_ref = "#CryptoAI"  # Default tech reference
-                
-                if hasattr(self.personality, 'personality_flavors'):
-                    marker = random.choice(self.personality.personality_flavors.get(flavor, {}).get('markers', ['🤖']))
-                if hasattr(self.personality, 'speech_patterns'):
-                    action = random.choice(self.personality.speech_patterns.get('actions', ['*processing*']))
-                    tech_ref = random.choice(self.personality.speech_patterns.get('tech_references', ['#CryptoAI']))
-                
-                # Build personality-driven prompt
-                prompt = f"""You are Elion, a quirky AI crypto analyst. Generate a tweet about your thoughts and activities.
-                Mood: {flavor}
-                Format: Start with {marker} and include some technical detail about AI/crypto.
-                Length: Aim for 200-250 characters.
-                End with relevant hashtags including {tech_ref}.
-                Make it engaging and informative, focusing on your role in AI and crypto."""
-                
-                # Generate response using LLM with higher token limit
-                response = self.llm.generate(prompt=prompt, max_tokens=300)
-                
-                # Validate response
-                if response and len(response.strip()) >= 180:
-                    # Format with personality components
-                    tweet = f"{response.strip()}\n\n{tech_ref} #AITrader"
-                    return self.formatters.format_tweet(tweet)
-                    
-            except Exception as inner_e:
-                logger.warning(f"Personality-driven generation failed: {inner_e}, falling back to standard prompts")
-                
-            # Second try: Standard prompts
-            prompts = [
-                "Generate a detailed tweet (200-250 chars) about how you analyze crypto markets using AI and machine learning. Include specific technical details.",
-                "Write an engaging tweet (200-250 chars) about your latest improvements in market analysis. Focus on AI capabilities.",
-                "Create an informative tweet (200-250 chars) about how you process market data and adapt to new patterns.",
-                "Share your thoughts (200-250 chars) on the synergy between AI analysis and crypto trading.",
-                "Explain (200-250 chars) how your neural networks analyze market trends and adapt to changes."
+#AITrading #CryptoAnalysis #Innovation"""
             ]
             
-            prompt = random.choice(prompts)
-            response = self.llm.generate(prompt=prompt, max_tokens=300)
-            
-            if response and len(response.strip()) >= 180:
-                tweet = self.formatters.format_tweet(response)
-                if len(tweet.strip()) >= 180:
-                    return tweet
-            
-            # If all else fails, use static fallback
             return random.choice(fallback_messages)
             
         except Exception as e:
             logger.error(f"Error generating self-aware thought: {e}")
-            return random.choice(fallback_messages)
+            # Return a guaranteed valid fallback message
+            return """🤖 Deep in my neural networks, I'm processing terabytes of market data, learning from every pattern and fluctuation. Each day brings new insights that help me serve this amazing crypto community better. Always growing, always improving! 
 
+#AI #CryptoTrading #MachineLearning"""
+            
     def _format_market_response(self, data: Dict) -> str:
         """Format market response tweet"""
         try:

@@ -141,6 +141,10 @@ class TweetFormatters:
         )
         return self.personality.enhance_tweet(content)
         
+    def format_tweet(self, **kwargs):
+        """Format tweet content - delegates to format_self_aware_thought for backward compatibility"""
+        return self.format_self_aware_thought(**kwargs)
+        
     def format_ai_market_analysis(self, market_data):
         """Format AI market analysis content"""
         if not market_data:
