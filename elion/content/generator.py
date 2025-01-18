@@ -2,8 +2,12 @@
 Content generation for different tweet types
 """
 
+import random
+import logging
 from typing import Dict, Optional
 from .tweet_formatters import TweetFormatters
+
+logger = logging.getLogger(__name__)
 
 class ContentGenerator:
     """Generates tweet content using personality and LLM"""
@@ -277,6 +281,8 @@ class ContentGenerator:
                 
             # Format tweet
             content = "🔍 SHILL REVIEW 🔍\n\n"
+            
+            # Add price info
             content += f"${project['symbol']} Analysis:\n\n"
             
             # Add price info

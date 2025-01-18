@@ -5,6 +5,7 @@ Core Elion class that coordinates all bot functionality
 from datetime import datetime
 from typing import Dict, Optional
 import time
+import random
 
 from .data_sources import DataSources
 from .portfolio import PortfolioManager
@@ -88,73 +89,119 @@ class Elion:
 
     def generate_market_analysis(self) -> Optional[str]:
         """Generate a market analysis tweet"""
-        max_retries = 3
-        retry_count = 0
-        
-        while retry_count < max_retries:
-            try:
-                print("Getting market data...")
-                data = self.data.get_market_data()
+        try:
+            market_data = self.data.get_market_data()
+            if not market_data:
+                logger.warning("No market data available for analysis")
+                return self.content.generate('self_aware_thought', {})
                 
-                print("Generating tweet...")
-                tweet = self.content.generate('market_analysis', data)
-                
-                # Only return valid tweets
-                if self._validate_tweet(tweet):
-                    print(f"Generated tweet: {tweet}")
-                    return tweet
-                    
-                print("Generated tweet failed validation, retrying...")
-                retry_count += 1
-                
-            except Exception as e:
-                print(f"Error generating market analysis (attempt {retry_count + 1}/{max_retries}): {e}")
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(5)  # Wait 5 seconds before retrying
-                    continue
-                    
-        print("Failed to generate valid market analysis after all retries")
-        return None
-    
+            return self.content.generate('market_analysis', {
+                'market_data': market_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating market analysis: {e}")
+            return self.content.generate('self_aware_thought', {})
+
     def generate_shill_review(self) -> Optional[str]:
         """Generate a shill review tweet"""
         try:
-            print("Getting shill opportunities...")
-            data = self.data.get_shill_opportunities()
-            
-            print("Generating tweet...")
-            tweet = self.content.generate('shill_review', data)
-            
-            # Only return valid tweets
-            if self._validate_tweet(tweet):
-                print(f"Generated tweet: {tweet}")
-                return tweet
-            return None
+            projects = self.data.get_shill_opportunities()
+            if not projects:
+                logger.warning("No shill opportunities found")
+                return self.content.generate('self_aware_thought', {})
+                
+            return self.content.generate('shill_review', {
+                'projects': projects
+            })
             
         except Exception as e:
-            print(f"Error generating shill review: {e}")
-            return f"Error: {str(e)}"
+            logger.error(f"Error generating shill review: {e}")
+            return self.content.generate('self_aware_thought', {})
             
     def generate_market_search(self, query: str) -> Optional[str]:
         """Generate a market search tweet"""
         try:
-            print("Getting market search data...")
-            data = self.data.get_market_search(query)
-            
-            print("Generating tweet...")
-            tweet = self.content.generate('market_search', data)
-            
-            # Only return valid tweets
-            if self._validate_tweet(tweet):
-                print(f"Generated tweet: {tweet}")
-                return tweet
-            return None
+            search_data = self.data.get_market_search(query)
+            if not search_data:
+                logger.warning(f"No results found for market search: {query}")
+                return self.content.generate('self_aware_thought', {})
+                
+            return self.content.generate('market_search', {
+                'query': query,
+                'results': search_data
+            })
             
         except Exception as e:
-            print(f"Error generating market search: {e}")
-            return f"Error: {str(e)}"
-        
+            logger.error(f"Error generating market search: {e}")
+            return self.content.generate('self_aware_thought', {})
+
+    def generate_gem_alpha(self) -> Optional[str]:
+        """Generate gem alpha tweet"""
+        try:
+            gems = self.data.get_undervalued_gems()
+            if not gems:
+                logger.warning("No gem opportunities found")
+                return self.content.generate('self_aware_thought', {})
+                
+            return self.content.generate('gem_alpha', {
+                'gems': gems
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating gem alpha: {e}")
+            return self.content.generate('self_aware_thought', {})
+
+    def generate_market_aware(self) -> Optional[str]:
+        """Generate market awareness tweet"""
+        try:
+            market_data = self.data.get_market_data()
+            if not market_data:
+                logger.warning("No market data available for awareness")
+                return self.content.generate('self_aware_thought', {})
+                
+            analysis = self.data.analyze_market_conditions()
+            return self.content.generate('market_aware', {
+                'market_data': market_data,
+                'analysis': analysis
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating market awareness: {e}")
+            return self.content.generate('self_aware_thought', {})
+
+    def generate_technical_analysis(self) -> Optional[str]:
+        """Generate technical analysis tweet"""
+        try:
+            ta_data = self.data.get_technical_analysis()
+            if not ta_data:
+                logger.warning("No technical analysis data available")
+                return self.content.generate('self_aware_thought', {})
+                
+            return self.content.generate('technical_analysis', {
+                'ta_data': ta_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating technical analysis: {e}")
+            return self.content.generate('self_aware_thought', {})
+
+    def generate_whale_alert(self) -> Optional[str]:
+        """Generate whale alert tweet"""
+        try:
+            whale_data = self.data.get_whale_movements()
+            if not whale_data:
+                logger.warning("No significant whale movements found")
+                return self.content.generate('self_aware_thought', {})
+                
+            return self.content.generate('whale_alert', {
+                'movements': whale_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error generating whale alert: {e}")
+            return self.content.generate('self_aware_thought', {})
+
     def analyze_performance(self, tweet_data: Dict) -> None:
         """Analyze tweet performance and optimize strategy"""
         try:
@@ -185,26 +232,18 @@ class Elion:
     def engage_with_community(self, interaction_data: Dict) -> Optional[str]:
         """Generate engagement response using personality system"""
         try:
-            # Generate response using personality system
-            response = self.personality.generate(
-                content_type='interaction',
-                context=interaction_data.get('content', ''),
-                interaction_type=interaction_data.get('type'),
-                user=interaction_data.get('user')
-            )
-            
-            # Track engagement
-            self.metrics['community_growth'].append({
+            if not interaction_data or not isinstance(interaction_data, dict):
+                logger.warning("Invalid interaction data")
+                return self.content.generate('self_aware_thought', {})
+
+            return self.content.generate('engagement_reply', {
                 'interaction': interaction_data,
-                'response': response,
-                'timestamp': datetime.now()
+                'personality': self.personality.current_state()
             })
             
-            return response
-            
         except Exception as e:
-            print(f"Error engaging with community: {e}")
-            return None
+            logger.error(f"Error engaging with community: {e}")
+            return self.content.generate('self_aware_thought', {})
 
     def _is_viral_hit(self, tweet_data: Dict) -> bool:
         """Check if tweet meets viral thresholds"""
@@ -257,45 +296,38 @@ class Elion:
 
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
         """Generate a tweet of the specified type"""
-        if tweet_type is None:
-            tweet_type = self.get_next_tweet_type()
-            
         try:
-            # Handle market data dependent tweets
-            if tweet_type in ['market_analysis', 'gem_alpha', 'shill_review', 'market_aware', 'technical_analysis']:
-                if not self.data.has_market_data():
-                    logger.warning(f"Skipping {tweet_type} - Market data not available")
-                    # Fall back to a non-market tweet type
-                    return self.generate_tweet('self_aware_thought')
+            # Map tweet types to generation methods
+            tweet_generators = {
+                'market_analysis': self.generate_market_analysis,
+                'gem_alpha': self.generate_gem_alpha,
+                'shill_review': self.generate_shill_review,
+                'market_aware': self.generate_market_aware,
+                'technical_analysis': self.generate_technical_analysis,
+                'self_aware': lambda: self.content.generate('self_aware', {}),
+                'ai_market_analysis': self.generate_ai_market_analysis,
+                'self_aware_thought': self.generate_self_aware_thought,
+                'controversial_thread': self.generate_controversial_thread,
+                'giveaway': lambda: self.content.generate('giveaway', {}),
+                'whale_alert': self.generate_whale_alert
+            }
             
-            # Generate based on type
-            if tweet_type == 'market_analysis':
-                return self.generate_market_analysis()
-            elif tweet_type == 'shill_review':
-                return self.generate_shill_review()
-            elif tweet_type == 'gem_alpha':
-                return self.generate_gem_alpha()
-            elif tweet_type == 'market_aware':
-                return self.generate_market_aware()
-            elif tweet_type == 'technical_analysis':
-                return self.generate_technical_analysis()
-            elif tweet_type == 'self_aware':
-                return self.generate_self_aware()
-            elif tweet_type == 'self_aware_thought':
-                return self.generate_self_aware_thought()
-            elif tweet_type == 'controversial_thread':
-                return self.generate_controversial_thread()
-            elif tweet_type == 'giveaway':
-                return self.generate_giveaway()
-            elif tweet_type == 'whale_alert':
-                return self.generate_whale_alert()
-            else:
-                logger.warning(f"Unknown tweet type: {tweet_type}")
-                return self.generate_self_aware_thought()
+            # If no type specified, pick a random one
+            if not tweet_type:
+                tweet_type = random.choice(list(tweet_generators.keys()))
                 
+            # Generate tweet using mapped method
+            if tweet_type in tweet_generators:
+                tweet = tweet_generators[tweet_type]()
+                if self._validate_tweet(tweet):
+                    return tweet
+                    
+            # Fallback to self-aware thought if generation fails
+            logger.warning(f"Failed to generate {tweet_type} tweet, falling back to self-aware")
+            return self.generate_self_aware_thought()
+            
         except Exception as e:
-            logger.error(f"Error generating {tweet_type} tweet: {str(e)}")
-            # Fall back to self-aware thought as it doesn't require external data
+            logger.error(f"Error generating tweet: {e}")
             return self.generate_self_aware_thought()
 
     def process_market_alpha(self) -> Optional[str]:
@@ -303,52 +335,35 @@ class Elion:
         try:
             market_data = self.data.get_market_data()
             if not market_data:
-                return None
+                logger.warning("No market data available for alpha")
+                return self.content.generate('self_aware_thought', {})
                 
             analysis = self.data.analyze_market_conditions()
-            
-            return self.content.generate('market_analysis', {
+            return self.content.generate('market_alpha', {
                 'market_data': market_data,
                 'analysis': analysis
             })
             
         except Exception as e:
-            print(f"Error processing market alpha: {e}")
-            return None
-
-    def process_gem_alpha(self) -> Optional[str]:
-        """Process gem data and return alpha call"""
-        try:
-            gems = self.data.get_undervalued_gems()
-            if not gems or len(gems) == 0:
-                return None
-                
-            # Get the highest scoring gem
-            best_gem = gems[0]
-            
-            return self.content.generate('gem_alpha', {
-                'gem_data': best_gem
-            })
-            
-        except Exception as e:
-            print(f"Error processing gem alpha: {e}")
-            return None
+            logger.error(f"Error processing market alpha: {e}")
+            return self.content.generate('self_aware_thought', {})
 
     def process_portfolio_update(self) -> Optional[str]:
         """Process portfolio data and return update"""
         try:
             stats = self.portfolio.get_portfolio_stats()
-            if not stats or not isinstance(stats, dict):
-                print("Invalid portfolio stats returned")
-                return None
+            if not stats:
+                logger.warning("No portfolio stats available")
+                return self.content.generate('self_aware_thought', {})
                 
             return self.content.generate('portfolio_update', {
-                'portfolio_stats': stats
+                'stats': stats,
+                'performance': self.portfolio.get_performance()
             })
             
         except Exception as e:
-            print(f"Error processing portfolio update: {e}")
-            return None
+            logger.error(f"Error processing portfolio update: {e}")
+            return self.content.generate('self_aware_thought', {})
 
     def process_market_aware(self) -> Optional[str]:
         """Generate market awareness tweet"""
@@ -413,3 +428,19 @@ class Elion:
                     
         print("Failed to generate valid whale alert after all retries")
         return None
+
+    def generate_controversial_thread(self) -> Optional[str]:
+        """Generate a controversial but engaging thread starter"""
+        try:
+            return self.content._format_controversial_thread({})
+        except Exception as e:
+            logger.error(f"Error generating controversial thread: {e}")
+            return self.generate_self_aware_thought()
+
+    def generate_self_aware_thought(self) -> Optional[str]:
+        """Generate a self-aware thought that doesn't require market data"""
+        try:
+            return self.content._format_self_aware_thought({})
+        except Exception as e:
+            logger.error(f"Error generating self-aware thought: {e}")
+            return "🤖 Just processing and learning... #AI"
