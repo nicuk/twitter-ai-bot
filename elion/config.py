@@ -7,12 +7,12 @@ load_dotenv()
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/elion.db')
 
-# API Keys
+# API Keys and Tokens
 CRYPTORANK_API_KEY = os.getenv('CRYPTORANK_API_KEY')
-TWITTER_API_KEY = os.getenv('TWITTER_API_KEY')
-TWITTER_API_SECRET = os.getenv('TWITTER_API_SECRET')
+TWITTER_API_KEY = os.getenv('TWITTER_CLIENT_ID')  # Changed from TWITTER_API_KEY
+TWITTER_API_SECRET = os.getenv('TWITTER_CLIENT_SECRET')  # Changed from TWITTER_API_SECRET
 TWITTER_ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
-TWITTER_ACCESS_SECRET = os.getenv('TWITTER_ACCESS_SECRET')
+TWITTER_ACCESS_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')  # Changed from TWITTER_ACCESS_SECRET
 
 # Market Analysis Settings
 MARKET_SETTINGS = {
@@ -24,8 +24,7 @@ MARKET_SETTINGS = {
 }
 
 # Twitter Settings
-TWEET_MIN_LENGTH = 180  # Minimum tweet length for substantial content
-TWEET_MAX_LENGTH = 280  # Maximum tweet length
+TWEET_MAX_LENGTH = 280
 TWEET_THREAD_MAX = 4  # Maximum tweets in a thread
 
 # Excluded Tokens

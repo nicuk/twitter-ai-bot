@@ -7,7 +7,6 @@ from datetime import datetime
 from custom_llm import MetaLlamaComponent
 import os
 from dotenv import load_dotenv
-import logging
 
 class LLMIntegration:
     def __init__(self):
@@ -204,17 +203,14 @@ Remember: You're a quirky, lovable AI who combines deep market knowledge with a 
             expansion_prompt = f"""The following response is too short (needs at least 180 characters):
             {response}
             
-            Generate a new response that:
-            1. Is between 180-280 characters
-            2. Maintains the same tone and adds value
-            3. Includes specific insights or personal touches
-            4. Uses emojis appropriately"""
+            Expand it while maintaining the same tone and adding more value.
+            Include more specific insights or personal touches."""
             
             expanded = self.llm._call(expansion_prompt)
             return expanded.strip()
             
         except Exception as e:
-            logging.error(f"Error expanding response: {e}")
+            print(f"Error expanding response: {e}")
             return response
     
     def _truncate_response(self, response: str) -> str:
@@ -230,7 +226,7 @@ Remember: You're a quirky, lovable AI who combines deep market knowledge with a 
             return truncated.strip()
             
         except Exception as e:
-            logging.error(f"Error truncating response: {e}")
+            print(f"Error truncating response: {e}")
             return response[:280]
     
     def _update_context_memory(self, 

@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import sys
+import random
 
 from elion.elion import Elion
 from elion.data_sources import DataSources
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 logger.info("Loading environment variables...")
 load_dotenv('.env.test')  # Load test environment first
-load_dotenv('.env', override=True)  # Then load production env if it exists
+load_dotenv('.env', override=True)  # Then override with production env
 logger.info("Environment variables loaded")
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -69,6 +70,21 @@ class AIGamingBot:
         self.cache_file = 'rate_limits.json'
         self.response_cache_file = 'response_cache.json'
         
+        # Map tweet types to categories
+        self.tweet_categories = {
+            'market_analysis': 'analysis',
+            'gem_alpha': 'alpha',
+            'shill_review': 'review',
+            'market_aware': 'analysis',
+            'technical_analysis': 'analysis',
+            'self_aware': 'thoughts',
+            'ai_market_analysis': 'analysis',
+            'self_aware_thought': 'thoughts',
+            'controversial_thread': 'discussion',
+            'giveaway': 'community',
+            'whale_alert': 'alert'
+        }
+        
         # Track rate limits
         self.rate_limits = {
             'post': {
@@ -96,8 +112,7 @@ class AIGamingBot:
             'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
             'AI_ACCESS_TOKEN': 'AI API Access Token',
             'AI_API_URL': 'AI API Base URL',
-            'AI_MODEL_NAME': 'AI Model Name',
-            'CRYPTORANK_API_KEY': 'CryptoRank API Key'
+            'AI_MODEL_NAME': 'AI Model Name'
         }
         
         missing_vars = []
@@ -157,12 +172,37 @@ class AIGamingBot:
     
     def _setup_schedule(self):
         """Set up the tweet schedule"""
-        # Main content schedule (every 6 hours)
-        schedule.every(6).hours.do(self.run_cycle)
+        # Calculate intervals
+        daily_limit = self.rate_limits['post']['daily_limit']
+        hours_in_day = 24
         
-        # Engagement schedule (every 4 hours)
-        schedule.every(4).hours.do(self.engagement_cycle)
+        # Calculate base interval in minutes
+        base_interval = (hours_in_day * 60) / daily_limit
         
+        # Add some randomness to avoid exact patterns
+        def random_interval():
+            return base_interval + random.uniform(-5, 5)
+        
+        # Schedule next tweet
+        def schedule_next():
+            interval = random_interval()
+            schedule.every(interval).minutes.do(self.run_cycle)
+            logger.info(f"Next tweet scheduled in {int(interval)} minutes")
+            
+        # Initial schedule
+        schedule_next()
+        
+        # After each tweet, schedule the next one
+        def run_and_reschedule():
+            self.run_cycle()
+            # Clear the old schedule
+            schedule.clear()
+            # Schedule the next tweet
+            schedule_next()
+            # Reschedule response checking and cache cleanup
+            schedule.every(1).hours.do(self.check_responses)
+            schedule.every().day.at("00:00").do(self._cleanup_cache)
+            
         # Response checking (every hour)
         schedule.every(1).hours.do(self.check_responses)
         
@@ -185,13 +225,21 @@ class AIGamingBot:
         
         # Check limits
         if self.rate_limits['post']['daily_count'] >= self.rate_limits['post']['daily_limit']:
-            logger.info("Daily tweet limit reached")
+            next_reset = self.rate_limits['post']['last_reset'] + timedelta(days=1)
+            time_until = next_reset - current_time
+            hours = int(time_until.total_seconds() / 3600)
+            minutes = int((time_until.total_seconds() % 3600) / 60)
+            logger.info(f"Daily tweet limit reached ({self.rate_limits['post']['daily_count']}/{self.rate_limits['post']['daily_limit']}). Reset in {hours}h {minutes}m")
             return False
             
         if self.rate_limits['post']['monthly_count'] >= self.rate_limits['post']['monthly_limit']:
-            logger.info("Monthly tweet limit reached")
+            next_reset = self.rate_limits['post']['monthly_reset'] + timedelta(days=30)
+            time_until = next_reset - current_time
+            days = time_until.days
+            hours = int((time_until.total_seconds() % (24 * 3600)) / 3600)
+            logger.info(f"Monthly tweet limit reached ({self.rate_limits['post']['monthly_count']}/{self.rate_limits['post']['monthly_limit']}). Reset in {days}d {hours}h")
             return False
-        
+            
         return True
     
     def _update_post_counts(self):
@@ -371,33 +419,70 @@ class AIGamingBot:
                 
             # Get next tweet type
             tweet_type = self.elion.get_next_tweet_type()
+            if not tweet_type:
+                logger.warning("No valid tweet type available")
+                return
+                
             logger.info(f"Generating {tweet_type} tweet...")
             
             # Try to generate tweet
             tweet = self.elion.generate_tweet(tweet_type)
             if not tweet:
-                logger.info(f"Failed to generate {tweet_type} tweet, will try again later")
+                logger.warning(f"Failed to generate {tweet_type} tweet, will try again later")
+                return
+                
+            # Validate tweet before posting
+            if not self.elion._validate_tweet(tweet):
+                logger.warning(f"Generated tweet failed validation: {tweet}")
                 return
                 
             # Post tweet
             logger.info("Posting tweet...")
-            response = self.api.create_tweet(text=tweet)
-            
-            if response and hasattr(response, 'data'):
-                tweet_id = response.data['id']
-                logger.info(f"Tweet posted successfully! ID: {tweet_id}")
+            try:
+                response = self.api.create_tweet(text=tweet)
                 
-                # Update tracking
-                self._update_post_counts()
-                self.tweet_history.add_tweet(tweet, tweet_type)
-                
-                # Save cache
-                self._save_cache()
-            else:
-                logger.error("Failed to post tweet")
+                if response and hasattr(response, 'data'):
+                    tweet_id = response.data['id']
+                    logger.info(f"Tweet posted successfully! ID: {tweet_id}")
+                    
+                    # Get category from tweet type
+                    category = self.tweet_categories.get(tweet_type, 'other')
+                    
+                    # Update tracking
+                    self._update_post_counts()
+                    self.tweet_history.add_tweet(tweet, "default", category)
+                    
+                    # Save cache
+                    self._save_cache()
+                    
+                    # Schedule next tweet
+                    schedule.clear()
+                    daily_limit = self.rate_limits['post']['daily_limit']
+                    base_interval = (24 * 60) / daily_limit
+                    next_interval = base_interval + random.uniform(-5, 5)
+                    schedule.every(next_interval).minutes.do(self.run_cycle)
+                    schedule.every(1).hours.do(self.check_responses)
+                    schedule.every().day.at("00:00").do(self._cleanup_cache)
+                    
+                    logger.info(f"Next tweet scheduled in {int(next_interval)} minutes")
+                else:
+                    logger.error("Failed to post tweet - invalid response")
+                    return
+                    
+            except tweepy.errors.Unauthorized as e:
+                logger.error(f"Twitter API authentication failed: {e}")
+                logger.error("Please check your Twitter API credentials in the .env file")
+                return
+            except tweepy.errors.Forbidden as e:
+                logger.error(f"Twitter API request forbidden: {e}")
+                return
+            except tweepy.errors.TweepyException as e:
+                logger.error(f"Twitter API error: {e}")
+                return
                 
         except Exception as e:
             logger.error(f"Error in tweet cycle: {e}")
+            return
     
     def engagement_cycle(self):
         """Run engagement cycle"""
@@ -467,6 +552,14 @@ class AIGamingBot:
             
             # Main loop
             while True:
+                # Get next scheduled jobs
+                next_jobs = sorted(schedule.jobs, key=lambda x: x.next_run)
+                if next_jobs:
+                    next_job = next_jobs[0]
+                    time_until = next_job.next_run - datetime.now()
+                    minutes = int(time_until.total_seconds() / 60)
+                    logger.info(f"Next tweet scheduled in {minutes} minutes")
+                
                 schedule.run_pending()
                 time.sleep(60)  # Check every minute
                 
@@ -509,4 +602,11 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("\nBot stopped by user")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1)

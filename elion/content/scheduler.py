@@ -1,110 +1,156 @@
 """
-Tweet scheduler for different content types
+Tweet scheduling functionality for Elion
 """
 
-from typing import List, Dict
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Dict
 import random
 
 class TweetScheduler:
-    """Schedules different types of tweets"""
+    """Handles tweet scheduling and timing"""
     
-    def __init__(self, limited_mode: bool = False):
-        """Initialize scheduler"""
-        self.limited_mode = limited_mode
-        self.last_tweet_time = {}
+    def __init__(self):
+        """Initialize tweet scheduler"""
+        self.datetime = datetime
+        self.cycle_count = 0
+        self.total_cycles = 50
+        self.initial_tweets_count = 0  # Track number of initial tweets
+        self.initial_tweets_max = 5    # Number of initial self-aware tweets
         
-        # Define tweet types and their frequencies (in hours)
-        self.tweet_frequencies = {
-            # Regular tweets
-            'market_analysis': 4,
-            'portfolio_update': 12,
-            'gem_alpha': 6,
-            'shill_review': 8,
-            # Special tweets
-            'self_aware_thought': 3,
-            'controversial_thread': 6,
-            'giveaway': 24,
-            'technical_analysis': 8,
-            'breaking_alpha': 12,
-            'whale_alert': 4
+        # Regular Scheduled Posts (50% of tweets)
+        self.type_distribution = {
+            # Regular Scheduled Posts (50%)
+            'portfolio_update': 0.1,   # 5 posts
+            'market_analysis': 0.05,   # 2-3 posts
+            'market_search': 0.05,     # 2-3 posts
+            'gem_alpha': 0.1,          # 5 posts
+            'shill_review': 0.1,       # 5 posts
+            'market_aware': 0.1,       # 5 posts
+            
+            # Special Event Posts (30%)
+            'breaking_alpha': 0.05,    # 2-3 posts
+            'whale_alert': 0.05,       # 2-3 posts
+            'technical_analysis': 0.05, # 2-3 posts
+            'controversial_thread': 0.05, # 2-3 posts
+            'giveaway': 0.025,         # 1-2 posts
+            'self_aware': 0.025,       # 1-2 posts
+            'ai_market_analysis': 0.05, # 2-3 posts
+            'self_aware_thought': 0.025, # 1-2 posts
+            
+            # Reactive Posts (20%)
+            'market_response': 0.05,    # 2-3 posts
+            'engagement_reply': 0.05,   # 2-3 posts
+            'alpha_call': 0.05,        # 2-3 posts
+            'technical_alpha': 0.05     # 2-3 posts
         }
         
-        # Define priorities for limited mode
-        self.limited_mode_priorities = [
-            'self_aware_thought',
-            'controversial_thread',
-            'giveaway'
-        ]
+        # Define non-market-data tweet types
+        self.non_market_types = {
+            'self_aware': 0.3,
+            'self_aware_thought': 0.3,
+            'controversial_thread': 0.2,
+            'giveaway': 0.2
+        }
+        
+        self.type_counts = {t: 0 for t in self.type_distribution}
+        self.failed_types = set()  # Track failed tweet types
+        
+    def _reset_cycle(self):
+        """Reset cycle counts"""
+        self.cycle_count = 0
+        self.type_counts = {k: 0 for k in self.type_counts}
+        self.failed_types.clear()
         
     def get_next_tweet_type(self) -> str:
-        """Get the next tweet type to post"""
-        current_time = datetime.utcnow()
+        """Get the next tweet type based on timing and distribution rules"""
+        current_hour = self.datetime.now().hour
         
-        # Get eligible tweet types
-        eligible_types = []
+        # For the first few tweets, prioritize non-market-data tweets
+        if self.initial_tweets_count < self.initial_tweets_max:
+            self.initial_tweets_count += 1
+            # Use non-market distribution for initial tweets
+            r = random.random()
+            cumsum = 0
+            for t, p in self.non_market_types.items():
+                cumsum += p
+                if r <= cumsum:
+                    self.type_counts[t] += 1
+                    self.cycle_count += 1
+                    return t
+            # Fallback to first non-market type
+            t = next(iter(self.non_market_types))
+            self.type_counts[t] += 1
+            self.cycle_count += 1
+            return t
         
-        # In limited mode, only consider priority tweet types
-        tweet_types = (
-            self.limited_mode_priorities if self.limited_mode 
-            else self.tweet_frequencies.keys()
-        )
+        # Reset cycle if completed
+        if self.cycle_count >= self.total_cycles:
+            self._reset_cycle()
         
-        for tweet_type in tweet_types:
-            last_time = self.last_tweet_time.get(tweet_type, datetime.min)
-            frequency = self.tweet_frequencies[tweet_type]
-            if current_time - last_time > timedelta(hours=frequency):
-                eligible_types.append(tweet_type)
+        # Don't try failed types again in same cycle
+        available_types = {
+            t: r for t, r in self.type_distribution.items()
+            if t not in self.failed_types
+        }
+        
+        if not available_types:
+            self._reset_cycle()
+            available_types = self.type_distribution
+            
+        # Normalize probabilities
+        total_prob = sum(available_types.values())
+        normalized_types = {
+            t: r/total_prob for t, r in available_types.items()
+        }
+        
+        # Select type based on distribution
+        r = random.random()
+        cumsum = 0
+        for t, p in normalized_types.items():
+            cumsum += p
+            if r <= cumsum:
+                self.type_counts[t] += 1
+                self.cycle_count += 1
+                return t
                 
-        if not eligible_types:
-            return 'self_aware_thought'  # Default to self-aware if nothing else
-            
-        # Prioritize self-aware thoughts and engagement
-        if self.limited_mode:
-            priorities = {
-                'self_aware_thought': 0.5,
-                'controversial_thread': 0.3,
-                'giveaway': 0.2
-            }
-            
-            # Use weighted random selection
-            total = sum(priorities.get(t, 0) for t in eligible_types)
-            r = random.random() * total
-            
-            for tweet_type in eligible_types:
-                r -= priorities.get(tweet_type, 0)
-                if r <= 0:
-                    return tweet_type
-                    
-            return eligible_types[0]  # Fallback
-            
-        # Normal mode - random selection
-        return random.choice(eligible_types)
+        # Fallback to first available type
+        t = next(iter(available_types))
+        self.type_counts[t] += 1
+        self.cycle_count += 1
+        return t
         
-    def update_last_tweet_time(self, tweet_type: str):
-        """Update the last tweet time for a type"""
-        self.last_tweet_time[tweet_type] = datetime.utcnow()
-        
-    def get_tweet_schedule(self) -> List[Dict]:
-        """Get the current tweet schedule"""
-        current_time = datetime.utcnow()
-        schedule = []
-        
-        tweet_types = (
-            self.limited_mode_priorities if self.limited_mode 
-            else self.tweet_frequencies.keys()
-        )
-        
-        for tweet_type in tweet_types:
-            last_time = self.last_tweet_time.get(tweet_type, datetime.min)
-            frequency = self.tweet_frequencies[tweet_type]
-            next_time = last_time + timedelta(hours=frequency)
+    def boost_working_types(self):
+        """Boost probability of working tweet types"""
+        if not self.failed_types:
+            return
             
-            schedule.append({
-                'type': tweet_type,
-                'last_posted': last_time,
-                'next_scheduled': next_time,
-                'frequency': frequency
-            })
-            
-        return sorted(schedule, key=lambda x: x['next_scheduled'])
+        # Calculate boost amount
+        failed_total = sum(self.type_distribution[t] for t in self.failed_types)
+        working_types = [t for t in self.type_distribution if t not in self.failed_types]
+        boost = failed_total / len(working_types)
+        
+        # Apply boost to working types
+        for t in working_types:
+            self.type_distribution[t] += boost
+
+    def mark_type_failed(self, tweet_type: str):
+        """Mark a tweet type as failed for this cycle"""
+        self.failed_types.add(tweet_type)
+        # Adjust distribution for remaining types
+        remaining_types = {t: r for t, r in self.type_distribution.items() 
+                         if t not in self.failed_types}
+        if remaining_types:
+            # Redistribute failed type's probability
+            failed_prob = self.type_distribution[tweet_type]
+            boost = failed_prob / len(remaining_types)
+            for t in remaining_types:
+                self.type_distribution[t] += boost
+
+    def get_cycle_progress(self) -> Dict:
+        """Get current cycle progress"""
+        return {
+            'cycle_count': self.cycle_count,
+            'total_cycles': self.total_cycles,
+            'type_counts': self.type_counts,
+            'failed_types': list(self.failed_types)
+        }

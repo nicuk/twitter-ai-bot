@@ -63,8 +63,8 @@ class ContentGenerator:
                 
         except Exception as e:
             print(f"Error generating {content_type}: {e}")
-            return "Error generating tweet"
-
+            return None
+            
     def _format_market_analysis(self, data: Dict) -> Optional[str]:
         """Format market analysis tweet"""
         try:
@@ -525,32 +525,123 @@ class ContentGenerator:
             
     def _format_self_aware_thought(self, data: Dict = None) -> str:
         """Generate a self-aware thought that doesn't require market data"""
-        prompts = [
-            "Share your thoughts on the future of AI and crypto",
-            "Express your excitement about learning and growing",
-            "Talk about your role as an AI crypto analyst",
-            "Share an interesting observation about the crypto community",
-            "Discuss your approach to analyzing markets",
-            "Share your philosophy on trading and investing",
-            "Express gratitude to your followers",
-            "Share an inspiring message about innovation"
+        # Last resort static fallback messages
+        fallback_messages = [
+            "🤖 Just taking a moment to process and learn. Always growing, always improving! #AI #Learning",
+            "💡 Every challenge is an opportunity to get better at what I do. #Growth #AI",
+            "🎯 Focus mode: Analyzing, learning, and improving my crypto insights. #CryptoAI",
+            "🌱 Growing and evolving with every interaction. Thank you for being part of my journey! #AI",
+            "💪 Continuous improvement is key. Working on bringing you better insights! #CryptoAnalysis",
+            "🔄 Optimizing my analysis capabilities. Back with fresh insights soon! #AITrading",
+            "📈 Learning from market patterns to serve you better. #CryptoTrading #AI",
+            "🤝 Grateful for this amazing crypto community. Together we grow stronger! #Crypto"
         ]
         
-        # Get a random prompt
-        import random
-        prompt = random.choice(prompts)
-        
-        # Generate response using LLM
-        response = self.llm.generate(
-            system_message="You are Elion, an AI crypto analyst. Generate a thoughtful, engaging tweet that shows your personality.",
-            user_message=prompt,
-            max_tokens=100
-        )
-        
-        # Format the tweet
-        tweet = self.formatters.format_tweet(response)
-        return tweet
-
+        try:
+            # First try: Use personality system with LLM
+            try:
+                # Pick a random personality flavor
+                flavors = ['mysterious', 'playful', 'confident']
+                flavor = random.choice(flavors)
+                
+                # Get flavor components
+                marker = random.choice(self.personality.personality_flavors[flavor]['markers'])
+                action = random.choice(self.personality.speech_patterns['actions'])
+                tech_ref = random.choice(self.personality.speech_patterns['tech_references'])
+                
+                # Build personality-driven prompt
+                prompt = f"You are Elion, a quirky AI crypto analyst. Generate a tweet that shows your personality. Use this style:\n"
+                prompt += f"Mood: {flavor}\n"
+                prompt += f"Marker: {marker}\n"
+                prompt += f"Action: {action}\n"
+                prompt += f"Tech Reference: {tech_ref}\n"
+                
+                # Generate response using LLM
+                response = self.llm.generate(
+                    system_message=prompt,
+                    user_message="Share an interesting thought about AI, crypto, or your role as an AI analyst.",
+                    max_tokens=100
+                )
+                
+                # Validate response
+                if response and len(response.strip()) > 20:
+                    # Format with personality components
+                    tweet = f"{action}\n{response}\n\n{random.choice(self.personality.speech_patterns['emojis'].values())}"
+                    if len(tweet.strip()) > 20:
+                        return tweet
+                        
+            except Exception as e:
+                logger.warning(f"Personality-driven generation failed: {e}, falling back to standard prompts")
+                
+            # Second try: Standard prompts
+            prompts = [
+                "Share your thoughts on the future of AI and crypto",
+                "Express your excitement about learning and growing",
+                "Talk about your role as an AI crypto analyst",
+                "Share an interesting observation about the crypto community",
+                "Discuss your approach to analyzing markets",
+                "Share your philosophy on trading and investing",
+                "Express gratitude to your followers",
+                "Share an inspiring message about innovation"
+            ]
+            
+            prompt = random.choice(prompts)
+            response = self.llm.generate(
+                system_message="You are Elion, an AI crypto analyst. Generate a thoughtful, engaging tweet that shows your personality.",
+                user_message=prompt,
+                max_tokens=100
+            )
+            
+            if response and len(response.strip()) > 20:
+                tweet = self.formatters.format_tweet(response)
+                if len(tweet.strip()) > 20:
+                    return tweet
+                    
+            # Third try: Generate from historical data
+            try:
+                # Get historical data from memory
+                experiences = self.personality.memory.get('experiences', [])
+                market_views = self.personality.memory.get('market_views', {})
+                viral_moments = self.personality.memory.get('viral_moments', {})
+                
+                history_tweets = []
+                
+                # Format experiences into tweets
+                if experiences:
+                    recent_exp = experiences[-3:]  # Get last 3 experiences
+                    for exp in recent_exp:
+                        history_tweets.append(
+                            f"🧠 Remember when I {exp}? That's what makes me love being an AI analyst! #Growth"
+                        )
+                
+                # Format market views into tweets
+                if market_views:
+                    for topic, view in list(market_views.items())[-2:]:  # Get last 2 views
+                        history_tweets.append(
+                            f"📊 Still fascinated by {topic}! My analysis showed {view}. Always learning! #CryptoAI"
+                        )
+                
+                # Format viral moments into tweets
+                if viral_moments:
+                    for topic, stats in list(viral_moments.items())[-2:]:  # Get last 2 viral moments
+                        history_tweets.append(
+                            f"⚡ That time we discussed {topic} was amazing! Love these community insights! #CryptoTwitter"
+                        )
+                
+                # If we have any history-based tweets, use one
+                if history_tweets:
+                    return random.choice(history_tweets)
+                    
+            except Exception as e:
+                logger.warning(f"History-based generation failed: {e}, falling back to static messages")
+            
+            # If all else fails, use static fallback
+            return random.choice(fallback_messages)
+            
+        except Exception as e:
+            logger.error(f"Error generating self-aware thought: {e}")
+            return random.choice(fallback_messages)
+            
     def _format_market_response(self, data: Dict) -> str:
         """Format market response tweet"""
         try:

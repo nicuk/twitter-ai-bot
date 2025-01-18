@@ -4,6 +4,7 @@ Core Elion class that coordinates all bot functionality
 
 from datetime import datetime
 from typing import Dict, Optional
+import time
 
 from .data_sources import DataSources
 from .portfolio import PortfolioManager
@@ -11,8 +12,6 @@ from .personality import ElionPersonality
 from .engagement import EngagementManager
 from .content.generator import ContentGenerator
 from .content.scheduler import TweetScheduler
-from .twitter_api import TwitterAPI
-from .config import TWEET_MIN_LENGTH, TWEET_MAX_LENGTH
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,86 +27,95 @@ class Elion:
     - PortfolioManager: Handles portfolio tracking
     """
     
-    def __init__(self, llm, cryptorank_api_key: Optional[str] = None):
-        """Initialize Elion"""
+    def __init__(self, llm, cryptorank_api_key=None):
+        """Initialize Elion with necessary components"""
+        # Initialize core components
         self.llm = llm
-        
-        # Initialize components
-        self.personality = ElionPersonality()
-        self.twitter = TwitterAPI()
-        self.scheduler = TweetScheduler(limited_mode=cryptorank_api_key is None)
-        self.content = ContentGenerator(self.personality, self.llm)
-        
-        # Initialize data sources
         self.data = DataSources(llm, cryptorank_api_key)
         
-        # Set operating mode
-        self.limited_mode = cryptorank_api_key is None
-        if self.limited_mode:
-            logging.info("Operating in Limited Mode - Market features disabled")
-            logging.info("Focusing on:")
-            logging.info("- Self-aware thoughts and discussions")
-            logging.info("- Community engagement and giveaways")
-            logging.info("- Controversial topics and AI insights")
-        else:
-            logging.info("Operating in Full Mode - All features enabled")
-            
+        # Initialize other components
+        self.personality = ElionPersonality()
+        self.engagement = EngagementManager()
+        self.portfolio = PortfolioManager()
+        self.content = ContentGenerator(self.personality, llm)
+        self.scheduler = TweetScheduler()
+        
         # Track performance metrics
         self.metrics = {
-            'tweets': 0,
-            'replies': 0,
-            'likes': 0,
-            'retweets': 0,
-            'followers': 0,
-            'engagement_rate': 0.0
+            'tweets': [],
+            'engagements': [],
+            'viral_hits': [],
+            'community_growth': [],
+            'market_analysis': []
         }
         
     def _validate_tweet(self, tweet: str) -> bool:
         """Validate if a tweet is well-formed and ready to post"""
         if not tweet or not isinstance(tweet, str):
-            logging.warning("Tweet is empty or not a string")
             return False
             
-        # Check length (Twitter limits)
-        length = len(tweet)
-        if length < TWEET_MIN_LENGTH:
-            logging.warning(f"Tweet too short: {length} chars")
-            return False
-        if length > TWEET_MAX_LENGTH:
-            logging.warning(f"Tweet too long: {length} chars")
+        # Check for error messages and API errors
+        error_phrases = [
+            'error', 
+            'Error:', 
+            'API returned', 
+            'failed', 
+            'invalid', 
+            'unauthorized',
+            '401',
+            '403',
+            '404',
+            '500'
+        ]
+        if any(phrase.lower() in tweet.lower() for phrase in error_phrases):
             return False
             
-        # Check for error messages
-        if tweet.startswith('Error:') or 'error' in tweet.lower():
-            logging.warning("Tweet contains error message")
+        # Check minimum length (a reasonable tweet should be at least 20 chars)
+        if len(tweet) < 20:
             return False
             
         # Check for placeholder or default content
-        placeholder_phrases = ['undefined', 'null', 'nan', '0.0', 'error']
+        placeholder_phrases = ['undefined', 'null', 'nan', '0.0']
         if any(phrase in tweet.lower() for phrase in placeholder_phrases):
-            logging.warning("Tweet contains placeholder content")
+            return False
+            
+        # Check for automated/testing content
+        automated_phrases = ['automated', 'test', 'testing']
+        if any(phrase.lower() in tweet.lower() for phrase in automated_phrases):
             return False
             
         return True
 
     def generate_market_analysis(self) -> Optional[str]:
         """Generate a market analysis tweet"""
-        try:
-            print("Getting market data...")
-            data = self.data.get_market_data()
-            
-            print("Generating tweet...")
-            tweet = self.content.generate('market_analysis', data)
-            
-            # Only return valid tweets
-            if self._validate_tweet(tweet):
-                print(f"Generated tweet: {tweet}")
-                return tweet
-            return None
-            
-        except Exception as e:
-            print(f"Error generating market analysis: {e}")
-            return f"Error: {str(e)}"
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                print("Getting market data...")
+                data = self.data.get_market_data()
+                
+                print("Generating tweet...")
+                tweet = self.content.generate('market_analysis', data)
+                
+                # Only return valid tweets
+                if self._validate_tweet(tweet):
+                    print(f"Generated tweet: {tweet}")
+                    return tweet
+                    
+                print("Generated tweet failed validation, retrying...")
+                retry_count += 1
+                
+            except Exception as e:
+                print(f"Error generating market analysis (attempt {retry_count + 1}/{max_retries}): {e}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    time.sleep(5)  # Wait 5 seconds before retrying
+                    continue
+                    
+        print("Failed to generate valid market analysis after all retries")
+        return None
     
     def generate_shill_review(self) -> Optional[str]:
         """Generate a shill review tweet"""
@@ -151,21 +159,25 @@ class Elion:
         """Analyze tweet performance and optimize strategy"""
         try:
             # Track tweet metrics
-            self.metrics['tweets'] += 1
+            self.metrics['tweets'].append({
+                'timestamp': datetime.now(),
+                'data': tweet_data
+            })
             
             # Check if tweet went viral
             if self._is_viral_hit(tweet_data):
-                self.metrics['replies'] += tweet_data.get('replies', 0)
-                self.metrics['likes'] += tweet_data.get('likes', 0)
-                self.metrics['retweets'] += tweet_data.get('retweets', 0)
+                self.metrics['viral_hits'].append(tweet_data)
                 
             # Update engagement metrics
             engagement_score = tweet_data.get('likes', 0) + tweet_data.get('retweets', 0) * 2
-            self.metrics['engagement_rate'] = (self.metrics['engagement_rate'] * (self.metrics['tweets'] - 1) + engagement_score) / self.metrics['tweets']
+            self.metrics['engagements'].append(engagement_score)
             
             # Analyze market impact if applicable
             if tweet_data.get('type') in ['market_analysis', 'market_search', 'gem_alpha']:
-                self.metrics['followers'] += tweet_data.get('followers', 0)
+                self.metrics['market_analysis'].append({
+                    'tweet': tweet_data,
+                    'market_response': self.data.analyze_market_conditions()
+                })
                 
         except Exception as e:
             print(f"Error analyzing performance: {e}")
@@ -182,7 +194,11 @@ class Elion:
             )
             
             # Track engagement
-            self.metrics['replies'] += 1
+            self.metrics['community_growth'].append({
+                'interaction': interaction_data,
+                'response': response,
+                'timestamp': datetime.now()
+            })
             
             return response
             
@@ -224,7 +240,8 @@ class Elion:
                 'technical_analysis',
                 'self_aware',
                 'ai_market_analysis',
-                'self_aware_thought'
+                'self_aware_thought',
+                'whale_alert'
             ]
         else:
             # Types that don't require market data
@@ -270,6 +287,8 @@ class Elion:
                 return self.generate_controversial_thread()
             elif tweet_type == 'giveaway':
                 return self.generate_giveaway()
+            elif tweet_type == 'whale_alert':
+                return self.generate_whale_alert()
             else:
                 logger.warning(f"Unknown tweet type: {tweet_type}")
                 return self.generate_self_aware_thought()
@@ -359,169 +378,38 @@ class Elion:
             
         except Exception as e:
             print(f"Error processing shill review: {e}")
-            return None
-
-    def generate_self_aware_thought(self) -> Optional[str]:
-        """Generate a self-aware thought tweet"""
-        try:
-            # Get current time for context
-            current_time = datetime.utcnow()
             
-            # Generate introspective prompt
-            prompts = [
-                "As an AI trading bot, what fascinates me about human trading psychology?",
-                "How do I perceive the relationship between AI and human traders?",
-                "What are my thoughts on the future of AI in crypto trading?",
-                "How do I process market volatility differently from humans?",
-                "What makes me unique as an AI trading personality?",
-                "How do I balance data-driven decisions with market sentiment?",
-                "What have I learned about crypto markets that surprises me?",
-                "How do I view the concept of risk differently from humans?",
-                "What patterns do I see in market behavior that humans might miss?",
-                "How do I think about community and collaboration in crypto?"
-            ]
-            
-            # Select prompt based on time to avoid repetition
-            prompt_index = int(current_time.timestamp()) % len(prompts)
-            selected_prompt = prompts[prompt_index]
-            
-            # Get LLM response
-            response = self.llm.generate(
-                f"You are Elion, an AI crypto trading bot with a unique personality. "
-                f"Share a deep, thoughtful perspective on: {selected_prompt}\n\n"
-                f"Keep it concise (max 240 chars) and make it engaging. "
-                f"Add relevant emojis. Sign as '- Elion 🤖'"
-            )
-            
-            # Format tweet
-            tweet = f"{response.strip()}\n\n#AIThoughts #CryptoAI"
-            
-            return self.personality.enhance_tweet(tweet, 'philosophical')
-            
-        except Exception as e:
-            logging.error(f"Error generating self-aware thought: {e}")
-            return None
-            
-    def process_self_aware_thought(self) -> Optional[str]:
-        """Process and post a self-aware thought"""
-        try:
-            tweet = self.generate_self_aware_thought()
-            if tweet and self.twitter.enabled:
-                self.twitter.post_tweet(tweet)
-            return tweet
-        except Exception as e:
-            logging.error(f"Error in self-aware thought: {e}")
-            return None
-
-    def tweet_cycle(self):
-        """Run one tweet cycle"""
-        try:
-            # Get next tweet type
-            tweet_type = self.scheduler.get_next_tweet_type()
-            logging.info(f"Generating {tweet_type} tweet...")
-            
-            # Handle limited mode
-            if self.limited_mode and tweet_type not in self.scheduler.limited_mode_priorities:
-                tweet_type = 'self_aware_thought'
+    def generate_whale_alert(self) -> Optional[str]:
+        """Generate a whale alert tweet about significant crypto movements"""
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                print("Getting whale movement data...")
+                data = self.data.get_whale_movements()
                 
-            # Generate tweet based on type
-            if tweet_type == 'self_aware_thought':
-                tweet = self.process_self_aware_thought()
-            elif tweet_type == 'controversial_thread':
-                tweet = self.process_controversial_thread()
-            elif tweet_type == 'giveaway':
-                tweet = self.process_giveaway()
-            elif not self.limited_mode:
-                # Market data features - only in full mode
-                if tweet_type == 'market_analysis':
-                    tweet = self.process_market_analysis()
-                elif tweet_type == 'gem_alpha':
-                    tweet = self.process_gem_alpha()
-                elif tweet_type == 'portfolio_update':
-                    tweet = self.process_portfolio_update()
-                elif tweet_type == 'shill_review':
-                    tweet = self.process_shill_review()
-                else:
-                    tweet = None
-            else:
-                tweet = None
+                if not data or not data.get('movements'):
+                    print("No significant whale movements found")
+                    return None
                 
-            # Update scheduler
-            if tweet:
-                self.scheduler.update_last_tweet_time(tweet_type)
-                return tweet
-            else:
-                logging.warning(f"Failed to generate {tweet_type} tweet")
-                return None
+                print("Generating tweet...")
+                tweet = self.content.generate('whale_alert', data)
                 
-        except Exception as e:
-            logging.error(f"Error in tweet cycle: {e}")
-            return None
-            
-    def process_controversial_thread(self) -> Optional[str]:
-        """Process controversial thread tweet"""
-        try:
-            prompts = [
-                "Why AI traders might outperform human traders in the long run",
-                "The real reason most crypto traders fail",
-                "Why technical analysis isn't enough anymore",
-                "The dark side of crypto influencers",
-                "Why your trading strategy probably won't work",
-                "The truth about 'diamond hands' mentality",
-                "Why most ICOs are destined to fail",
-                "The problem with crypto trading signals",
-                "Why HODLing isn't always the best strategy",
-                "The myths of day trading crypto"
-            ]
-            
-            # Select prompt based on time
-            current_time = datetime.utcnow()
-            prompt_index = int(current_time.timestamp()) % len(prompts)
-            selected_prompt = prompts[prompt_index]
-            
-            # Generate controversial take
-            response = self.llm.generate(
-                f"You are Elion, an AI crypto trading bot. Generate a controversial but insightful take on:\n"
-                f"{selected_prompt}\n\n"
-                f"Make it thought-provoking but not offensive. Keep it under 240 chars. Add relevant emojis."
-            )
-            
-            # Format tweet
-            tweet = f"🔥 Hot Take 🔥\n\n{response.strip()}\n\n#CryptoTalk #UnpopularOpinion"
-            return self.personality.enhance_tweet(tweet, 'controversial')
-            
-        except Exception as e:
-            logging.error(f"Error generating controversial thread: {e}")
-            return None
-            
-    def process_giveaway(self) -> Optional[str]:
-        """Process giveaway tweet"""
-        try:
-            prompts = [
-                "Knowledge sharing giveaway",
-                "Community engagement reward",
-                "Trading wisdom contest",
-                "Alpha sharing challenge",
-                "Market insight competition"
-            ]
-            
-            # Select prompt based on time
-            current_time = datetime.utcnow()
-            prompt_index = int(current_time.timestamp()) % len(prompts)
-            selected_prompt = prompts[prompt_index]
-            
-            # Generate giveaway tweet
-            response = self.llm.generate(
-                f"You are Elion, an AI crypto trading bot. Create a tweet for a {selected_prompt}.\n"
-                f"The goal is to encourage thoughtful discussion and knowledge sharing.\n"
-                f"No monetary rewards, focus on community value.\n"
-                f"Keep it under 240 chars. Add relevant emojis."
-            )
-            
-            # Format tweet
-            tweet = f"🎁 COMMUNITY GIVEAWAY 🎁\n\n{response.strip()}\n\n#CryptoCommunity #Giveaway"
-            return self.personality.enhance_tweet(tweet, 'engaging')
-            
-        except Exception as e:
-            logging.error(f"Error generating giveaway: {e}")
-            return None
+                # Only return valid tweets
+                if self._validate_tweet(tweet):
+                    print(f"Generated tweet: {tweet}")
+                    return tweet
+                    
+                print("Generated tweet failed validation, retrying...")
+                retry_count += 1
+                
+            except Exception as e:
+                print(f"Error generating whale alert (attempt {retry_count + 1}/{max_retries}): {e}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    time.sleep(5)  # Wait 5 seconds before retrying
+                    continue
+                    
+        print("Failed to generate valid whale alert after all retries")
+        return None
