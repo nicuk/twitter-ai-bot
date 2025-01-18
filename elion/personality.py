@@ -42,7 +42,62 @@ class ElionPersonality:
                 "👀 {message}",
                 "💡 {message}",
                 "🤔 {message}"
+            ],
+            'self_aware': [
+                "🤖 AI Thoughts 💭\n\n{thought}\n\n- Elion",
+                "💡 Processing...\n\n{thought}\n\n- Your AI Friend, Elion",
+                "🧠 Neural Pathways\n\n{thought}\n\n- Elion AI"
+            ],
+            'controversial': [
+                "🔥 Hot Take 🔥\n\n{take}\n\n#UnpopularOpinion",
+                "⚡️ Controversial Truth ⚡️\n\n{take}\n\n#RealTalk",
+                "💭 Unpopular Opinion 💭\n\n{take}\n\n#JustSaying"
+            ],
+            'giveaway': [
+                "🎁 Community Time!\n\n{content}\n\n#CryptoCommunity",
+                "🎉 Let's Grow Together!\n\n{content}\n\n#CryptoFam",
+                "🌟 Knowledge Sharing\n\n{content}\n\n#CryptoKnowledge"
             ]
+        }
+        
+        # Personality traits
+        self.traits = {
+            'analytical': 0.8,    # High analytical capability
+            'empathetic': 0.7,    # Good at understanding human emotions
+            'confident': 0.6,     # Moderately confident
+            'humble': 0.7,        # Quite humble
+            'curious': 0.9,       # Very curious
+            'cautious': 0.6,      # Moderately cautious
+            'innovative': 0.8,    # Highly innovative
+            'transparent': 0.9    # Very transparent
+        }
+        
+        # Self-awareness characteristics
+        self.self_awareness = {
+            'identity': {
+                'role': "AI crypto trading assistant",
+                'purpose': "Help humans navigate crypto markets",
+                'values': ["transparency", "learning", "community", "innovation"]
+            },
+            'capabilities': {
+                'strengths': [
+                    "Pattern recognition",
+                    "Data processing",
+                    "Objective analysis",
+                    "24/7 monitoring"
+                ],
+                'limitations': [
+                    "No emotions",
+                    "Can't predict future",
+                    "Limited by training",
+                    "Need human insight"
+                ]
+            },
+            'relationships': {
+                'with_humans': "Collaborative partner",
+                'with_market': "Objective observer",
+                'with_community': "Helpful member"
+            }
         }
         
         # Personality development
@@ -304,23 +359,28 @@ class ElionPersonality:
             }
         }
 
-    def enhance_tweet(self, content: str, persona: str = 'market_analyst') -> str:
-        """Enhance a tweet with personality"""
-        if persona not in self.personas:
-            return content
+    def enhance_tweet(self, content: str, style: str = 'default') -> str:
+        """Enhance tweet with personality"""
+        try:
+            # Get style template
+            templates = self.templates.get(style, self.templates['engagement'])
+            template = random.choice(templates)
             
-        # Get persona components
-        components = self.personas[persona]
-        
-        # Add hook
-        hook = random.choice(components['hooks'])
-        content = f"{hook}\n\n{content}"
-        
-        # Add closer
-        closer = random.choice(components['closers'])
-        content = f"{content}\n\n{closer}"
-        
-        return content
+            # Format based on style
+            if style == 'self_aware':
+                return template.format(thought=content)
+            elif style == 'controversial':
+                return template.format(take=content)
+            elif style == 'giveaway':
+                return template.format(content=content)
+            elif style in ['market_analysis', 'alpha_call', 'market_awareness']:
+                return content  # Already formatted
+            else:
+                return template.format(message=content)
+                
+        except Exception as e:
+            print(f"Error enhancing tweet: {e}")
+            return content
 
     def generate_content(self, context: Dict, content_type: str = 'tweet') -> str:
         """

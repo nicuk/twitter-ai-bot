@@ -1,67 +1,76 @@
-# CryptoRank API Integration Guide
+# CryptoRank API Integration
 
-## Authentication Solution
-The key to getting the CryptoRank API working was:
+## Overview
+The Elion bot uses the CryptoRank API to fetch real-time cryptocurrency market data, including prices, volumes, and market caps.
 
-1. Use **only** the `X-Api-Key` header:
-```python
-headers = {
-    'X-Api-Key': api_key  # Do NOT include Content-Type or other headers
-}
-```
+## API Version
+We use the CryptoRank API v1 endpoint: `https://api.cryptorank.io/v1`
 
-2. Use the correct parameter names exactly as specified in the API docs:
+## Authentication
+- Get your API key from: https://api.cryptorank.io
+- Set it in your `.env` file as: `CRYPTORANK_API_KEY=your_api_key_here`
+
+## Important Notes
+1. The API key must be passed as a query parameter `api_key`, NOT in the headers
+2. Example request:
 ```python
 params = {
-    'limit': 100,  # Must be 100, 500, or 1000
-    'sortBy': 'rank',  # Not sort[by]
-    'sortDirection': 'ASC'  # Not sort[dir]
+    'api_key': 'your_api_key_here',
+    'limit': 100  # optional parameters
+}
+response = requests.get('https://api.cryptorank.io/v1/currencies', params=params)
+```
+
+3. Do NOT use the v2 endpoint or header-based authentication as they don't work reliably
+
+## Example Response Structure
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "rank": 1,
+      "slug": "bitcoin",
+      "name": "Bitcoin",
+      "symbol": "BTC",
+      "values": {
+        "USD": {
+          "price": 104439.40,
+          "volume24h": 23031478492,
+          "high24h": 105860.64,
+          "low24h": 99545.85
+        }
+      }
+    }
+  ]
 }
 ```
 
-## Finding Alpha Opportunities
-To find real alpha opportunities (not just top coins), we should:
-
-1. Filter for coins with:
-   - Market cap between $1M and $100M
-   - 24h volume > $100K
-   - Significant price movement (>5% in 24h)
-   - Recent listing date (within last 3 months)
-
-2. Sort by:
-   - Volume growth
-   - Price momentum
-   - Market cap growth
-
-## Finding Shill Opportunities
-For potential shill opportunities:
-
-1. Filter for coins with:
-   - Market cap under $50M
-   - 24h volume between $100K and $1M
-   - Price stability (not too volatile)
-   - Strong fundamentals (check funding rounds)
-
-2. Sort by:
-   - Recent price action
-   - Volume growth
-   - Community growth
-
-## API Endpoints Used
-1. `/v2/currencies` - Get list of currencies with market data
-2. `/v2/currencies/funding-rounds` - Get funding data
-3. `/v2/currencies/{id}/full-metadata` - Get detailed coin data
-
-## Error Handling
-Always check response status and handle common errors:
+## Common Endpoints
+1. Get Currencies (Top 100):
 ```python
-try:
-    response = requests.get(url, headers=headers, params=params)
-    response.raise_for_status()
-    return response.json()
-except requests.exceptions.RequestException as e:
-    print(f"Error: {e}")
-    if hasattr(e.response, 'text'):
-        print(f"Response: {e.response.text}")
-    return {}
+params = {
+    'api_key': api_key,
+    'limit': 100,
+    'sortBy': 'rank',
+    'sortDirection': 'ASC'
+}
+response = requests.get('https://api.cryptorank.io/v1/currencies', params=params)
 ```
+
+## Troubleshooting
+1. If you get a 401 error, check:
+   - API key is set correctly in .env
+   - API key is passed as `api_key` in query parameters
+   - Using v1 endpoint (not v2)
+
+2. Common Issues:
+   - Using `X-Api-Key` in headers (wrong)
+   - Using v2 endpoint (wrong)
+   - Not passing API key as query parameter (wrong)
+
+## Implementation Files
+The API is primarily used in:
+- `elion/data_sources.py`: Main API wrapper
+- `elion/portfolio.py`: For portfolio tracking
+- `elion/market_analysis.py`: For market analysis

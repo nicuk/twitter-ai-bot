@@ -96,7 +96,8 @@ class AIGamingBot:
             'TWITTER_BEARER_TOKEN': 'Twitter Bearer Token',
             'AI_ACCESS_TOKEN': 'AI API Access Token',
             'AI_API_URL': 'AI API Base URL',
-            'AI_MODEL_NAME': 'AI Model Name'
+            'AI_MODEL_NAME': 'AI Model Name',
+            'CRYPTORANK_API_KEY': 'CryptoRank API Key'
         }
         
         missing_vars = []

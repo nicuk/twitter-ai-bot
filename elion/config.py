@@ -24,7 +24,8 @@ MARKET_SETTINGS = {
 }
 
 # Twitter Settings
-TWEET_MAX_LENGTH = 280
+TWEET_MIN_LENGTH = 180  # Minimum tweet length for substantial content
+TWEET_MAX_LENGTH = 280  # Maximum tweet length
 TWEET_THREAD_MAX = 4  # Maximum tweets in a thread
 
 # Excluded Tokens
