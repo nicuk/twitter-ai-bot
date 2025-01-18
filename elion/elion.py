@@ -53,6 +53,7 @@ class Elion:
     def _validate_tweet(self, tweet: str) -> bool:
         """Validate if a tweet is well-formed and ready to post"""
         if not tweet or not isinstance(tweet, str):
+            logger.warning("Tweet is None or not a string")
             return False
             
         # Check for error messages and API errors
@@ -69,20 +70,37 @@ class Elion:
             '500'
         ]
         if any(phrase.lower() in tweet.lower() for phrase in error_phrases):
+            logger.warning(f"Tweet contains error phrase: {tweet}")
             return False
             
-        # Check minimum length (a reasonable tweet should be at least 20 chars)
-        if len(tweet) < 20:
+        # Extract the main content without prefixes for length validation
+        content = tweet
+        prefixes = ["[ELION THOUGHTS]", "[MARKET WATCH]", "[GEM ALERT]", "[PORTFOLIO UPDATE]",
+                   "[ALPHA CALL]", "[TECHNICAL ALPHA]", "[AI MARKET ANALYSIS]"]
+        for prefix in prefixes:
+            if content.startswith(prefix):
+                content = content[len(prefix):].strip()
+                break
+                
+        # Check minimum and maximum length
+        # Twitter's limit is 280, but we want substantial content
+        if len(content) < 180:  # Minimum length for meaningful content
+            logger.warning(f"Tweet content too short ({len(content)} chars): {tweet}")
+            return False
+        if len(tweet) > 280:  # Twitter's limit
+            logger.warning(f"Tweet too long ({len(tweet)} chars)")
             return False
             
         # Check for placeholder or default content
         placeholder_phrases = ['undefined', 'null', 'nan', '0.0']
         if any(phrase in tweet.lower() for phrase in placeholder_phrases):
+            logger.warning(f"Tweet contains placeholder content: {tweet}")
             return False
             
         # Check for automated/testing content
         automated_phrases = ['automated', 'test', 'testing']
         if any(phrase.lower() in tweet.lower() for phrase in automated_phrases):
+            logger.warning(f"Tweet contains automated/test phrase: {tweet}")
             return False
             
         return True

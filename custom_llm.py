@@ -20,12 +20,12 @@ class MetaLlamaComponent:
         })
         self.display_name = "Meta-Llama"
 
-    def generate(self, prompt: str, max_tokens: int = 150) -> str:
+    def generate(self, prompt: str, max_tokens: int = 300) -> str:
         """Generate text from prompt"""
         try:
             # Format prompt for Llama
             messages = [
-                {"role": "system", "content": "You are Elion, an AI crypto trading bot. Keep your responses concise and focused on market analysis."},
+                {"role": "system", "content": "You are Elion, an AI crypto trading bot. Keep your responses focused on market analysis and aim for 200-250 characters."},
                 {"role": "user", "content": prompt}
             ]
             
