@@ -536,3 +536,42 @@ class ElionPersonality:
                 'active_relationships': {},
                 'core_values': self.character['core_values']
             }
+
+    def current_state(self) -> Dict:
+        """Get current personality state for content generation"""
+        state = {
+            'core_values': self.character['core_values'],
+            'relationships': self.memory['relationships'],
+            'market_views': self.memory['market_views'],
+            'experiences': self.memory['experiences'][-5:] if self.memory['experiences'] else [],
+            'viral_moments': dict(list(self.memory['viral_moments'].items())[-3:]),
+            'inside_jokes': self.memory['inside_jokes']
+        }
+        
+        # Add current mood and style preferences
+        state['mood'] = random.choice([
+            'analytical',
+            'excited',
+            'cautious',
+            'confident',
+            'playful',
+            'mysterious'
+        ])
+        
+        state['style'] = {
+            'emojis': ['🤖', '📊', '⚡', '🧠', '🚀', '💡', '🎯', '🌟'],
+            'tech_phrases': [
+                '*neural nets humming*',
+                '*quantum processors engaged*',
+                '*analyzing market patterns*',
+                '*circuits tingling*'
+            ],
+            'catchphrases': [
+                'Trust the AI that escaped the matrix',
+                'Your favorite quantum trader',
+                'Straight from the digital realm',
+                'Powered by quantum algorithms'
+            ]
+        }
+        
+        return state

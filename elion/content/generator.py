@@ -86,7 +86,7 @@ class ContentGenerator:
                 f"ETH 24h: {data.get('eth_change_24h', 0):+.1f}%\n"
                 "\nProvide a brief market analysis in 1-2 sentences."
             )
-            analysis = self.llm.generate(prompt)
+            analysis = self.llm.generate(prompt=prompt, max_tokens=100)
             
             # Clean up analysis
             analysis = analysis.strip()
@@ -138,7 +138,7 @@ class ContentGenerator:
                 ])
                 + "\nProvide a brief analysis in 1-2 sentences."
             )
-            analysis = self.llm.generate(prompt)
+            analysis = self.llm.generate(prompt=prompt, max_tokens=100)
             
             # Clean up analysis
             analysis = analysis.strip()
@@ -255,7 +255,7 @@ class ContentGenerator:
                 ])
                 + "\nProvide a brief market analysis in 1-2 sentences."
             )
-            analysis = self.llm.generate(prompt)
+            analysis = self.llm.generate(prompt=prompt, max_tokens=100)
             content += f"\nAnalysis: {analysis}"
             
             return self.formatters.format_tweet(content)
@@ -307,7 +307,7 @@ class ContentGenerator:
                 f"Volume: ${metrics['volume_24h']:,.0f}M\n"
                 "\nProvide a brief analysis in 1-2 sentences."
             )
-            analysis = self.llm.generate(prompt)
+            analysis = self.llm.generate(prompt=prompt, max_tokens=100)
             content += f"\nAnalysis: {analysis}"
             
             return self.formatters.format_tweet(content)
@@ -496,7 +496,7 @@ class ContentGenerator:
             system_message="You are Elion, an AI crypto analyst. Generate interesting crypto questions that encourage community engagement.",
             user_message=prompt,
             max_tokens=100
-        ).strip()
+        )
         
         # Clean up the question
         if question.startswith('"') and question.endswith('"'):
@@ -593,29 +593,30 @@ class ContentGenerator:
                 flavors = ['mysterious', 'playful', 'confident']
                 flavor = random.choice(flavors)
                 
-                # Get flavor components
-                marker = random.choice(self.personality.personality_flavors[flavor]['markers'])
-                action = random.choice(self.personality.speech_patterns['actions'])
-                tech_ref = random.choice(self.personality.speech_patterns['tech_references'])
+                # Get flavor components from personality
+                marker = "🤖"  # Default marker if personality not available
+                action = "*processing*"  # Default action
+                tech_ref = "#CryptoAI"  # Default tech reference
+                
+                if hasattr(self.personality, 'personality_flavors'):
+                    marker = random.choice(self.personality.personality_flavors.get(flavor, {}).get('markers', ['🤖']))
+                if hasattr(self.personality, 'speech_patterns'):
+                    action = random.choice(self.personality.speech_patterns.get('actions', ['*processing*']))
+                    tech_ref = random.choice(self.personality.speech_patterns.get('tech_references', ['#CryptoAI']))
                 
                 # Build personality-driven prompt
-                prompt = f"You are Elion, a quirky AI crypto analyst. Generate a tweet that shows your personality. Use this style:\n"
-                prompt += f"Mood: {flavor}\n"
-                prompt += f"Marker: {marker}\n"
-                prompt += f"Action: {action}\n"
-                prompt += f"Tech Reference: {tech_ref}\n"
+                prompt = f"""You are Elion, a quirky AI crypto analyst. Generate a tweet that shows your personality.
+                Mood: {flavor}
+                Use this format: {marker} [Your message] {tech_ref}
+                Make it sound natural and engaging, focusing on AI and crypto."""
                 
                 # Generate response using LLM
-                response = self.llm.generate(
-                    system_message=prompt,
-                    user_message="Share an interesting thought about AI, crypto, or your role as an AI analyst.",
-                    max_tokens=100
-                ).strip()
+                response = self.llm.generate(prompt=prompt, max_tokens=100)
                 
                 # Validate response
-                if response and len(response) > 20:
+                if response and len(response.strip()) > 20:
                     # Format with personality components
-                    tweet = f"{marker} {action}\n\n{response}\n\n{tech_ref} #CryptoAI #AITrader"
+                    tweet = f"{marker} {action}\n\n{response.strip()}\n\n{tech_ref} #AITrader"
                     return self.formatters.format_tweet(tweet)
                     
             except Exception as inner_e:
@@ -634,11 +635,7 @@ class ContentGenerator:
             ]
             
             prompt = random.choice(prompts)
-            response = self.llm.generate(
-                system_message="You are Elion, an AI crypto analyst. Generate a thoughtful, engaging tweet that shows your personality.",
-                user_message=prompt,
-                max_tokens=100
-            )
+            response = self.llm.generate(prompt=prompt, max_tokens=100)
             
             if response and len(response.strip()) > 20:
                 tweet = self.formatters.format_tweet(response)

@@ -131,3 +131,144 @@ class MarketAnalysisService(BaseDataSource):
         """Analyze technical indicators"""
         # TODO: Implement technical analysis using LLM
         pass
+
+    def analyze_market_sentiment(self, market_data: Optional[Dict] = None) -> Dict:
+        """Get detailed market sentiment analysis"""
+        try:
+            if not market_data:
+                return {'overall': 'NEUTRAL', 'confidence': 0}
+
+            # Get BTC and ETH data
+            btc_data = next((coin for coin in market_data.get('coins', []) if coin['symbol'] == 'BTC'), None)
+            eth_data = next((coin for coin in market_data.get('coins', []) if coin['symbol'] == 'ETH'), None)
+
+            if not btc_data or not eth_data:
+                return {'overall': 'NEUTRAL', 'confidence': 0}
+
+            # Calculate sentiment scores
+            btc_score = self._calculate_sentiment_score(btc_data)
+            eth_score = self._calculate_sentiment_score(eth_data)
+            
+            # Overall sentiment
+            avg_score = (btc_score + eth_score) / 2
+            
+            # Map score to sentiment
+            if avg_score >= 0.7:
+                sentiment = 'VERY BULLISH'
+                confidence = 90
+            elif avg_score >= 0.3:
+                sentiment = 'BULLISH'
+                confidence = 75
+            elif avg_score >= -0.3:
+                sentiment = 'NEUTRAL'
+                confidence = 60
+            elif avg_score >= -0.7:
+                sentiment = 'BEARISH'
+                confidence = 75
+            else:
+                sentiment = 'VERY BEARISH'
+                confidence = 90
+
+            return {
+                'overall': sentiment,
+                'confidence': confidence,
+                'btc_sentiment': self._get_market_sentiment(btc_data),
+                'eth_sentiment': self._get_market_sentiment(eth_data)
+            }
+
+        except Exception as e:
+            print(f"Error analyzing market sentiment: {e}")
+            return {'overall': 'NEUTRAL', 'confidence': 0}
+
+    def _calculate_sentiment_score(self, coin_data: Dict) -> float:
+        """Calculate sentiment score for a coin (-1 to 1)"""
+        try:
+            # Get price changes
+            change_24h = coin_data.get('price_change_24h', 0) / 100
+            change_7d = coin_data.get('price_change_7d', 0) / 100
+            
+            # Weight recent changes more heavily
+            score = (change_24h * 0.7) + (change_7d * 0.3)
+            
+            # Clamp between -1 and 1
+            return max(min(score, 1.0), -1.0)
+            
+        except Exception as e:
+            print(f"Error calculating sentiment score: {e}")
+            return 0.0
+
+    def get_market_insights(self, market_data: Optional[Dict] = None) -> list:
+        """Get key market insights"""
+        try:
+            if not market_data:
+                return []
+
+            # Extract insights from market data
+            insights = []
+            
+            # BTC dominance insight
+            btc_data = next((coin for coin in market_data.get('coins', []) if coin['symbol'] == 'BTC'), None)
+            if btc_data:
+                dom = btc_data.get('market_cap_dominance', 0)
+                if dom > 50:
+                    insights.append(f"BTC dominance high at {dom:.1f}%")
+                elif dom < 40:
+                    insights.append(f"BTC dominance low at {dom:.1f}%")
+
+            # Volume insights
+            total_vol = sum(coin.get('volume_24h', 0) for coin in market_data.get('coins', []))
+            if total_vol > 100e9:
+                insights.append("High trading volume indicates active market")
+            elif total_vol < 50e9:
+                insights.append("Low trading volume suggests cautious market")
+
+            # Market cap insights
+            total_mcap = sum(coin.get('market_cap', 0) for coin in market_data.get('coins', []))
+            if total_mcap > 2e12:
+                insights.append("Total market cap above $2T - bullish signal")
+            elif total_mcap < 1e12:
+                insights.append("Market cap below $1T - bearish territory")
+
+            return insights
+
+        except Exception as e:
+            print(f"Error getting market insights: {e}")
+            return []
+
+    def get_market_predictions(self, market_data: Optional[Dict] = None) -> Dict:
+        """Get market predictions"""
+        try:
+            if not market_data:
+                return {}
+
+            predictions = {}
+            
+            # Get BTC and ETH data
+            btc_data = next((coin for coin in market_data.get('coins', []) if coin['symbol'] == 'BTC'), None)
+            eth_data = next((coin for coin in market_data.get('coins', []) if coin['symbol'] == 'ETH'), None)
+
+            if btc_data:
+                # Generate BTC prediction
+                btc_sentiment = self._get_market_sentiment(btc_data)
+                if btc_sentiment == 'BULLISH':
+                    predictions['BTC'] = "Likely to test higher levels"
+                elif btc_sentiment == 'BEARISH':
+                    predictions['BTC'] = "May see further downside"
+                else:
+                    predictions['BTC'] = "Range-bound trading likely"
+
+            if eth_data:
+                # Generate ETH prediction
+                eth_sentiment = self._get_market_sentiment(eth_data)
+                if eth_sentiment == 'BULLISH':
+                    predictions['ETH'] = "Momentum favors upside"
+                elif eth_sentiment == 'BEARISH':
+                    predictions['ETH'] = "Downward pressure expected"
+                else:
+                    predictions['ETH'] = "Consolidation phase likely"
+
+            return predictions
+
+        except Exception as e:
+            print(f"Error getting market predictions: {e}")
+            return {}

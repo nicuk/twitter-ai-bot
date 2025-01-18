@@ -444,3 +444,29 @@ class Elion:
         except Exception as e:
             logger.error(f"Error generating self-aware thought: {e}")
             return "🤖 Just processing and learning... #AI"
+
+    def generate_ai_market_analysis(self) -> Optional[str]:
+        """Generate AI-powered market analysis tweet"""
+        try:
+            # Get market data
+            market_data = self.data.get_market_data()
+            if not market_data:
+                logger.warning("No market data available for AI analysis")
+                return self.generate_self_aware_thought()
+
+            # Get sentiment analysis
+            sentiment = self.data.analyze_market_sentiment()
+            
+            # Format data for AI analysis
+            analysis_data = {
+                'sentiment': sentiment,
+                'market_data': market_data,
+                'insights': self.data.get_market_insights(),
+                'predictions': self.data.get_market_predictions()
+            }
+            
+            return self.content._format_ai_market_analysis(analysis_data)
+            
+        except Exception as e:
+            logger.error(f"Error generating AI market analysis: {e}")
+            return self.generate_self_aware_thought()

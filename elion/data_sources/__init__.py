@@ -99,3 +99,27 @@ class DataSources:
         """Analyze market conditions"""
         data = self.market_data.get_market_data()
         return self.market_analysis.analyze_market_conditions(data)
+        
+    def analyze_market_sentiment(self) -> Dict:
+        """Analyze market sentiment"""
+        data = self.market_data.get_market_data()
+        if not data:
+            return {'overall': 'NEUTRAL', 'confidence': 0}
+            
+        return self.market_analysis.analyze_market_sentiment(data)
+        
+    def get_market_insights(self) -> list:
+        """Get market insights"""
+        data = self.market_data.get_market_data()
+        if not data:
+            return []
+            
+        return self.market_analysis.get_market_insights(data)
+        
+    def get_market_predictions(self) -> Dict:
+        """Get market predictions"""
+        data = self.market_data.get_market_data()
+        if not data:
+            return {}
+            
+        return self.market_analysis.get_market_predictions(data)
