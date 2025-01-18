@@ -28,20 +28,49 @@ class CryptoRankAPI:
         """Test v1 API endpoint"""
         params = {
             'api_key': self.api_key,
-            'limit': 1
+            'limit': 100,  # Get more coins to filter
+            'sort': 'volume24h',  # Sort by 24h volume for trending coins
+            'marketCapUsd[to]': 100000000  # Max $100M market cap
         }
         print("\nTesting CryptoRank v1 API...")
         try:
             response = requests.get(f"{self.base_url}/currencies", params=params)
-            print(f"Status Code: {response.status_code}")
+            status_messages = {
+                200: "✅ API connection successful",
+                401: "❌ API key invalid or expired",
+                403: "❌ API access forbidden - check permissions",
+                429: "⚠️ Rate limit exceeded - try again later",
+                500: "❌ CryptoRank server error",
+                502: "❌ CryptoRank gateway error",
+                503: "⚠️ CryptoRank service temporarily unavailable"
+            }
+            status_msg = status_messages.get(
+                response.status_code, 
+                f"❓ Unexpected response (code: {response.status_code})"
+            )
+            print(f"Status: {status_msg}")
+            
             if response.status_code == 200:
                 data = response.json()
                 if 'data' in data and data['data']:
-                    coin = data['data'][0]
-                    print(f"Success! Sample data: {coin['name']} ({coin['symbol']})")
+                    # Filter for coins with good volume and recent price action
+                    trending = [
+                        coin for coin in data['data']
+                        if coin['values']['USD'].get('volume24h', 0) > 100000  # Min $100k daily volume
+                        and abs(coin['values']['USD'].get('percentChange24h', 0)) > 5  # >5% price move
+                    ]
+                    if trending:
+                        coin = trending[0]  # Get the most interesting one
+                        print(f"\n🔥 Found trending gem! {coin['name']} ({coin['symbol']})")
+                        print(f"📈 24h Change: {coin['values']['USD'].get('percentChange24h', 0):.1f}%")
+                        print(f"💰 24h Volume: ${coin['values']['USD'].get('volume24h', 0)/1000000:.1f}M")
+                    else:
+                        print("\n😴 No trending gems found at the moment")
+            else:
+                print(f"\n❌ API request failed: {response.text}")
                     
         except Exception as e:
-            print(f"Error testing API: {e}")
+            print(f"❌ Error testing API: {e}")
             
     def get_currencies(self, limit: int = 100) -> List[Dict]:
         """Get currency data from CryptoRank"""
