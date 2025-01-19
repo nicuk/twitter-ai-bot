@@ -63,10 +63,18 @@ class ContentGenerator:
             elif content_type == 'technical_alpha':
                 return self._format_technical_alpha(data)
             else:
-                raise ValueError(f"Unknown content type: {content_type}")
+                logger.warning(f"Unknown content type: {content_type}")
+                return None
                 
         except Exception as e:
-            print(f"Error generating {content_type}: {e}")
+            logger.error(f"Error generating {content_type}: {str(e)}", exc_info=True)
+            # If it's a giveaway or self-aware tweet, we can fall back
+            if content_type in ['giveaway', 'self_aware', 'self_aware_thought']:
+                logger.warning(f"Failed to generate {content_type} tweet, falling back to self-aware")
+                try:
+                    return self._format_self_aware_thought({})
+                except Exception as fallback_e:
+                    logger.error(f"Error in fallback to self-aware: {str(fallback_e)}", exc_info=True)
             return None
             
     def _format_market_analysis(self, data: Dict) -> Optional[str]:
