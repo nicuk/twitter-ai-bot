@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "python twitter_api_bot.py",
+    "startCommand": "python -m twitter.bot",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
