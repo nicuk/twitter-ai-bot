@@ -107,55 +107,57 @@ class AIGamingBot:
                     tokens = self.cryptorank.get_tokens()
                     if not tokens:
                         logger.error("Failed to fetch tokens")
-                        return
+                        # If market analysis fails, try community engagement as fallback
+                        main_cat, sub_cat = 'community', 'engagement'
                         
-                    # Format tokens consistently
-                    formatted_tokens = [
-                        token for token in (format_token_info(t) for t in tokens)
-                        if token is not None
-                    ]
-                    
-                    if main_cat == 'trend':
-                        if sub_cat == 'ai':
-                            ai_tokens = analyze_ai_tokens(formatted_tokens)
-                            content = self._format_trend_tweet(ai_tokens)
-                        elif sub_cat == 'gaming':
-                            gaming_tokens = analyze_gaming_tokens(formatted_tokens)
-                            content = self._format_trend_tweet(gaming_tokens)
-                        elif sub_cat == 'meme':
-                            meme_tokens = analyze_meme_tokens(formatted_tokens)
-                            content = self._format_trend_tweet(meme_tokens)
+                    else:
+                        # Format tokens consistently
+                        formatted_tokens = [
+                            token for token in (format_token_info(t) for t in tokens)
+                            if token is not None
+                        ]
+                        
+                        if main_cat == 'trend':
+                            if sub_cat == 'ai':
+                                ai_tokens = analyze_ai_tokens(formatted_tokens)
+                                content = self._format_trend_tweet(ai_tokens)
+                            elif sub_cat == 'gaming':
+                                gaming_tokens = analyze_gaming_tokens(formatted_tokens)
+                                content = self._format_trend_tweet(gaming_tokens)
+                            elif sub_cat == 'meme':
+                                meme_tokens = analyze_meme_tokens(formatted_tokens)
+                                content = self._format_trend_tweet(meme_tokens)
+                                
+                        elif main_cat == 'volume':
+                            if sub_cat == 'leaders':
+                                leaders = analyze_volume_leaders(formatted_tokens)
+                                content = self._format_volume_tweet(leaders)
+                            elif sub_cat == 'spikes':
+                                spikes = find_volume_spikes(formatted_tokens)
+                                content = self._format_volume_tweet(spikes)
+                            elif sub_cat == 'anomalies':
+                                anomalies = find_volume_anomalies(formatted_tokens)
+                                content = self._format_volume_tweet(anomalies)
+                                
+                        # Calculate confidence and apply penalties for market posts
+                        if content and formatted_tokens:
+                            token = formatted_tokens[0]
+                            activity_score = calculate_activity_score(
+                                volume=token['volume'],
+                                mcap=token['mcap'],
+                                price_change=token['price_change']
+                            )
+                            stability_score = self.scoring.get_stability_score(token)
                             
-                    elif main_cat == 'volume':
-                        if sub_cat == 'leaders':
-                            leaders = analyze_volume_leaders(formatted_tokens)
-                            content = self._format_volume_tweet(leaders)
-                        elif sub_cat == 'spikes':
-                            spikes = find_volume_spikes(formatted_tokens)
-                            content = self._format_volume_tweet(spikes)
-                        elif sub_cat == 'anomalies':
-                            anomalies = find_volume_anomalies(formatted_tokens)
-                            content = self._format_volume_tweet(anomalies)
+                            # Apply volatility penalty if needed
+                            final_score = self.scoring.apply_volatility_penalty(
+                                score=activity_score + stability_score,
+                                price_change=token['price_change']
+                            )
                             
-                    # Calculate confidence and apply penalties for market posts
-                    if content and formatted_tokens:
-                        token = formatted_tokens[0]
-                        activity_score = calculate_activity_score(
-                            volume=token['volume'],
-                            mcap=token['mcap'],
-                            price_change=token['price_change']
-                        )
-                        stability_score = self.scoring.get_stability_score(token)
-                        
-                        # Apply volatility penalty if needed
-                        final_score = self.scoring.apply_volatility_penalty(
-                            score=activity_score + stability_score,
-                            price_change=token['price_change']
-                        )
-                        
-                        # Get confidence label
-                        label, emoji = self.scoring.get_confidence_label(final_score)
-                        content = f"{content}\n\n{label} {emoji}"
+                            # Get confidence label
+                            label, emoji = self.scoring.get_confidence_label(final_score)
+                            content = f"{content}\n\n{label} {emoji}"
                         
                 except Exception as e:
                     logger.error(f"Error in market analysis: {e}")
@@ -168,12 +170,14 @@ class AIGamingBot:
                     content = self.elion.engage_with_community()
                 except Exception as e:
                     logger.error(f"Community engagement failed: {e}")
-                    # If community engagement fails, try market analysis next time
-                    self.post_categories['community']['engagement']['count'] = self.post_categories['community']['engagement']['target']
+                    # If community engagement fails, schedule next attempt
+                    self._schedule_next_tweet()
                     return
 
             if not content:
                 logger.warning(f"No content generated for {main_cat}/{sub_cat}")
+                # Schedule next attempt even if no content was generated
+                self._schedule_next_tweet()
                 return
 
             # Try to post with retries
@@ -197,26 +201,21 @@ class AIGamingBot:
                         # Mark community engagement as maxed if that's what failed
                         if main_cat == 'community':
                             self.post_categories['community']['engagement']['count'] = self.post_categories['community']['engagement']['target']
-                        # Will try market analysis next time
+                        # Schedule next attempt
+                        self._schedule_next_tweet()
                         return
                     
-                    # For other errors, use exponential backoff
-                    wait_time = self.base_wait * (2 ** attempt)
-                    logger.warning(f"Tweet failed, attempt {attempt + 1}/{self.max_retries}. Waiting {wait_time} minutes...")
-                    time.sleep(wait_time * 60)
+                    logger.error(f"Error posting tweet (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(self.base_wait * 60)  # Wait before retry
             
-            # All retries failed
-            self.retry_count += 1
-            if self.retry_count >= self.max_retries:
-                logger.error("All tweet retries failed. Entering recovery mode...")
-                self._enter_recovery_mode()
+            # If all retries failed, schedule next attempt
+            self._schedule_next_tweet()
             
         except Exception as e:
             logger.error(f"Error in tweet cycle: {e}")
-            self.retry_count += 1
-            if self.retry_count >= self.max_retries:
-                logger.error("Too many errors. Entering recovery mode...")
-                self._enter_recovery_mode()
+            # Always schedule next attempt, even if there's an error
+            self._schedule_next_tweet()
 
     def _get_next_category(self) -> tuple:
         """Get the next category to post based on targets"""
