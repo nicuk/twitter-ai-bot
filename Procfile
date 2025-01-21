@@ -1,1 +1,1 @@
-web: python twitter_api_bot.py
+web: python -m twitter.bot
