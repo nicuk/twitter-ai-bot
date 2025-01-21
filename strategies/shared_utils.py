@@ -252,30 +252,44 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
         data = response.json()
         raw_tokens = data.get('data', [])
         
-        if print_first > 0:
-            print("\nFirst token raw data:")
-            print(json.dumps(raw_tokens[0], indent=2))
-            print("\nFirst token values:")
-            values = raw_tokens[0].get('values', {}).get('USD', {})
-            print(json.dumps(values, indent=2))
-            
         # Format token data
         formatted_tokens = []
         for token in raw_tokens:
             try:
+                # Calculate price change from high/low
+                high = float(token.get('high24h', 0))
+                low = float(token.get('low24h', 0))
+                current = float(token.get('price', 0))
+                
+                if high > 0 and low > 0:
+                    # Calculate price change as percentage from midpoint
+                    midpoint = (high + low) / 2
+                    price_change = ((current - midpoint) / midpoint) * 100
+                else:
+                    price_change = 0
+                
                 formatted_token = {
                     'symbol': token.get('symbol', ''),
-                    'price': token.get('price', 0),
-                    'priceChange24h': token.get('percentChange', {}).get('h24', 0),
-                    'volume24h': token.get('volume24h', 0),
-                    'marketCap': token.get('marketCap', 0)
+                    'price': current,
+                    'priceChange24h': price_change,
+                    'volume24h': float(token.get('volume24h', 0)),
+                    'marketCap': float(token.get('marketCap', 0))
                 }
                 formatted_tokens.append(formatted_token)
+                
+                # Debug first few tokens
+                if len(formatted_tokens) <= 3:
+                    print(f"\n{formatted_token['symbol']}:")
+                    print(f"Price: ${formatted_token['price']:.4f}")
+                    print(f"Change: {formatted_token['priceChange24h']:.2f}%")
+                    print(f"Volume: ${formatted_token['volume24h']:,.0f}")
+                    print(f"Market Cap: ${formatted_token['marketCap']:,.0f}")
+                
             except Exception as e:
                 print(f"Error formatting token {token.get('symbol')}: {str(e)}")
                 continue
                 
-        print(f"Found {len(formatted_tokens)} tokens")
+        print(f"\nFound {len(formatted_tokens)} tokens")
         
         # Update cache with new data
         _token_cache[cache_key] = formatted_tokens

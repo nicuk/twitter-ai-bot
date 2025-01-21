@@ -1,11 +1,19 @@
 """Volume-based analysis strategies"""
 
 import os
+import sys
+from pathlib import Path
 import requests
 import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 import datetime
+
+# Add project root to Python path
+project_root = str(Path(__file__).parent.parent)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 from strategies.scoring_base import BaseScoring
 
 class CryptoRankAPI:

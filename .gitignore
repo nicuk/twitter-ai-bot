@@ -194,3 +194,7 @@ LICENSE
 .pypirc
 
 docs/cryptorank_integration.md
+
+# Legacy components
+legacy_components/
+tweet_test_results.txt

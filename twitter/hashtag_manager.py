@@ -42,18 +42,28 @@ class HashtagManager:
             "#Finance"
         ]
         
+        self.MEME_HASHTAGS = [
+            "#Memecoin",
+            "#MemeToken",
+            "#Memeseason",
+            "#CryptoMemes",
+            "#DOGE",
+            "#PEPE",
+            "#SHIB"
+        ]
+        
     def get_hashtags(self, tweet_type: str) -> Tuple[List[str], int]:
         """Get hashtags and their total character length for tweet type"""
         # Always select exactly TWEET_MAX_HASHTAGS hashtags
         if tweet_type == 'trend':
             tags = (
                 random.sample(self.TRADING_HASHTAGS, 1) +
-                random.sample(self.CRYPTO_HASHTAGS, TWEET_MAX_HASHTAGS - 1)
+                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, TWEET_MAX_HASHTAGS - 1)
             )
         elif tweet_type == 'volume':
             tags = (
-                random.sample(self.TRADING_HASHTAGS, 2) +
-                random.sample(self.CRYPTO_HASHTAGS, TWEET_MAX_HASHTAGS - 2)
+                random.sample(self.TRADING_HASHTAGS, 1) +
+                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, TWEET_MAX_HASHTAGS - 1)
             )
         else:  # personal
             tags = (
