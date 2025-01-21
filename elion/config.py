@@ -25,6 +25,8 @@ MARKET_SETTINGS = {
 
 # Twitter Settings
 TWEET_MAX_LENGTH = 280
+TWEET_MIN_LENGTH = 240  # Minimum length for better engagement
+TWEET_MAX_HASHTAGS = 3  # Maximum number of hashtags per tweet
 TWEET_THREAD_MAX = 4  # Maximum tweets in a thread
 
 # Excluded Tokens
