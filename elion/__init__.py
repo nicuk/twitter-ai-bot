@@ -2,7 +2,7 @@
 ELAI - Advanced AI Trading Bot
 """
 
-from .core.elion import Elion
+from .elion import Elion
 from .personality.traits import PersonalityManager
 from .content.generator import ContentGenerator
 from .content.tweet_formatters import TweetFormatters

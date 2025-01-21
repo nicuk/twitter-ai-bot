@@ -6,7 +6,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from custom_llm import MetaLlamaComponent
-from elion.core.elion import Elion
+from elion.elion import Elion
 from twitter.bot import AIGamingBot
 
 def main():
