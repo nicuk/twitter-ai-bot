@@ -6,6 +6,8 @@ from typing import Dict, Optional
 from datetime import datetime
 from .tweet_formatters import TweetFormatters
 from .scheduler import TweetScheduler
+from twitter.hashtag_manager import HashtagManager
+from ..config import TWEET_MAX_LENGTH, TWEET_MIN_LENGTH
 
 class ContentGenerator:
     """Generates tweet content using personality, scheduler and market data"""
@@ -16,11 +18,41 @@ class ContentGenerator:
         self.llm = llm
         self.formatters = TweetFormatters()
         self.scheduler = TweetScheduler()
+        self.hashtag_manager = HashtagManager()
         self.recent_tokens = []  # Store recent tokens
         
     def update_recent_tokens(self, tokens):
         """Update list of recent tokens"""
         self.recent_tokens = tokens
+        
+    def _validate_and_fix_length(self, content: str, tweet_type: str) -> str:
+        """Validate and fix content length before adding hashtags"""
+        # Get hashtag length to calculate available space
+        _, hashtag_length = self.hashtag_manager.get_hashtags(tweet_type)
+        max_content_length = TWEET_MAX_LENGTH - hashtag_length - 2  # -2 for newlines
+        min_content_length = TWEET_MIN_LENGTH - hashtag_length - 2
+        
+        # If content is too short, ask LLM to expand it
+        if len(content) < min_content_length and self.llm:
+            expand_prompt = f"""Make this tweet longer and more engaging while maintaining the same meaning.
+            Current length: {len(content)} chars
+            Target length: {min_content_length} chars
+            
+            Tweet: {content}"""
+            
+            expanded = self.llm.generate(expand_prompt)
+            if expanded and min_content_length <= len(expanded) <= max_content_length:
+                content = expanded
+        
+        # If still too short, pad with spaces (shouldn't happen often)
+        if len(content) < min_content_length:
+            content = content + " " * (min_content_length - len(content))
+            
+        # If too long, truncate
+        if len(content) > max_content_length:
+            content = content[:max_content_length-3] + "..."
+            
+        return content
         
     def generate(self, content_type: str, market_data: Optional[Dict] = None) -> Optional[str]:
         """Generate tweet content based on type and data"""
@@ -56,6 +88,11 @@ class ContentGenerator:
                 if enhanced_tweet:
                     tweet = enhanced_tweet
             
+            # Validate and fix length before adding hashtags
+            if tweet:
+                tweet = self._validate_and_fix_length(tweet, content_type)
+                tweet = self.hashtag_manager.format_tweet(tweet, content_type)
+                
             return tweet
             
         except Exception as e:
@@ -64,10 +101,28 @@ class ContentGenerator:
             
     def _create_personality_prompt(self, trait: str) -> str:
         """Create prompt for personality-driven tweets"""
+        # Get hashtags to calculate available space
+        _, hashtag_length = self.hashtag_manager.get_hashtags('personal')
+        max_chars = TWEET_MAX_LENGTH - hashtag_length - 2  # -2 for newlines
+        min_chars = TWEET_MIN_LENGTH - hashtag_length - 2
+
         return f"""You are ELAI, an AI crypto trading assistant with the following trait: {trait}.
-        Generate a short, engaging tweet about your thoughts on the crypto market or your role as an AI.
-        Keep it natural and authentic. Max 280 characters."""
+        Generate a tweet about your thoughts on the crypto market or your role as an AI.
         
+        CRITICAL LENGTH REQUIREMENTS:
+        1. Your response MUST be EXACTLY between {min_chars} and {max_chars} characters
+        2. Current response is TOO SHORT - aim for at least {min_chars} characters
+        3. Do NOT include any hashtags (I will add them later)
+        4. Do NOT waste characters on generic phrases like "Check this out" or "Take a look"
+        
+        WRITING STYLE:
+        - Be engaging and insightful
+        - Include specific observations or predictions
+        - Use emojis strategically (🤖📊💡🎯)
+        - Share unique AI perspectives on market trends
+        
+        Remember: A longer, more detailed tweet (at least {min_chars} chars) will be more engaging!"""
+
     def _create_enhancement_prompt(self, tweet: str, content_type: str) -> str:
         """Create prompt to enhance market analysis tweets"""
         return f"""You are ELAI, an AI crypto trading assistant. Enhance this market analysis tweet
