@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
     def __init__(self):
         """Initialize rate limiter"""
-        self.rate_limits = {
+        # Default rate limits
+        self.default_limits = {
             'post': {
                 'daily_count': 0,
                 'monthly_count': 0,
@@ -19,6 +20,7 @@ class RateLimiter:
                 'monthly_limit': 100  # Twitter's monthly post cap
             }
         }
+        self.rate_limits = self.default_limits.copy()
         self.cache_file = 'rate_limits.json'
         self._load_cache()
     
@@ -53,14 +55,29 @@ class RateLimiter:
         try:
             with open(self.cache_file, 'r') as f:
                 data = json.load(f)
-                self.rate_limits = data
+                # Ensure all required keys exist
+                if 'post' in data and all(k in data['post'] for k in self.default_limits['post']):
+                    # Convert date strings back to datetime
+                    data['post']['last_reset'] = datetime.fromisoformat(data['post']['last_reset'])
+                    data['post']['monthly_reset'] = datetime.fromisoformat(data['post']['monthly_reset'])
+                    self.rate_limits = data
+                else:
+                    logger.warning("Invalid cache format, using default limits")
         except (FileNotFoundError, json.JSONDecodeError):
-            pass
-    
+            logger.info("No valid cache found, using default limits")
+            
     def _save_cache(self) -> None:
         """Save current rate limits to cache"""
         try:
+            # Convert datetime to string for JSON serialization
+            cache_data = {
+                'post': {
+                    **self.rate_limits['post'],
+                    'last_reset': self.rate_limits['post']['last_reset'].isoformat(),
+                    'monthly_reset': self.rate_limits['post']['monthly_reset'].isoformat()
+                }
+            }
             with open(self.cache_file, 'w') as f:
-                json.dump(self.rate_limits, f)
+                json.dump(cache_data, f)
         except Exception as e:
             logger.error(f"Error saving rate limits: {e}")
