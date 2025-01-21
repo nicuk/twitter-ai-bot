@@ -37,8 +37,8 @@ def main():
             api_base=api_url
         )
         
-        # Initialize Elion
-        elai = Elion(llm, cryptorank_api_key=os.getenv('CRYPTORANK_API_KEY'))
+        # Initialize Elion (only needs LLM)
+        elai = Elion(llm)
         
         # Initialize and run Twitter bot
         logger.info("Initializing Twitter bot...")

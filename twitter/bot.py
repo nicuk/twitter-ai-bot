@@ -63,7 +63,7 @@ class AIGamingBot:
             api_key=os.getenv('AI_ACCESS_TOKEN'),
             api_base=os.getenv('AI_API_URL')
         )
-        self.elion = Elion(llm=llm, cryptorank_api_key=os.getenv('CRYPTORANK_API_KEY'))
+        self.elion = Elion(llm=llm)
         logger.info("Elion initialized")
         
         # Add post categories and their daily targets
@@ -364,3 +364,24 @@ class AIGamingBot:
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             raise
+
+def main():
+    """Main entry point for the Twitter bot"""
+    try:
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Initialize and run bot
+        bot = AIGamingBot()
+        bot.run()
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}", exc_info=True)
+        raise
+
+if __name__ == '__main__':
+    main()
