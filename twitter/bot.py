@@ -31,7 +31,7 @@ from strategies.volume_strategy import (
     format_twitter_output as format_volume_output,
     get_elai_insight
 )
-from elion.elion import Elion
+from elion.core.elion import Elion
 from custom_llm import MetaLlamaComponent
 from .api_client import TwitterAPI
 from .rate_limiter import RateLimiter
