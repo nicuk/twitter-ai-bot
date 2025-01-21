@@ -42,19 +42,9 @@ class AIGamingBot:
         
         # Add post categories and their daily targets
         self.post_categories = {
-            'trend': {
-                'ai': {'target': 3, 'count': 0},
-                'gaming': {'target': 2, 'count': 0},
-                'meme': {'target': 2, 'count': 0}
-            },
-            'volume': {
-                'leaders': {'target': 2, 'count': 0},
-                'spikes': {'target': 2, 'count': 0},
-                'anomalies': {'target': 2, 'count': 0}
-            },
-            'community': {
-                'engagement': {'target': 3, 'count': 0}
-            }
+            'trend': {'target': 7, 'count': 0},    # Market trend analysis
+            'volume': {'target': 6, 'count': 0},   # Volume analysis
+            'personal': {'target': 4, 'count': 0}  # Personality-driven tweets
         }
         
         # Set up tweet schedule
@@ -63,30 +53,30 @@ class AIGamingBot:
     def run_cycle(self):
         """Run a single tweet cycle with retries"""
         try:
-            # Get next category
-            main_cat, sub_cat = self._get_next_category()
+            # Try each category until we get content
+            categories_to_try = ['trend', 'volume', 'personal']
             content = None
+            category = None
             
-            # Generate content based on category
-            try:
-                if main_cat == 'trend':
-                    content = self.elion.generate_tweet('trend')
-                elif main_cat == 'volume':
-                    content = self.elion.generate_tweet('volume')
-                elif main_cat == 'community':
-                    content = self.elion.engage_with_community()
-                    
-            except Exception as e:
-                logger.error(f"Error generating content: {e}")
-                # Try community engagement as fallback
+            # First try the next category from scheduler
+            next_category = self._get_next_category()
+            if next_category in categories_to_try:
+                categories_to_try.remove(next_category)
+                categories_to_try.insert(0, next_category)
+            
+            # Try each category until we get content
+            for cat in categories_to_try:
                 try:
-                    content = self.elion.engage_with_community()
+                    content = self.elion.generate_tweet(cat)
+                    if content:
+                        category = cat
+                        break
                 except Exception as e:
-                    logger.error(f"Community engagement failed: {e}")
-                    return
+                    logger.error(f"Error generating {cat} content: {e}")
+                    continue
 
             if not content:
-                logger.warning(f"No content generated for {main_cat}/{sub_cat}")
+                logger.warning("No content generated for any category")
                 return
 
             # Try to post with retries
@@ -98,7 +88,7 @@ class AIGamingBot:
                         self.rate_limiter.update_counts()
                         
                         # Update category count
-                        self.post_categories[main_cat][sub_cat]['count'] += 1
+                        self.post_categories[category]['count'] += 1
                         
                         # Reset retry count and schedule next
                         self.retry_count = 0
@@ -127,36 +117,29 @@ class AIGamingBot:
                 logger.error("Too many errors. Entering recovery mode...")
                 self._enter_recovery_mode()
 
-    def _get_next_category(self) -> tuple:
+    def _get_next_category(self) -> str:
         """Get the next category to post based on targets"""
         hour = datetime.now().hour
         
         # First try market hours schedule (8 AM - 4 PM UTC)
         if 8 <= hour <= 16:
             # Check which market category needs posts
-            for main_cat in ['trend', 'volume']:
-                for sub_cat, data in self.post_categories[main_cat].items():
-                    if data['count'] < data['target']:
-                        return main_cat, sub_cat
+            for category in ['trend', 'volume']:
+                if self.post_categories[category]['count'] < self.post_categories[category]['target']:
+                    return category
         
-        # Then try community engagement
-        if self.post_categories['community']['engagement']['count'] < self.post_categories['community']['engagement']['target']:
-            return 'community', 'engagement'
+        # Then try personal tweets
+        if self.post_categories['personal']['count'] < self.post_categories['personal']['target']:
+            return 'personal'
             
         # If all primary targets met, find any category that's below target
-        for main_cat in self.post_categories:
-            for sub_cat, data in self.post_categories[main_cat].items():
-                if data['count'] < data['target']:
-                    return main_cat, sub_cat
+        for category, data in self.post_categories.items():
+            if data['count'] < data['target']:
+                return category
                     
-        # If everything is at target, pick random category to avoid hanging
-        main_cats = list(self.post_categories.keys())
-        main_cat = random.choice(main_cats)
-        sub_cats = list(self.post_categories[main_cat].keys())
-        sub_cat = random.choice(sub_cats)
-        
-        logger.info(f"All targets met, posting additional {main_cat}/{sub_cat}")
-        return main_cat, sub_cat
+        # If everything is at target, pick random category
+        logger.info("All post targets met, picking random category")
+        return random.choice(list(self.post_categories.keys()))
 
     def _setup_schedule(self):
         """Set up the tweet schedule"""
@@ -234,9 +217,8 @@ class AIGamingBot:
             self.rate_limiter.cleanup()
             
             # Reset post category counts
-            for main_cat in self.post_categories:
-                for sub_cat in self.post_categories[main_cat]:
-                    self.post_categories[main_cat][sub_cat]['count'] = 0
+            for category in self.post_categories:
+                self.post_categories[category]['count'] = 0
             
         except Exception as e:
             logger.error(f"Error cleaning cache: {e}")
