@@ -143,12 +143,11 @@ class AIGamingBot:
 
     def _setup_schedule(self):
         """Set up the tweet schedule"""
-        # Schedule first tweet in 1 minute
-        schedule.every(1).minutes.do(self.run_cycle).tag('tweets')
-        logger.info("First tweet scheduled in 1 minute")
+        # Schedule first tweet in 2 minutes to allow for startup
+        schedule.every(2).minutes.do(self.run_cycle).tag('tweets')
+        logger.info("First tweet scheduled in 2 minutes")
         
-        # Schedule regular checks
-        schedule.every(1).hours.do(self.check_responses)
+        # Schedule daily cleanup only
         schedule.every().day.at("00:00").do(self._cleanup_cache)
 
     def _enter_recovery_mode(self):
