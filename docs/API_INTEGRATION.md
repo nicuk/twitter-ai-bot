@@ -19,7 +19,7 @@ All sensitive API keys and credentials are managed securely through environment 
    TWITTER_BEARER_TOKEN=
 
    # Meta Llama API
-   AI_API_URL=https://api-user.ai.aitech.io/api/v1/user/products/209/use
+   AI_API_URL=https://api-user.ai.aitech.io/api/v1/user/products/209/use/chat/completions
    AI_ACCESS_TOKEN=[your_meta_llama_token]
 
    # Market Data
@@ -44,7 +44,7 @@ META_LLAMA_PROVIDER = {
             {
                 "name": "api_base",
                 "display_name": "API Base URL",
-                "value": "https://api-user.ai.aitech.io/api/v1/user/products/209/use",
+                "value": "https://api-user.ai.aitech.io/api/v1/user/products/209/use/chat/completions",
             }
         ]
     }

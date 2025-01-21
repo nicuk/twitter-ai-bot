@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database Configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/elion.db')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/elai')
 
 # API Keys and Tokens
 CRYPTORANK_API_KEY = os.getenv('CRYPTORANK_API_KEY')
@@ -31,4 +31,21 @@ TWEET_THREAD_MAX = 4  # Maximum tweets in a thread
 EXCLUDED_TOKENS = {
     'stablecoins': {'USDT', 'USDC', 'DAI', 'BUSD'},
     'mega_caps': {'BTC', 'ETH'}
+}
+
+# ELAI Settings
+ELAI_SETTINGS = {
+    'name': 'ELAI',
+    'description': 'Enhanced Learning AI for Crypto Trading',
+    'version': '1.0.0',
+    'personality': {
+        'quirky': 0.8,
+        'technical': 0.7,
+        'empathetic': 0.6,
+        'confident': 0.7,
+        'playful': 0.8,
+        'reflective': 0.9,
+        'curious': 0.9,
+        'humble': 0.8
+    }
 }

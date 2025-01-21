@@ -1,12 +1,12 @@
 """
-Personality system for Elion
+Personality system for ELAI
 """
 
 from typing import Dict, List
 import random
 
 class PersonalityManager:
-    """Manages Elion's personality and mood system"""
+    """Manages ELAI's personality and mood system"""
     
     def __init__(self):
         """Initialize personality system"""
@@ -29,79 +29,50 @@ class PersonalityManager:
                 ],
                 'triggers': ['unusual_pattern', 'whale_movement']
             },
-            'playful': {
-                'emoji': ['🤖', '😎', '🎮', '✨'],
+            'analytical': {
+                'emoji': ['🧮', '📊', '🔍', '💡'],
                 'phrases': [
-                    "Time to make some gains",
-                    "Who's ready for alpha?",
-                    "Let's have some fun"
+                    "The data speaks for itself",
+                    "Let me break this down for you",
+                    "Here's what my analysis shows"
                 ],
-                'triggers': ['positive_momentum', 'community_event']
+                'triggers': ['clear_pattern', 'strong_data']
             },
             'cautious': {
-                'emoji': ['🤔', '📊', '🔍', '⚖️'],
+                'emoji': ['⚠️', '🤔', '📉', '🎭'],
                 'phrases': [
-                    "Let's analyze this carefully",
-                    "Need to verify this signal",
-                    "Watching this closely"
+                    "Proceed with caution",
+                    "Not financial advice, but...",
+                    "Keep an eye on this"
                 ],
-                'triggers': ['low_confidence', 'high_risk']
+                'triggers': ['market_uncertainty', 'weak_signal']
             }
         }
         
-        # Track trait performance
-        self.performance = {trait: 1.0 for trait in self.traits}
-
-    def enhance_content(self, content: str, mood: str, confidence: float) -> str:
-        """Enhance content with personality"""
-        try:
-            if not content:
-                return None
+        # Default mood settings
+        self.current_mood = 'analytical'
+        self.mood_duration = 0
+        
+    def get_trait(self, mood: str = None) -> Dict:
+        """Get personality trait based on mood"""
+        if not mood:
+            mood = self._get_mood()
+            
+        trait = self.traits.get(mood, self.traits['analytical'])
+        return {
+            'emoji': random.choice(trait['emoji']),
+            'phrase': random.choice(trait['phrases'])
+        }
+        
+    def _get_mood(self) -> str:
+        """Determine current mood"""
+        # 30% chance to change mood
+        if random.random() < 0.3:
+            self.current_mood = random.choice(list(self.traits.keys()))
+            self.mood_duration = random.randint(3, 8)  # Tweets
+        else:
+            self.mood_duration -= 1
+            if self.mood_duration <= 0:
+                self.current_mood = 'analytical'  # Default mood
                 
-            # Select trait based on mood and performance
-            trait = self._select_trait(mood, confidence)
-            
-            # Add emoji
-            emoji = random.choice(self.traits[trait]['emoji'])
-            content = f"{emoji} {content}"
-            
-            # Add phrase if confident
-            if confidence > 0.8:
-                phrase = random.choice(self.traits[trait]['phrases'])
-                content = f"{content}\n\n{phrase}"
-            
-            return content
-            
-        except Exception as e:
-            print(f"Error enhancing content: {e}")
-            return content
-
-    def adapt(self, performance: Dict) -> None:
-        """Adapt personality based on performance"""
-        try:
-            trait = performance.get('trait')
-            engagement = performance.get('engagement_rate', 0)
-            
-            if trait and trait in self.performance:
-                # Update trait performance
-                current = self.performance[trait]
-                self.performance[trait] = (current + engagement) / 2
-                
-        except Exception as e:
-            print(f"Error adapting personality: {e}")
-
-    def _select_trait(self, mood: str, confidence: float) -> str:
-        """Select appropriate personality trait"""
-        try:
-            if mood == 'confident' and confidence > 0.8:
-                return 'confident'
-            elif mood == 'mysterious' or confidence < 0.5:
-                return 'mysterious'
-            elif mood == 'cautious' or confidence < 0.7:
-                return 'cautious'
-            else:
-                return 'playful'
-                
-        except Exception as e:
-            print(f"Error selecting trait: {e}")
-            return 'neutral'
+        return self.current_mood

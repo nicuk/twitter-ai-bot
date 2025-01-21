@@ -1,63 +1,64 @@
-# Elion AI Trading Bot
+# ELAI AI Trading Bot
 
 ## Project Status: Pre-Deployment Testing
 
 ### Latest Updates (2025-01-17)
-- Completed major refactoring of Elion class structure
+- Completed major refactoring of ELAI class structure
 - Separated functionality into dedicated components
 - Enhanced market analysis capabilities
 - Improved personality and engagement systems
 
 ### Project Structure
 ```
-elion/
-├── __init__.py
-├── elion.py              # Main Elion class coordinating components
-├── market_analyzer.py    # Market analysis functionality
-├── personality.py        # Personality and response generation
-├── data_sources.py       # Data fetching and processing
-├── portfolio/           # Portfolio management
-│   └── __init__.py
-├── content/            # Content generation and scheduling
-│   ├── generator.py
-│   ├── scheduler.py
-│   └── tweet_formatters.py
-└── engagement/        # Community engagement
-    └── __init__.py
+elai/
+├── core/
+│   └── elai.py              # Main orchestrator
+├── personality/
+│   └── traits.py             # Personality system
+└── twitter/                  # Twitter API handling
+    ├── api_client.py         # API client
+    ├── bot.py                # Bot implementation
+    └── rate_limiter.py       # Rate limiting
+
+strategies/
+├── trend_strategy.py         # Trend analysis + content generation
+├── volume_strategy.py        # Volume analysis + content generation
+└── shared_utils.py           # Common utilities
 ```
 
 ### Components
-1. **Elion Core (elion.py)**
-   - Coordinates between components
-   - Manages high-level bot functionality
-   - Tracks performance metrics
+1. **ELAI Core (core/elai.py)**
+   - Orchestrates all components
+   - Integrates strategies with personality
+   - Manages tweet generation and timing
+   - Tracks daily tweet limits and performance
 
-2. **Market Analyzer**
-   - Technical analysis
-   - On-chain metrics analysis
-   - Market sentiment analysis
-   - Whale movement tracking
+2. **Strategies**
+   - **Trend Strategy**: Market trend analysis and content generation
+   - **Volume Strategy**: Volume analysis and content generation
+   - **Shared Utils**: Common utilities for data fetching and analysis
 
-3. **Content Generation**
-   - Tweet generation and formatting
-   - Scheduling optimization
-   - Content type management
+3. **Personality System**
+   - Manages bot's personality traits
+   - Handles engagement style
+   - Adapts tone based on market conditions
+   - Provides consistent bot character
 
-4. **Portfolio Management**
-   - Portfolio tracking
-   - Performance analytics
-   - Position management
+4. **Twitter Integration**
+   - API client for Twitter interactions
+   - Rate limiting implementation
+   - Bot implementation for posting
 
-5. **Engagement System**
-   - Community interaction
-   - Response generation
-   - Audience segmentation
+5. **Future Components (Not Currently Integrated)**
+   - Portfolio Management
+   - Extended Data Sources
+   - Additional Engagement Features
 
 ### Development Environment Setup
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/elion-bot.git
-cd elion-bot
+git clone https://github.com/yourusername/elai-bot.git
+cd elai-bot
 ```
 
 2. Create and activate virtual environment:
@@ -78,8 +79,8 @@ pip install -r requirements.txt
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/elion-ai.git
-cd elion-ai
+git clone https://github.com/yourusername/elai-ai.git
+cd elai-ai
 ```
 
 2. Install dependencies:
@@ -106,7 +107,7 @@ python test_twitter_api.py  # Test Twitter API connection
 python demo_tweets.py       # Test tweet generation
 ```
 
-2. Run Elion:
+2. Run ELAI:
 ```bash
 python main.py
 ```
@@ -230,7 +231,7 @@ python -m pytest tests/
 python -m pytest tests/test_market_analyzer.py
 
 # Run with coverage
-python -m pytest --cov=elion tests/
+python -m pytest --cov=elai tests/
 
 # Start the bot
 python main.py
