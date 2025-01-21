@@ -339,43 +339,32 @@ Focus on the most interesting metric or pattern. Add 1-2 relevant emojis."""
 
 def format_twitter_output(trend_tokens: list) -> str:
     """Format output for Twitter"""
-    tweet = ""
+    tweet = "🚨 Market Movers Alert! 🚨\n\n"
     shown_symbols = set()
     
-    for _, token in trend_tokens:
+    for _, token in trend_tokens[:5]:  # Show top 5 movers
         symbol = token['symbol']
         if symbol in shown_symbols:
             continue
             
         direction = "🟢" if token['price_change'] > 0 else "🔴"
-        price = float(token['price'])
-        
-        # Format price with dynamic decimals based on size
-        if price < 0.0001:
-            price_str = f"${price:.8f}"
-        elif price < 0.01:
-            price_str = f"${price:.6f}"
-        elif price < 1:
-            price_str = f"${price:.4f}"
-        else:
-            price_str = f"${price:.4f}"
-            
-        volume = float(token['volume'])/1e6  # Convert to millions
         price_change = float(token['price_change'])
         movement = get_movement_description(price_change)
         
-        section = f"{direction} ${symbol} TRENDING!\n"
-        section += f"💰 {price_str} {movement}\n"
-        section += f"📊 Vol: ${volume:.1f}M\n"
+        section = f"{direction} ${symbol}: {price_change:+.1f}% {movement}\n"
         
         if len(tweet + section) < 280:
             tweet += section
             shown_symbols.add(symbol)
             
     # Add ELAI's insight
-    insight = get_trend_insight(trend_tokens)
-    if len(tweet + "\n" + insight) < 280:
-        tweet += "\n" + insight
+    if price_change > 0:
+        insight = "\nELAI: Bulls are charging! Keep an eye on these gems 💎"
+    else:
+        insight = "\nELAI: Dips detected! Time to do your research 🔍"
+        
+    if len(tweet + insight) < 280:
+        tweet += insight
             
     return tweet.strip()
 
@@ -423,11 +412,25 @@ def test_analyze():
     """Test just the analyze function"""
     load_dotenv()
     api_key = os.getenv('CRYPTORANK_API_KEY')
-    
-    print("\nTesting just analyze()...")
+    if not api_key:
+        print("Error: CRYPTORANK_API_KEY not found in environment")
+        return
+        
     strategy = TrendStrategy(api_key)
     result = strategy.analyze()
     print("\nAnalyze result:", json.dumps(result, indent=2))
+    
+    # Format tweet from trend tokens
+    if result.get('trend_tokens'):
+        print("\nTWEET OUTPUT:")
+        print("-" * 40)
+        tweet = format_twitter_output([(1, {'symbol': t.split()[0][1:], 
+                                          'price': 0.0,
+                                          'price_change': float(t.split()[1].rstrip('%')),
+                                          'volume': 1e6}) for t in result['trend_tokens']])
+        print(tweet)
+        print("-" * 40)
+        print(f"Character count: {len(tweet)}")
 
 if __name__ == "__main__":
     test_analyze()
