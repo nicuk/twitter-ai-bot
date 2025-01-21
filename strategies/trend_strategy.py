@@ -107,19 +107,6 @@ class TrendStrategy:
             print(f"Error analyzing trends: {str(e)}")
             return {'signal': 'neutral', 'confidence': 0.0}
 
-    def get_market_sentiment(self) -> dict:
-        """Get current market sentiment"""
-        try:
-            result = self.analyze()
-            if result:
-                return {
-                    'signal': result['signal'],
-                    'confidence': result['confidence']
-                }
-        except Exception as e:
-            print(f"Error getting market sentiment: {e}")
-        return None
-
 def calculate_trend_score(token: Dict) -> float:
     """Calculate trend-based score (0-100) with strict criteria"""
     try:
@@ -432,5 +419,15 @@ def test_trend_strategy():
     except Exception as e:
         print(f"Error testing trend strategy: {str(e)}")
 
+def test_analyze():
+    """Test just the analyze function"""
+    load_dotenv()
+    api_key = os.getenv('CRYPTORANK_API_KEY')
+    
+    print("\nTesting just analyze()...")
+    strategy = TrendStrategy(api_key)
+    result = strategy.analyze()
+    print("\nAnalyze result:", json.dumps(result, indent=2))
+
 if __name__ == "__main__":
-    test_trend_strategy()
+    test_analyze()

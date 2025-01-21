@@ -61,6 +61,13 @@ class TweetFormatters:
         insight = random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
         
+    def format_thought(self, content: str, trait: str) -> str:
+        """Format a thought/personal tweet"""
+        template = random.choice(self.templates['self_aware'])
+        emoji = random.choice(self.emojis)
+        insight = content if content else random.choice(self.thoughts)
+        return template.format(emoji=emoji, insight=insight)
+        
     def format_alpha(self, market_data: Dict, trait: str) -> str:
         """Format alpha insight tweet with personality"""
         template = random.choice(self.templates['alpha'])

@@ -16,7 +16,8 @@ if project_root not in sys.path:
 
 from strategies.cryptorank_client import CryptoRankAPI
 
-_token_cache = {}
+# Cache settings
+_token_cache = {}  # Dict to store different sorted results
 _last_fetch_time = 0
 CACHE_DURATION = 300  # Cache duration in seconds
 
@@ -135,26 +136,32 @@ def filter_tokens_by_volume(tokens: list, min_volume_mcap_ratio: float = 1.0) ->
 def filter_tokens_by_trend(tokens: List[Dict], min_price_change: float = 5.0) -> List[Dict]:
     """Filter tokens by price trend"""
     trend_tokens = []
+    print(f"\nFiltering {len(tokens)} tokens for trends...")
+    print("First token data:", json.dumps(tokens[0], indent=2))
     
     for token in tokens:
         try:
+            symbol = token.get('symbol', '')
+            
             # Skip stablecoins
-            if is_likely_stablecoin(token.get('symbol', '')):
-                print(f"Skipping stablecoin: {token.get('symbol', '')}")
+            if is_likely_stablecoin(symbol):
+                print(f"Skipping stablecoin: {symbol}")
                 continue
                 
             # Get price change
             price_change = float(token.get('priceChange24h', 0))
+            print(f"Token {symbol}: Price change = {price_change:+.1f}%")
             
             # Check if meets minimum change threshold
             if abs(price_change) >= min_price_change:
-                print(f"Found trending token: {token.get('symbol', '')} ({price_change:+.1f}%)")
+                print(f"Found trending token: {symbol} ({price_change:+.1f}%)")
                 trend_tokens.append(token)
                 
         except Exception as e:
             print(f"Error filtering token: {str(e)}")
             continue
             
+    print(f"\nFound {len(trend_tokens)} trending tokens")
     return trend_tokens
 
 def format_token_data(token: Dict) -> Dict:
@@ -203,23 +210,42 @@ def is_likely_stablecoin(symbol: str) -> bool:
 
 def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_first=0) -> list:
     """Fetch tokens from CryptoRank API with specified sorting"""
+    global _token_cache, _last_fetch_time
+    
+    # Check cache first
+    current_time = time.time()
+    cache_key = f"{sort_by}_{direction}"
+    
+    if _token_cache.get(cache_key) and current_time - _last_fetch_time < CACHE_DURATION:
+        print("Using cached token data")
+        return _token_cache[cache_key]
+    
+    # Add delay between API calls
+    if current_time - _last_fetch_time < 2:  # Wait at least 2 seconds between calls
+        time.sleep(2)
+    
     try:
         # Build API URL
-        base_url = "https://api.cryptorank.io/v1"
+        base_url = "https://api.cryptorank.io/v2"
         endpoint = "/currencies"
         params = {
-            'api_key': api_key,
-            'sortBy': sort_by,
-            'dir': direction.upper(),
-            'limit': 1000
+            'limit': 500,
+            'convert': 'USD',
+            'status': 'active',
+            'orderBy': sort_by if sort_by == 'volume24h' else 'percentChange.h24',
+            'orderDirection': direction,
+            'type': None,
+            'offset': None
         }
         
-        # Make API request
-        response = requests.get(f"{base_url}{endpoint}", params=params)
+        # Make API request with key in header
+        headers = {'X-Api-Key': api_key}
+        response = requests.get(f"{base_url}{endpoint}", params=params, headers=headers)
         print(f"Response status: {response.status_code}")
         
         if response.status_code != 200:
             print(f"Error fetching data: {response.text}")
+            print("Rate limit headers:", dict(response.headers))
             return []
             
         # Parse response
@@ -229,21 +255,20 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
         if print_first > 0:
             print("\nFirst token raw data:")
             print(json.dumps(raw_tokens[0], indent=2))
+            print("\nFirst token values:")
+            values = raw_tokens[0].get('values', {}).get('USD', {})
+            print(json.dumps(values, indent=2))
             
         # Format token data
         formatted_tokens = []
         for token in raw_tokens:
             try:
-                values = token.get('values', {}).get('USD', {})
-                if not values:
-                    continue
-                    
                 formatted_token = {
                     'symbol': token.get('symbol', ''),
-                    'price': values.get('price', 0),
-                    'priceChange24h': values.get('percentChange24h', 0),
-                    'volume24h': values.get('volume24h', 0),
-                    'marketCap': values.get('marketCap', 0)
+                    'price': token.get('price', 0),
+                    'priceChange24h': token.get('percentChange', {}).get('h24', 0),
+                    'volume24h': token.get('volume24h', 0),
+                    'marketCap': token.get('marketCap', 0)
                 }
                 formatted_tokens.append(formatted_token)
             except Exception as e:
@@ -251,6 +276,11 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
                 continue
                 
         print(f"Found {len(formatted_tokens)} tokens")
+        
+        # Update cache with new data
+        _token_cache[cache_key] = formatted_tokens
+        _last_fetch_time = current_time
+        
         return formatted_tokens
         
     except Exception as e:

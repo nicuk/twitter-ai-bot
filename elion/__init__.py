@@ -1,11 +1,17 @@
 """
-Elion AI - Advanced AI Trading Bot
+ELAI - Advanced AI Trading Bot
 """
 
-from .elion import Elion
-from .data_sources import DataSources
-from .portfolio import PortfolioManager
+from .core.elion import Elion
+from .personality.traits import PersonalityManager
 from .content.generator import ContentGenerator
-from .personality import ElionPersonality
+from .content.tweet_formatters import TweetFormatters
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
+
+__all__ = [
+    'Elion',
+    'PersonalityManager',
+    'ContentGenerator',
+    'TweetFormatters'
+]
