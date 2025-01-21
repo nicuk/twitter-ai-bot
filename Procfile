@@ -1,1 +1,1 @@
-web: python -m twitter.bot
+web: python main.py
