@@ -13,6 +13,7 @@ from elion.content.generator import ContentGenerator
 from elion.personality import PersonalityManager
 import json
 import sys
+from datetime import datetime
 
 def test_personal_tweets(llm):
     """Test ELAI's personal tweet generation"""
@@ -70,8 +71,23 @@ def test_market_tweets():
         api_base=os.getenv('AI_API_URL')
     )
     
-    # Initialize ELAI
+    # Initialize ELAI and bot
     elion = Elion(llm=llm)
+    bot = AIGamingBot()
+    
+    # Test scheduling logic
+    logger.info("\nTesting Tweet Scheduling:")
+    print("-" * 50)
+    
+    # Current time is in Asian market hours
+    current_hour = datetime.now().hour
+    print(f"\nCurrent time: {current_hour}:00 UTC")
+    
+    # Get next category 5 times to see distribution
+    print("\nTesting next 5 tweet categories:")
+    for i in range(5):
+        category = bot._get_next_category()
+        print(f"Tweet {i+1}: {category}")
     
     # Test trend tweets
     logger.info("\nTesting Trend Tweets:")

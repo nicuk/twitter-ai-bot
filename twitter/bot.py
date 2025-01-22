@@ -13,6 +13,14 @@ from twitter.rate_limiter import RateLimiter
 from twitter.history_manager import TweetHistory
 from elion.elion import Elion
 
+# Initialize logging
+logging.basicConfig(
+    filename='tweet_activity.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 logger = logging.getLogger(__name__)
 
 class AIGamingBot:
@@ -90,6 +98,9 @@ class AIGamingBot:
                         # Update category count
                         self.post_categories[category]['count'] += 1
                         
+                        # Log tweet activity
+                        logger.info(f"Posted {category} tweet at {datetime.now().strftime('%H:%M:%S UTC')}")
+                        
                         # Reset retry count and schedule next
                         self.retry_count = 0
                         self._schedule_next_tweet()
@@ -121,23 +132,31 @@ class AIGamingBot:
         """Get the next category to post based on targets"""
         hour = datetime.now().hour
         
-        # First try market hours schedule (8 AM - 4 PM UTC)
-        if 8 <= hour <= 16:
-            # Check which market category needs posts
+        # Asian market hours (00:00-08:00 UTC)
+        if 0 <= hour < 8:
+            # Prioritize volume and trend tweets for Asian markets
+            for category in ['volume', 'trend']:
+                if self.post_categories[category]['count'] < self.post_categories[category]['target'] // 2:
+                    return category
+                    
+        # European/American market hours (08:00-16:00 UTC)
+        elif 8 <= hour < 16:
+            # Prioritize trend and volume tweets for EU/US markets
             for category in ['trend', 'volume']:
                 if self.post_categories[category]['count'] < self.post_categories[category]['target']:
                     return category
         
-        # Then try personal tweets
-        if self.post_categories['personal']['count'] < self.post_categories['personal']['target']:
-            return 'personal'
-            
-        # If all primary targets met, find any category that's below target
-        for category, data in self.post_categories.items():
-            if data['count'] < data['target']:
-                return category
+        # Evening hours (16:00-00:00 UTC)
+        else:
+            # Prioritize personal tweets and remaining market tweets
+            if self.post_categories['personal']['count'] < self.post_categories['personal']['target']:
+                return 'personal'
+            # Use remaining market tweets if any left
+            for category in ['trend', 'volume']:
+                if self.post_categories[category]['count'] < self.post_categories[category]['target']:
+                    return category
                     
-        # If everything is at target, pick random category
+        # If all targets met, pick random category
         logger.info("All post targets met, picking random category")
         return random.choice(list(self.post_categories.keys()))
 
@@ -177,20 +196,32 @@ class AIGamingBot:
         """Schedule the next tweet"""
         schedule.clear('tweets')
         
-        # Default to 17 tweets per day if rate limits not available
-        daily_limit = 17
-        try:
-            daily_limit = self.rate_limiter.rate_limits['post']['daily_limit']
-        except (KeyError, AttributeError):
-            logger.warning("Could not get daily limit from rate limiter, using default")
+        hour = datetime.now().hour
+        
+        # Asian market hours (00:00-08:00 UTC)
+        if 0 <= hour < 8:
+            # 6 tweets in 8 hours (focusing on Asian market activity)
+            base_interval = (8 * 60) / 6  # ~80 minutes
+            next_interval = base_interval + random.uniform(-10, 10)
+            market_period = 'Asian'
             
-        # Calculate interval between tweets
-        base_interval = (24 * 60) / daily_limit  # minutes
-        next_interval = base_interval + random.uniform(-5, 5)
+        # European/American market hours (08:00-16:00 UTC)
+        elif 8 <= hour < 16:
+            # 7 tweets in 8 hours (peak trading activity)
+            base_interval = (8 * 60) / 7  # ~69 minutes
+            next_interval = base_interval + random.uniform(-10, 10)
+            market_period = 'European/American'
+            
+        # Evening hours (16:00-00:00 UTC)
+        else:
+            # 4 tweets in 8 hours (mostly personal and analysis)
+            base_interval = (8 * 60) / 4  # ~120 minutes
+            next_interval = base_interval + random.uniform(-15, 15)
+            market_period = 'evening'
         
         # Schedule next tweet
         schedule.every(next_interval).minutes.do(self.run_cycle).tag('tweets')
-        logger.info(f"Next tweet scheduled in {next_interval:.1f} minutes")
+        logger.info(f"Next tweet scheduled in {next_interval:.1f} minutes during {market_period} hours")
 
     def check_responses(self):
         """Check responses to recent tweets"""
