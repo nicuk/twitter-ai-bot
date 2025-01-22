@@ -24,33 +24,27 @@ def test_personal_tweets(llm):
     personality = PersonalityManager()
     generator = ContentGenerator(personality, llm)
     
+    print("\nTesting Personal Tweets:\n")
+    
+    # Generate 5 test tweets
+    for i in range(5):
+        tweet = generator.generate('self_aware')
+        print(f"\nTweet {i+1}:\n{tweet}")
+        print(f"Length: {len(tweet)} chars\n")
+        
     # Open file for writing test results
     with open('tweet_test_results.txt', 'w', encoding='utf-8') as f:
         # Generate 5 test tweets
         for i in range(5):
             tweet = generator.generate('self_aware')
             
-            # Split and analyze tweet parts
-            parts = tweet.split('\n\n')
-            content = parts[0]
-            hashtags = parts[1] if len(parts) > 1 else ''
-            
             # Write to file with clear formatting
-            f.write(f"\n{'='*80}\n")
-            f.write(f"Test Tweet {i+1}:\n")
-            f.write(f"{'-'*40}\n\n")
+            header = f"\n{'='*80}\nTest Tweet {i+1}:\n{'-'*40}\n\n"
+            content_section = f"Content:\n{'-'*20}\n{tweet}\n[Length: {len(tweet)} chars]\n\n"
             
-            f.write("Content:\n")
-            f.write("-" * 20 + "\n")
-            f.write(content + "\n")
-            f.write(f"[Length: {len(content)} chars]\n\n")
-            
-            f.write("Hashtags:\n")
-            f.write("-" * 20 + "\n")
-            f.write(hashtags + "\n")
-            f.write(f"[Length: {len(hashtags)} chars]\n\n")
-            
-            f.write(f"Total Length: {len(tweet)} chars\n\n")
+            # Write to file
+            f.write(header)
+            f.write(content_section)
             
     logger.info("Test results written to tweet_test_results.txt")
 

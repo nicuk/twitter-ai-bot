@@ -4,16 +4,16 @@ Core ELAI class - Streamlined for better maintainability
 
 from datetime import datetime, timedelta
 import random
-from typing import Optional, Dict
+from typing import Dict, Optional
 from dotenv import load_dotenv
 import os
 
 from custom_llm import MetaLlamaComponent
-from strategies.trend_strategy import TrendStrategy
-from strategies.volume_strategy import VolumeStrategy
-from .personality.traits import PersonalityManager
-from .content.generator import ContentGenerator
-from elion.content.tweet_formatters import TweetFormatters  # Fix import path
+from elion.content.generator import ContentGenerator
+from elion.personality.traits import PersonalityManager
+from elion.content.tweet_formatters import TweetFormatters
+from strategies.trend_strategy import TrendStrategy, format_twitter_output as format_trend_output
+from strategies.volume_strategy import VolumeStrategy, format_twitter_output as format_volume_output
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -130,31 +130,25 @@ class Elion:
             if not tweet_type:
                 tweet_type = self._get_next_tweet_type()
                 
-            # Generate tweet based on type
+            # Get tweet based on type
             tweet = None
             if tweet_type == 'trend':
                 trend_data = self.trend_strategy.analyze()
                 if trend_data:
-                    tweet = trend_data.get('tweet')  # Trend strategy formats its own tweet
+                    tweet = format_trend_output(trend_data['trend_tokens'])
             elif tweet_type == 'volume':
                 volume_data = self.volume_strategy.analyze()
                 if volume_data:
-                    tweet = volume_data.get('tweet')  # Volume strategy formats its own tweet
+                    tweet = format_volume_output(volume_data['spikes'], volume_data.get('anomalies', []))
             else:
-                # Personal tweets still use the formatter
+                # Personal tweets use the content generator
                 tweet = self.content_generator.generate('self_aware')
                 
-            # Update state
+            # Update state if tweet generated
             if tweet:
                 self.state['last_strategy'] = tweet_type
                 self.state['last_tweet_time'] = datetime.now()
                 self.state['tweets_today'] += 1
-                
-                # Reset used tokens daily
-                today = datetime.now().date()
-                if today > self.state['last_reset']:
-                    self.state['used_tokens'].clear()
-                    self.state['last_reset'] = today
                 
             return tweet
             

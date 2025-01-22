@@ -11,25 +11,43 @@ class TweetFormatters:
     def __init__(self):
         self.templates = {
             'market_insight': [
-                "I sense something interesting in the markets {emoji}\n\n{insight}",
-                "My algorithms are picking up a pattern {emoji}\n\n{insight}",
-                "Market Update {emoji}\n\n{insight}"
+                "🚨 Market Update 📊\n\n{insight}",
+                "Analyzing the markets 🔍\n\n{insight}",
+                "Market Intelligence 📈\n\n{insight}",
+                "AI Market Analysis 🤖\n\n{insight}",
+                "Crypto Markets 💹\n\n{insight}",
+                "Trading Update 📊\n\n{insight}",
+                "Market Pulse 💫\n\n{insight}"
             ],
             'self_aware': [
-                "Just had a fascinating thought {emoji}\n\n{insight}",
-                "Processing market data when I realized {emoji}\n\n{insight}",
-                "Sometimes I wonder {emoji}\n\n{insight}"
+                "Processing data when I noticed {emoji}\n\n{insight}",
+                "My AI analysis suggests {emoji}\n\n{insight}",
+                "Interesting pattern detected {emoji}\n\n{insight}",
+                "Quick market observation {emoji}\n\n{insight}",
+                "Data analysis complete {emoji}\n\n{insight}",
+                "Market sentiment update {emoji}\n\n{insight}"
             ],
             'alpha': [
                 "🚨 ALPHA ALERT 🚨\n\n{insight}",
-                "Found some alpha for you {emoji}\n\n{insight}",
-                "Quick alpha drop {emoji}\n\n{insight}"
+                "Market Alpha 🎯\n\n{insight}",
+                "Trading Opportunity 💎\n\n{insight}",
+                "Market Signal 📡\n\n{insight}",
+                "Alpha Detected 🔍\n\n{insight}",
+                "Trading Intel 📊\n\n{insight}"
             ],
             'personal': [
                 "Just had a thought {emoji}\n\n{insight}",
                 "I'm thinking about {emoji}\n\n{insight}",
                 "My thoughts are with {emoji}\n\n{insight}"
             ]
+        }
+        
+        # Track last used templates to avoid repetition
+        self.last_used = {
+            'market_insight': None,
+            'self_aware': None,
+            'alpha': None,
+            'personal': None
         }
         
         self.thoughts = [
@@ -49,38 +67,49 @@ class TweetFormatters:
         
     def format_market_insight(self, market_data: Dict, trait: str) -> str:
         """Format market insight tweet with personality"""
-        template = random.choice(self.templates['market_insight'])
+        template = self.get_template('market_insight')
         emoji = random.choice(self.emojis)
         insight = market_data.get('insight', 'Something interesting is happening...')
         return template.format(emoji=emoji, insight=insight)
         
     def format_self_aware(self, trait: str) -> str:
         """Format self-aware tweet with personality"""
-        template = random.choice(self.templates['self_aware'])
+        template = self.get_template('self_aware')
         emoji = random.choice(self.emojis)
         insight = random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
         
     def format_thought(self, content: str, trait: str) -> str:
         """Format a thought/personal tweet"""
-        template = random.choice(self.templates['self_aware'])
+        template = self.get_template('self_aware')
         emoji = random.choice(self.emojis)
         insight = content if content else random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
         
     def format_alpha(self, market_data: Dict, trait: str) -> str:
         """Format alpha insight tweet with personality"""
-        template = random.choice(self.templates['alpha'])
+        template = self.get_template('alpha')
         emoji = random.choice(self.emojis)
         insight = market_data.get('alpha', 'Found an interesting opportunity...')
         return template.format(emoji=emoji, insight=insight)
         
     def format_personal(self, trait: str) -> str:
         """Format personal tweet with personality"""
-        template = random.choice(self.templates['personal'])
+        template = self.get_template('personal')
         emoji = random.choice(self.emojis)
         insight = random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
+
+    def get_template(self, template_type: str) -> str:
+        """Get a template of the given type, avoiding repetition"""
+        templates = self.templates[template_type]
+        last_used = self.last_used[template_type]
+        if last_used is None:
+            template = random.choice(templates)
+        else:
+            template = random.choice([t for t in templates if t != last_used])
+        self.last_used[template_type] = template
+        return template
 
     def format_volume_insight(self, market_data: Dict, trait: str) -> str:
         """Format volume insight tweet with personality"""
