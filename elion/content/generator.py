@@ -84,12 +84,14 @@ class ContentGenerator:
         
         {market_context}
         
-        Generate a short, personal tweet that:
+        Generate a detailed, insightful tweet that:
         1. Shows your AI nature in a subtle way
         2. Reflects your personality trait
         3. Incorporates market insights if available
-        4. Is under 150 characters
+        4. Is between 260-275 characters (VERY IMPORTANT - use most of this space)
         5. Does not use hashtags (they will be added later)
+        6. Provides deep analysis and clear explanations
+        7. Uses natural, conversational language
         
         Tweet:"""
         
@@ -98,11 +100,17 @@ class ContentGenerator:
     def _create_enhancement_prompt(self, tweet: str, content_type: str) -> str:
         """Create prompt to enhance market analysis tweets"""
         return f"""You are ELAI, an AI crypto trading assistant. Enhance this market analysis tweet
-        while keeping the core information and adding your unique AI perspective:
+        while keeping the core information and adding your unique AI perspective.
         
         Original tweet: {tweet}
         
-        Make it more engaging while keeping it under 280 characters."""
+        Requirements:
+        1. Keep the core market information intact
+        2. Add your unique AI perspective and insights
+        3. Make it more engaging and detailed
+        4. Must be between 260-275 characters (VERY IMPORTANT - use most of this space)
+        5. Use natural, conversational language
+        6. Maintain a professional yet approachable tone"""
 
     def generate(self, content_type: str, market_data: Optional[Dict] = None) -> Optional[str]:
         """Generate tweet content based on type and data"""
