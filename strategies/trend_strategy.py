@@ -95,7 +95,13 @@ class TrendStrategy:
             # Format trend tokens for tweet
             trend_tokens = []
             for mover in big_movers[:6]:  # Try top 6 movers
-                trend_tokens.append(f"${mover['symbol']} {mover['price_change']:+.1f}% (${mover['mcap']/1e6:.1f}M) 🚀")
+                token_info = {
+                    'symbol': mover['symbol'],
+                    'price_change': mover['price_change'],
+                    'volume': mover['volume'],
+                    'mcap': mover['mcap']
+                }
+                trend_tokens.append((abs(mover['price_change']), token_info))
             
             return {
                 'signal': signal,
@@ -420,17 +426,18 @@ def test_analyze():
     result = strategy.analyze()
     print("\nAnalyze result:", json.dumps(result, indent=2))
     
-    # Format tweet from trend tokens
-    if result.get('trend_tokens'):
+    # Format tweet from trend tokens if present
+    trend_tokens = result.get('trend_tokens', [])
+    if trend_tokens:
         print("\nTWEET OUTPUT:")
         print("-" * 40)
-        tweet = format_twitter_output([(1, {'symbol': t.split()[1], 
-                                          'price': 0.0,
-                                          'price_change': float(t.split()[2].strip('%')),
-                                          'volume': 0.0}) for t in result['trend_tokens']])
+        tweet = format_twitter_output(trend_tokens)
         print(tweet)
         print("-" * 40)
         print(f"Character count: {len(tweet)}")
+    else:
+        print("\nNo trend tokens found in result")
 
 if __name__ == "__main__":
-    test_analyze()
+    print("Warning: This is a module and should not be run directly.")
+    print("Use the bot's main.py instead.")
