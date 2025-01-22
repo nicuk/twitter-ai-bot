@@ -393,6 +393,30 @@ class VolumeStrategy:
         except (ValueError, TypeError) as e:
             return "Unable to analyze pattern 🤔"
             
+    def analyze(self) -> Dict:
+        """Analyze volume patterns and return market data"""
+        try:
+            # Get tokens sorted by volume
+            tokens = fetch_tokens(self.api_key, sort_by='volume24h', direction='DESC')
+            if not tokens:
+                print("No tokens found or error fetching tokens")
+                return None
+
+            # Find volume spikes and anomalies
+            spikes = find_volume_spikes(tokens)
+            anomalies = find_volume_anomalies(tokens)
+
+            # Format data for tweet generation
+            return {
+                'spikes': spikes,
+                'anomalies': anomalies,
+                'insight': get_elai_insight(tokens) if tokens else None
+            }
+
+        except Exception as e:
+            print(f"Error analyzing volume: {str(e)}")
+            return None
+
     def get_elai_insight(self, tokens) -> str:
         """Generate ELAI's insight based on the detected tokens"""
         if not tokens:

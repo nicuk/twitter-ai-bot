@@ -20,7 +20,7 @@ from strategies.shared_utils import (
     is_likely_stablecoin,
     get_movement_description
 )
-from llama import generate
+from custom_llm import MetaLlamaComponent
 
 class TrendStrategy:
     """Analyzes market trends"""
@@ -334,7 +334,7 @@ Total Volume: ${total_volume/1e6:.1f}M
 Focus on the most interesting metric or pattern. Add 1-2 relevant emojis."""
 
     # Generate insight using Llama
-    insight = generate(prompt, max_tokens=60)
+    insight = MetaLlamaComponent().generate(prompt, max_tokens=60)
     return insight if insight else "Market moves catching attention... 👀"
 
 def format_twitter_output(trend_tokens: list) -> str:
@@ -424,10 +424,10 @@ def test_analyze():
     if result.get('trend_tokens'):
         print("\nTWEET OUTPUT:")
         print("-" * 40)
-        tweet = format_twitter_output([(1, {'symbol': t.split()[0][1:], 
+        tweet = format_twitter_output([(1, {'symbol': t.split()[1], 
                                           'price': 0.0,
-                                          'price_change': float(t.split()[1].rstrip('%')),
-                                          'volume': 1e6}) for t in result['trend_tokens']])
+                                          'price_change': float(t.split()[2].strip('%')),
+                                          'volume': 0.0}) for t in result['trend_tokens']])
         print(tweet)
         print("-" * 40)
         print(f"Character count: {len(tweet)}")

@@ -4,7 +4,7 @@ Core ELAI class - Streamlined for better maintainability
 
 from datetime import datetime, timedelta
 import random
-from typing import Optional
+from typing import Optional, Dict
 from dotenv import load_dotenv
 import os
 
@@ -13,6 +13,7 @@ from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from .personality.traits import PersonalityManager
 from .content.generator import ContentGenerator
+from elion.content.tweet_formatters import TweetFormatters  # Fix import path
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -25,6 +26,10 @@ class Elion:
         # Initialize components
         self.personality = PersonalityManager()
         self.content_generator = ContentGenerator(self.personality, self.llm)
+        
+        # Initialize market analyzers
+        self.trend_strategy = TrendStrategy(os.getenv('CRYPTORANK_API_KEY'))
+        self.volume_strategy = VolumeStrategy(os.getenv('CRYPTORANK_API_KEY'), llm=self.llm)
         
         # Initialize state
         self.state = {
@@ -76,47 +81,77 @@ class Elion:
                 
         return filtered if filtered else tokens  # Fall back to all tokens if all used
     
+    def get_market_data(self) -> Dict:
+        """Get market data from strategies"""
+        # Initialize strategies
+        trend = TrendStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
+        volume = VolumeStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
+        
+        # Get market data
+        trend_data = trend.analyze()
+        volume_data = volume.analyze()
+        
+        return {
+            'trend_data': trend_data,
+            'volume_data': volume_data
+        }
+        
+    def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
+        """Format a tweet using cached market data"""
+        try:
+            # Get formatter
+            formatter = TweetFormatters()
+            
+            # Get personality trait
+            trait = self.personality.get_trait()
+            
+            # Format tweet based on type
+            if tweet_type == 'trend':
+                return formatter.format_trend_insight(market_data['trend_data'], trait)
+            elif tweet_type == 'volume':
+                return formatter.format_volume_insight(market_data['volume_data'], trait)
+            else:
+                return formatter.format_personal(trait)
+                
+        except Exception as e:
+            print(f"Error formatting {tweet_type} tweet: {str(e)}")
+            return None
+            
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
-        """Generate tweet based on type"""
+        """Generate a tweet of the specified type"""
         try:
             # Get next tweet type from weights if not specified
             if not tweet_type:
                 tweet_type = self._get_next_tweet_type()
                 
-            # Generate tweet based on type
-            tweet = None
-            if tweet_type == 'trend':
-                # Generate trend analysis tweet
-                tweet = self.content_generator.generate('trend')
-                
-            elif tweet_type == 'volume':
-                # Generate volume analysis tweet
-                tweet = self.content_generator.generate('volume')
-                
-            elif tweet_type == 'personal':
-                # Generate personality-driven tweet
-                tweet = self.content_generator.generate('self_aware')
-                
+            # Get market data
+            market_data = self.get_market_data()
+            
+            # Format tweet
+            tweet = self.format_tweet(tweet_type, market_data)
+            
             # Update state
             if tweet:
+                self.state['last_strategy'] = tweet_type
                 self.state['last_tweet_time'] = datetime.now()
                 self.state['tweets_today'] += 1
-                self.state['last_strategy'] = tweet_type
+                
+                # Reset used tokens daily
+                today = datetime.now().date()
+                if today > self.state['last_reset']:
+                    self.state['used_tokens'].clear()
+                    self.state['last_reset'] = today
                 
             return tweet
             
         except Exception as e:
-            print(f"Error generating tweet: {e}")
+            print(f"Error generating {tweet_type} tweet: {str(e)}")
             return None
-
+            
     def engage_with_community(self) -> Optional[str]:
         """Generate a community engagement tweet"""
         try:
-            # Use personality-driven content for engagement
-            tweet = self.content_generator.generate('self_aware')
-            if tweet:
-                return tweet
-            return None
+            return self.content_generator.generate('self_aware')
         except Exception as e:
             print(f"Error generating engagement tweet: {str(e)}")
             return None

@@ -12,6 +12,7 @@ from twitter.bot import AIGamingBot
 from elion.content.generator import ContentGenerator
 from elion.personality import PersonalityManager
 import json
+import sys
 
 def test_personal_tweets(llm):
     """Test ELAI's personal tweet generation"""
@@ -57,52 +58,114 @@ def test_market_tweets():
     logger = logging.getLogger(__name__)
     logger.info("Testing market tweet generation...")
     
-    # Load API key
+    # Load API key and initialize LLM
     load_dotenv()
     api_key = os.getenv('CRYPTORANK_API_KEY')
     if not api_key:
         logger.error("CRYPTORANK_API_KEY not found")
         return
+        
+    llm = MetaLlamaComponent(
+        api_key=os.getenv('AI_ACCESS_TOKEN'),
+        api_base=os.getenv('AI_API_URL')
+    )
     
-    # Test trend strategy
-    logger.info("\nTesting Trend Strategy:")
-    from strategies.trend_strategy import TrendStrategy
-    trend = TrendStrategy(api_key)
-    trend_result = trend.analyze()
-    print("\nTrend Analysis Result:")
-    print(json.dumps(trend_result, indent=2))
+    # Initialize ELAI
+    elion = Elion(llm=llm)
     
-    # Format trend tweet
-    from strategies.trend_strategy import format_twitter_output
-    if trend_result.get('trend_tokens'):
-        trend_tokens = [(1, {'symbol': t.split()[0][1:], 
-                           'price': 0.0,
-                           'price_change': float(t.split()[1].rstrip('%')),
-                           'volume': 1e6}) for t in trend_result['trend_tokens']]
-        trend_tweet = format_twitter_output(trend_tokens)
-        print("\nTrend Tweet:")
-        print("-" * 40)
-        print(trend_tweet)
-        print("-" * 40)
-        print(f"Character count: {len(trend_tweet)}")
-    else:
-        print("\nNo trend tokens found")
+    # Test trend tweets
+    logger.info("\nTesting Trend Tweets:")
+    print("-" * 50)
     
-    # Test volume strategy
-    logger.info("\nTesting Volume Strategy:")
-    from strategies.volume_strategy import test_volume_strategy
-    volume_result = test_volume_strategy()
-    print("\nVolume Analysis Result:")
-    print(volume_result)
+    # Get market data once
+    market_data = elion.get_market_data()
     
-    logger.info("Market tests completed")
+    for i in range(3):
+        tweet = elion.format_tweet('trend', market_data)
+        if tweet:
+            print(f"\nTrend Tweet {i+1}:")
+            print(tweet)
+            print(f"Length: {len(tweet)} chars")
+            print("-" * 50)
+        else:
+            print(f"\nNo trend tweet generated (attempt {i+1})")
+            
+    # Test volume tweets
+    logger.info("\nTesting Volume Tweets:")
+    print("-" * 50)
+    
+    # Reuse market data
+    for i in range(3):
+        tweet = elion.format_tweet('volume', market_data)
+        if tweet:
+            print(f"\nVolume Tweet {i+1}:")
+            print(tweet)
+            print(f"Length: {len(tweet)} chars")
+            print("-" * 50)
+        else:
+            print(f"\nNo volume tweet generated (attempt {i+1})")
+            
+    # Write results to file
+    with open('market_tweet_results.txt', 'w', encoding='utf-8') as f:
+        f.write("Market Tweet Test Results\n")
+        f.write("=" * 50 + "\n\n")
+        
+        # Test trend tweets
+        f.write("Trend Tweets:\n")
+        f.write("-" * 30 + "\n")
+        for i in range(3):
+            tweet = elion.format_tweet('trend', market_data)
+            if tweet:
+                f.write(f"\nTweet {i+1}:\n")
+                f.write(tweet + "\n")
+                f.write(f"Length: {len(tweet)} chars\n")
+                f.write("-" * 30 + "\n")
+            else:
+                f.write(f"\nNo trend tweet generated (attempt {i+1})\n")
+                
+        # Test volume tweets
+        f.write("\nVolume Tweets:\n")
+        f.write("-" * 30 + "\n")
+        for i in range(3):
+            tweet = elion.format_tweet('volume', market_data)
+            if tweet:
+                f.write(f"\nTweet {i+1}:\n")
+                f.write(tweet + "\n")
+                f.write(f"Length: {len(tweet)} chars\n")
+                f.write("-" * 30 + "\n")
+            else:
+                f.write(f"\nNo volume tweet generated (attempt {i+1})\n")
+                
+    logger.info("Market tests completed. Results written to market_tweet_results.txt")
+
+def test_llm():
+    """Test LLM functionality"""
+    logger = logging.getLogger(__name__)
+    logger.info("Testing LLM...")
+    
+    # Initialize LLM
+    llm = MetaLlamaComponent(
+        api_key=os.getenv('AI_ACCESS_TOKEN'),
+        api_base=os.getenv('AI_API_URL')
+    )
+    
+    # Simple test prompt
+    test_prompt = "What's your analysis of the current crypto market? Keep it under 100 characters."
+    
+    try:
+        response = llm.generate(test_prompt)
+        logger.info(f"\nLLM Test Response:\n{response}\n")
+        return True
+    except Exception as e:
+        logger.error(f"LLM test failed: {e}")
+        return False
 
 def main():
     """Main entry point"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='ELAI Twitter Bot')
     parser.add_argument('--test', action='store_true', help='Run tests only')
-    parser.add_argument('--test-type', choices=['personal', 'market'], help='Type of test to run')
+    parser.add_argument('--test-type', type=str, choices=['personal', 'market', 'llm'], help='Type of test to run')
     args = parser.parse_args()
     
     # Configure logging
@@ -124,6 +187,8 @@ def main():
                 ))
             elif args.test_type == 'market':
                 test_market_tweets()
+            elif args.test_type == 'llm':
+                test_llm()
             else:
                 # Run both by default
                 test_personal_tweets(MetaLlamaComponent(
@@ -131,6 +196,7 @@ def main():
                     api_base=os.getenv('AI_API_URL')
                 ))
                 test_market_tweets()
+                test_llm()
         else:
             # Initialize Elion and run bot
             elai = Elion(MetaLlamaComponent(
