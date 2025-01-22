@@ -6,22 +6,29 @@ import random
 import logging
 import schedule
 from datetime import datetime, timedelta
+import sys
+
+# Add parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Initialize logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('tweet_activity.log'),
+        logging.StreamHandler(sys.stdout)  # Add console output
+    ]
+)
+
+logger = logging.getLogger(__name__)
+logger.info("Starting Twitter bot...")
 
 from custom_llm import MetaLlamaComponent
 from twitter.api_client import TwitterAPI
 from twitter.rate_limiter import RateLimiter
 from twitter.history_manager import TweetHistory
 from elion.elion import Elion
-
-# Initialize logging
-logging.basicConfig(
-    filename='tweet_activity.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-logger = logging.getLogger(__name__)
 
 class AIGamingBot:
     def __init__(self):
@@ -162,11 +169,11 @@ class AIGamingBot:
 
     def _setup_schedule(self):
         """Set up the tweet schedule"""
-        # Schedule first tweet in 2 minutes to allow for startup
-        schedule.every(2).minutes.do(self.run_cycle).tag('tweets')
-        logger.info("First tweet scheduled in 2 minutes")
+        # Schedule tweets every 30 minutes
+        schedule.every(30).minutes.do(self.run_cycle).tag('tweets')
+        logger.info("Tweet schedule set to every 30 minutes")
         
-        # Schedule daily cleanup only
+        # Schedule daily cleanup
         schedule.every().day.at("00:00").do(self._cleanup_cache)
 
     def _enter_recovery_mode(self):
@@ -258,12 +265,23 @@ class AIGamingBot:
         try:
             logger.info("Starting bot...")
             
+            # Schedule first tweet
+            self._schedule_next_tweet()
+            
+            # Run scheduler
             while True:
                 schedule.run_pending()
-                time.sleep(60)
+                time.sleep(1)
                 
         except KeyboardInterrupt:
             logger.info("\nBot stopped by user")
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             raise
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    bot = AIGamingBot()
+    bot.run()

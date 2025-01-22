@@ -8,6 +8,7 @@ import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 import datetime
+import time
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -258,13 +259,13 @@ def filter_tokens_by_volume(tokens, min_volume_mcap_ratio=0.1):
     filtered_tokens.sort(key=lambda x: x[0], reverse=True)
     return filtered_tokens
 
-def find_volume_anomalies(tokens, limit=3):
+def find_volume_anomalies(tokens, limit=5):
     """Find tokens with unusual volume patterns"""
-    # Use shared filtering function
+    # Use shared filtering function with higher threshold for anomalies
     anomalies = filter_tokens_by_volume(tokens, min_volume_mcap_ratio=1.0)
     return anomalies[:limit]
 
-def find_volume_spikes(tokens, limit=5):
+def find_volume_spikes(tokens, limit=10):
     """Find tokens with sudden volume increases"""
     # Calculate volume spike scores
     spikes = []
@@ -293,7 +294,7 @@ def find_volume_spikes(tokens, limit=5):
     
     # Sort by spike score
     spikes.sort(key=lambda x: x[0], reverse=True)
-    return spikes[:limit]
+    return spikes[:limit]  # Return more potential spikes
 
 def calculate_volume_score(token: Dict) -> float:
     """Calculate volume-based score (0-100) with strict criteria"""
@@ -342,6 +343,7 @@ class VolumeStrategy:
         """Initialize strategy with optional LLM for enhanced insights"""
         self.api_key = api_key
         self.llm = llm
+        self.recent_tokens = set()  # Track recently posted tokens
         
     def get_volume_insight(self, volume: float, mcap: float, price_change: float, symbol: str = None) -> str:
         """Generate insight based on volume and price action"""
@@ -405,11 +407,36 @@ class VolumeStrategy:
             # Find volume spikes and anomalies
             spikes = find_volume_spikes(tokens)
             anomalies = find_volume_anomalies(tokens)
-
+            
+            # Filter out recently posted tokens
+            filtered_spikes = []
+            for spike in spikes:
+                symbol = spike[1]['symbol']
+                if symbol not in self.recent_tokens:
+                    filtered_spikes.append(spike)
+                    self.recent_tokens.add(symbol)
+                    if len(filtered_spikes) >= 2:  # Only take up to 2 spikes
+                        break
+            
+            filtered_anomalies = []
+            for anomaly in anomalies:
+                symbol = anomaly[1]['symbol']
+                if symbol not in self.recent_tokens:
+                    filtered_anomalies.append(anomaly)
+                    self.recent_tokens.add(symbol)
+                    if len(filtered_anomalies) >= 1:  # Only take 1 anomaly
+                        break
+            
+            # Reset token history if we're not finding new tokens
+            if not filtered_spikes and not filtered_anomalies:
+                print("Resetting token history to allow rotation")
+                self.recent_tokens.clear()
+                return self.analyze()
+            
             # Format data for tweet generation
             return {
-                'spikes': spikes,
-                'anomalies': anomalies,
+                'spikes': filtered_spikes,
+                'anomalies': filtered_anomalies,
                 'insight': get_elai_insight(tokens) if tokens else None
             }
 
@@ -556,11 +583,11 @@ def format_twitter_output(spikes: list, anomalies: list) -> str:
     tweet = ""
     shown_symbols = set()  # Track which symbols we've shown
     
-    # First add volume anomalies
-    for ratio, token in anomalies:
+    # Helper function to format token info
+    def format_token_section(token, ratio, is_anomaly=False):
         symbol = token['symbol']
         if symbol in shown_symbols:
-            continue
+            return ""
             
         direction = "🟢" if token['price_change'] > 0 else "🔴"
         price = float(token['price'])
@@ -573,12 +600,24 @@ def format_twitter_output(spikes: list, anomalies: list) -> str:
         section += f"📊 Vol: ${volume:.1f}M\n"
         section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
         
-        if len(tweet + section) < 280:
+        return section
+    
+    # First add volume anomalies
+    for ratio, token in anomalies:
+        section = format_token_section(token, ratio, is_anomaly=True)
+        if section and len(tweet + section) < 280:
             tweet += section
-            shown_symbols.add(symbol)
+            shown_symbols.add(token['symbol'])
+            
+    # Then add volume spikes
+    for ratio, token in spikes:
+        section = format_token_section(token, ratio)
+        if section and len(tweet + section) < 280:
+            tweet += section
+            shown_symbols.add(token['symbol'])
             
     # Add ELAI's insight at the bottom
-    insight = get_elai_insight(anomalies)
+    insight = get_elai_insight(anomalies + spikes)
     if len(tweet + "\n" + insight) < 280:
         tweet += "\n" + insight
             
@@ -610,36 +649,74 @@ def get_movement_description(change: float) -> str:
 
 def test_volume_strategy():
     """Test the volume-based sorting strategy"""
-    # Initialize API
+    from dotenv import load_dotenv
     load_dotenv()
+    
+    print("\nTesting Volume Strategy...")
     api_key = os.getenv('CRYPTORANK_API_KEY')
-    api = CryptoRankAPI(api_key)
     
-    print("\nTesting CryptoRank V2 API...")
-    tokens = api.get_tokens()
-    
-    if not tokens:
-        print("❌ Failed to get tokens from API")
-        return None
+    if not api_key:
+        print("Error: No API key found in environment")
+        return
         
-    print("✅ API connection successful")
-    print(f"Found {len(tokens)} active currencies\n")
+    strategy = VolumeStrategy(api_key)
     
-    # Find volume anomalies and spikes
-    anomalies = find_volume_anomalies(tokens)
-    spikes = find_volume_spikes(tokens)
+    # Test 1: First Analysis
+    print("\nFirst Volume Post:")
+    print("-" * 50)
+    result1 = strategy.analyze()
+    if result1:
+        print(f"Found {len(result1['spikes'])} spikes and {len(result1['anomalies'])} anomalies")
+        print("\nTokens in this batch:")
+        for spike in result1['spikes']:
+            print(f"Spike: {spike[1]['symbol']}")
+        for anomaly in result1['anomalies']:
+            print(f"Anomaly: {anomaly[1]['symbol']}")
+            
+        print("\nTweet Content:")
+        print(format_twitter_output(result1['spikes'], result1['anomalies']))
+    else:
+        print("No results from first analysis")
     
-    # Format for Twitter
-    tweet = format_twitter_output(spikes, anomalies)
+    # Test 2: Second Analysis
+    print("\nSecond Volume Post:")
+    print("-" * 50)
+    result2 = strategy.analyze()
+    if result2:
+        print(f"Found {len(result2['spikes'])} spikes and {len(result2['anomalies'])} anomalies")
+        print("\nTokens in this batch:")
+        for spike in result2['spikes']:
+            print(f"Spike: {spike[1]['symbol']}")
+        for anomaly in result2['anomalies']:
+            print(f"Anomaly: {anomaly[1]['symbol']}")
+            
+        print("\nTweet Content:")
+        print(format_twitter_output(result2['spikes'], result2['anomalies']))
+    else:
+        print("No results from second analysis")
+        
+    # Test 3: Third Analysis
+    print("\nThird Volume Post:")
+    print("-" * 50)
+    print(f"Token history size before: {len(strategy.recent_tokens)}")
+    result3 = strategy.analyze()
+    print(f"Token history size after: {len(strategy.recent_tokens)}")
     
-    # Print for testing
-    print("\nTWEET OUTPUT:")
-    print("-" * 40)
-    print(tweet)
-    print("-" * 40)
-    print(f"Character count: {len(tweet)}")
-    
-    return tweet
+    if result3:
+        print(f"Found {len(result3['spikes'])} spikes and {len(result3['anomalies'])} anomalies")
+        print("\nTokens in this batch:")
+        for spike in result3['spikes']:
+            print(f"Spike: {spike[1]['symbol']}")
+        for anomaly in result3['anomalies']:
+            print(f"Anomaly: {anomaly[1]['symbol']}")
+            
+        print("\nTweet Content:")
+        print(format_twitter_output(result3['spikes'], result3['anomalies']))
+    else:
+        print("No results from third analysis")
+            
+    print("\nVolume Strategy Test Complete")
 
 if __name__ == "__main__":
-    test_volume_strategy()
+    print("Warning: This is a module and should not be run directly.")
+    print("Use the bot's main.py instead.")
