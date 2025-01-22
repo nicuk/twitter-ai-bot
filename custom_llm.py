@@ -6,6 +6,9 @@ import json
 import requests
 import os
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MetaLlamaComponent:
     """Custom LLM component for Meta-Llama"""
@@ -17,12 +20,22 @@ class MetaLlamaComponent:
         self.api_base = api_base or os.getenv('AI_API_URL')
         self.model = os.getenv('AI_MODEL_NAME', 'Meta-Llama-3.3-70B-Instruct')
         
-        # Initialize session
+        # Initialize session with longer timeouts
         self.session = requests.Session()
         self.session.headers.update({
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json'
         })
+        
+        # Set longer timeouts
+        adapter = requests.adapters.HTTPAdapter(
+            max_retries=3,
+            pool_connections=10,
+            pool_maxsize=10
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+        
         self.display_name = "Meta-Llama"
 
     def generate(self, prompt: str, max_tokens: int = 300, system_message: str = None) -> str:
@@ -40,16 +53,18 @@ class MetaLlamaComponent:
                 "stream": False  # Use non-streaming mode
             }
             
-            # Make API request
+            logger.info(f"Making API request to: {self.api_base}")
+            
+            # Make API request with longer timeout
             response = self.session.post(
                 self.api_base,
                 json=data,
-                timeout=30
+                timeout=(10, 60)  # (connect timeout, read timeout)
             )
             
             # Check for HTTP errors (200 or 201 are valid)
             if response.status_code not in [200, 201]:
-                print(f"API Error: {response.status_code} - {response.text}")
+                logger.error(f"API Error: {response.status_code} - {response.text}")
                 return None
             
             # Parse response
@@ -70,24 +85,24 @@ class MetaLlamaComponent:
                         return delta['content'].strip()
                     
                     # Try text (completion format)
-                    text = choice.get('text', '')
-                    if text:
-                        return text.strip()
-                    
-                    # Try raw text between quotes
-                    raw = str(choice)
-                    text_match = re.search(r'"([^"]{50,})"', raw)
-                    if text_match:
-                        return text_match.group(1).strip()
-            
-            except Exception as e:
-                print(f"Failed to parse response: {str(e)}")
-                print(f"Response text: {response.text}")
-            
+                    if 'text' in choice:
+                        return choice['text'].strip()
+                        
+                logger.error(f"Unexpected API response format: {data}")
+                return None
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse API response: {response.text}")
+                return None
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"API request timed out after 60 seconds")
             return None
-            
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Connection error: {e}")
+            return None
         except Exception as e:
-            print(f"API Error: {str(e)}")
+            logger.error(f"Unexpected error: {e}")
             return None
 
     def __call__(self, prompt: str, **kwargs) -> str:

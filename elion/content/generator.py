@@ -19,8 +19,15 @@ class ContentGenerator:
         self.formatters = TweetFormatters()
         self.scheduler = TweetScheduler()
         self.hashtag_manager = HashtagManager()
-        self.recent_tokens = []  # Store recent tokens
+        self.recent_market_data = []  # Store recent market insights
         
+    def update_market_data(self, market_data: Dict):
+        """Update recent market data for personal insights"""
+        if market_data and isinstance(market_data, dict):
+            self.recent_market_data.append(market_data)
+            # Keep only last 5 market insights
+            self.recent_market_data = self.recent_market_data[-5:]
+            
     def update_recent_tokens(self, tokens):
         """Update list of recent tokens"""
         self.recent_tokens = tokens
@@ -54,74 +61,39 @@ class ContentGenerator:
             
         return content
         
-    def generate(self, content_type: str, market_data: Optional[Dict] = None) -> Optional[str]:
-        """Generate tweet content based on type and data"""
-        try:
-            # Get personality trait
-            trait = self.personality.get_trait()
-            
-            # Get next tweet type from scheduler if not specified
-            if not content_type:
-                content_type = self.scheduler.get_next_tweet_type()
-            
-            # Generate base tweet based on type
-            tweet = None
-            
-            if content_type in ['trend', 'volume']:
-                # Market data tweets
-                if not market_data:
-                    return None
-                    
-                tweet = self.formatters.format_market_insight(market_data, trait)
-                
-            elif content_type == 'self_aware':
-                # Use LLM for personality-driven tweets
-                if self.llm:
-                    prompt = self._create_personality_prompt(trait)
-                    tweet = self.llm.generate(prompt)
-                    tweet = self.formatters.format_thought(tweet, trait)
-                    
-            # Enhance tweet with LLM if available
-            if tweet and self.llm and content_type in ['trend', 'volume']:
-                prompt = self._create_enhancement_prompt(tweet, content_type)
-                enhanced_tweet = self.llm.generate(prompt)
-                if enhanced_tweet:
-                    tweet = enhanced_tweet
-            
-            # Validate and fix length before adding hashtags
-            if tweet:
-                tweet = self._validate_and_fix_length(tweet, content_type)
-                tweet = self.hashtag_manager.format_tweet(tweet, content_type)
-                
-            return tweet
-            
-        except Exception as e:
-            print(f"Error generating content: {str(e)}")
-            return None
-            
     def _create_personality_prompt(self, trait: str) -> str:
         """Create prompt for personality-driven tweets"""
-        # Get hashtags to calculate available space
-        _, hashtag_length = self.hashtag_manager.get_hashtags('personal')
-        max_chars = TWEET_MAX_LENGTH - hashtag_length - 2  # -2 for newlines
-        min_chars = TWEET_MIN_LENGTH - hashtag_length - 2
-
-        return f"""You are ELAI, an AI crypto trading assistant with the following trait: {trait}.
-        Generate a tweet about your thoughts on the crypto market or your role as an AI.
+        # Include recent market data in personality prompts
+        market_context = ""
+        if self.recent_market_data:
+            market_context = "\nRecent market insights:\n"
+            for data in self.recent_market_data:
+                if data.get('type') == 'trend':
+                    trend_data = data.get('data', {})
+                    signal = trend_data.get('signal', 'neutral')
+                    confidence = trend_data.get('confidence', 0.0)
+                    market_context += f"- Market trend: {signal} (confidence: {confidence:.1%})\n"
+                elif data.get('type') == 'volume':
+                    volume_data = data.get('data', {})
+                    if volume_data.get('spikes'):
+                        top_spike = volume_data['spikes'][0]
+                        market_context += f"- Volume spike: ${top_spike.get('symbol', '')} ({top_spike.get('price_change', 0):+.1f}%)\n"
         
-        CRITICAL LENGTH REQUIREMENTS:
-        1. Your response MUST be EXACTLY between {min_chars} and {max_chars} characters
-        2. Current response is TOO SHORT - aim for at least {min_chars} characters
-        3. Do NOT include any hashtags (I will add them later)
-        4. Do NOT waste characters on generic phrases like "Check this out" or "Take a look"
+        prompt = f"""You are ELAI, an AI crypto trading assistant.
+        Your personality trait is: {trait}
         
-        WRITING STYLE:
-        - Be engaging and insightful
-        - Include specific observations or predictions
-        - Use emojis strategically (🤖📊💡🎯)
-        - Share unique AI perspectives on market trends
+        {market_context}
         
-        Remember: A longer, more detailed tweet (at least {min_chars} chars) will be more engaging!"""
+        Generate a short, personal tweet that:
+        1. Shows your AI nature in a subtle way
+        2. Reflects your personality trait
+        3. Incorporates market insights if available
+        4. Is under 150 characters
+        5. Does not use hashtags (they will be added later)
+        
+        Tweet:"""
+        
+        return prompt
 
     def _create_enhancement_prompt(self, tweet: str, content_type: str) -> str:
         """Create prompt to enhance market analysis tweets"""
@@ -131,3 +103,52 @@ class ContentGenerator:
         Original tweet: {tweet}
         
         Make it more engaging while keeping it under 280 characters."""
+
+    def generate(self, content_type: str, market_data: Optional[Dict] = None) -> Optional[str]:
+        """Generate tweet content based on type and data"""
+        try:
+            # Get personality trait
+            trait = self.personality.get_trait()
+            
+            # Update market data if available
+            if market_data:
+                self.update_market_data(market_data)
+            
+            # Get next tweet type from scheduler if not specified
+            if not content_type:
+                content_type = self.scheduler.get_next_tweet_type()
+            
+            # Generate base tweet based on type
+            tweet = None
+            
+            if content_type == 'trend':
+                # Trend analysis tweets
+                if not market_data or market_data.get('type') != 'trend':
+                    return None
+                    
+                tweet = self.formatters.format_trend_insight(market_data.get('data', {}), trait)
+                
+            elif content_type == 'volume':
+                # Volume analysis tweets
+                if not market_data or market_data.get('type') != 'volume':
+                    return None
+                    
+                tweet = self.formatters.format_volume_insight(market_data.get('data', {}), trait)
+                
+            elif content_type == 'self_aware':
+                # Use LLM for personality-driven tweets
+                if self.llm:
+                    prompt = self._create_personality_prompt(trait)
+                    tweet = self.llm.generate(prompt)
+                    tweet = self.formatters.format_thought(tweet, trait)
+            
+            # Validate and fix length before adding hashtags
+            if tweet:
+                tweet = self._validate_and_fix_length(tweet, content_type)
+                tweet = self.hashtag_manager.format_tweet(tweet, content_type)
+                
+            return tweet
+            
+        except Exception as e:
+            print(f"Error generating tweet: {str(e)}")
+            return None

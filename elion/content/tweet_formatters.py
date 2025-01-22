@@ -81,3 +81,25 @@ class TweetFormatters:
         emoji = random.choice(self.emojis)
         insight = random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
+
+    def format_volume_insight(self, market_data: Dict, trait: str) -> str:
+        """Format volume insight tweet with personality"""
+        # Get volume spikes and anomalies
+        spikes = market_data.get('spikes', [])
+        anomalies = market_data.get('anomalies', [])
+        
+        # Use VolumeStrategy's format_twitter_output
+        from strategies.volume_strategy import format_twitter_output
+        return format_twitter_output(spikes, anomalies)
+
+    def format_trend_insight(self, market_data: Dict, trait: str) -> str:
+        """Format trend insight tweet with personality"""
+        # Get trend tokens
+        trend_tokens = market_data.get('trend_tokens', [])
+        
+        # Use TrendStrategy's format_twitter_output
+        from strategies.trend_strategy import format_twitter_output
+        return format_twitter_output([(1, {'symbol': t.split()[0][1:], 
+                                         'price': 0.0,
+                                         'price_change': float(t.split()[1].rstrip('%')),
+                                         'volume': 1e6}) for t in trend_tokens])

@@ -1,6 +1,7 @@
 """Tweet history management"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+
 import json
 import logging
 
@@ -35,3 +36,11 @@ class TweetHistory:
             if tweet.get('id') == tweet_id:
                 tweet['metrics'] = metrics
                 break
+                
+    def cleanup_old_tweets(self, days: int = 7) -> None:
+        """Remove tweets older than specified days"""
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        self.tweets = [
+            tweet for tweet in self.tweets
+            if datetime.fromisoformat(tweet['timestamp']) > cutoff
+        ]

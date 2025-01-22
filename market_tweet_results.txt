@@ -1,9 +1,101 @@
+Market Tweet Test Results
+==================================================
 
-================================================================================
-TREND TWEET TEST
-================================================================================
+Trend Tweets:
+------------------------------
 
+Tweet 1:
+🚨 Market Movers Alert! 🚨
 
-Test Tweet 1:
-----------------------------------------
+🟢 $VTHO: +38.8% surging
+🟢 $BUZZ: +30.8% surging
+🟢 $pippin: +21.1% surging
+🟢 $swarms: +18.6% surging
+🟢 $ZEREBRO: +18.5% surging
 
+ELAI: Bulls are charging! Keep an eye on these gems 💎
+Length: 207 chars
+------------------------------
+
+Tweet 2:
+🚨 Market Movers Alert! 🚨
+
+🟢 $VTHO: +38.8% surging
+🟢 $BUZZ: +30.8% surging
+🟢 $pippin: +21.1% surging
+🟢 $swarms: +18.6% surging
+🟢 $ZEREBRO: +18.5% surging
+
+ELAI: Bulls are charging! Keep an eye on these gems 💎
+Length: 207 chars
+------------------------------
+
+Tweet 3:
+🚨 Market Movers Alert! 🚨
+
+🟢 $VTHO: +38.8% surging
+🟢 $BUZZ: +30.8% surging
+🟢 $pippin: +21.1% surging
+🟢 $swarms: +18.6% surging
+🟢 $ZEREBRO: +18.5% surging
+
+ELAI: Bulls are charging! Keep an eye on these gems 💎
+Length: 207 chars
+------------------------------
+
+Volume Tweets:
+------------------------------
+
+Tweet 1:
+🟢 $VTHO DETECTED!
+💰 $0.0085 🚀 Surging
+📊 Vol: $3011.1M
+🎯 V/MC: 413.4%
+🟢 $SOLV DETECTED!
+💰 $0.0818 📈 Rising
+📊 Vol: $180.9M
+🎯 V/MC: 149.2%
+🔴 $SONIC DETECTED!
+💰 $0.5480 ➡️ Stable
+📊 Vol: $259.8M
+🎯 V/MC: 131.7%
+
+ELAI: Volume rising with price... watching closely 👀
+Length: 258 chars
+------------------------------
+
+Tweet 2:
+🟢 $VTHO DETECTED!
+💰 $0.0085 🚀 Surging
+📊 Vol: $3011.1M
+🎯 V/MC: 413.4%
+🟢 $SOLV DETECTED!
+💰 $0.0818 📈 Rising
+📊 Vol: $180.9M
+🎯 V/MC: 149.2%
+🔴 $SONIC DETECTED!
+💰 $0.5480 ➡️ Stable
+📊 Vol: $259.8M
+🎯 V/MC: 131.7%
+
+ELAI: Volume rising with price... watching closely 👀
+Length: 258 chars
+------------------------------
+
+Tweet 3:
+🟢 $VTHO DETECTED!
+💰 $0.0085 🚀 Surging
+📊 Vol: $3011.1M
+🎯 V/MC: 413.4%
+🟢 $SOLV DETECTED!
+💰 $0.0818 📈 Rising
+📊 Vol: $180.9M
+🎯 V/MC: 149.2%
+🔴 $SONIC DETECTED!
+💰 $0.5480 ➡️ Stable
+📊 Vol: $259.8M
+🎯 V/MC: 131.7%
+
+ELAI: Volume rising with price... watching closely 👀
+Length: 258 chars
+------------------------------
