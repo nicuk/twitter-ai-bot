@@ -83,18 +83,24 @@ class Elion:
     
     def get_market_data(self) -> Dict:
         """Get market data from strategies"""
-        # Initialize strategies
-        trend = TrendStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
-        volume = VolumeStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
-        
-        # Get market data
-        trend_data = trend.analyze()
-        volume_data = volume.analyze()
-        
-        return {
-            'trend_data': trend_data,
-            'volume_data': volume_data
-        }
+        try:
+            # Get trend data
+            trend_data = self.trend_strategy.analyze()
+            if trend_data:
+                self.state['trend_tokens'] = trend_data.get('trend_tokens', [])
+
+            # Get volume data
+            volume_data = self.volume_strategy.analyze()
+            if volume_data:
+                self.state['volume_tokens'] = volume_data.get('volume_tokens', [])
+
+            return {
+                'trend_data': {'trend_tokens': self.state['trend_tokens']},
+                'volume_data': {'spikes': volume_data.get('spikes', []), 'anomalies': volume_data.get('anomalies', [])}
+            }
+        except Exception as e:
+            print(f"Error getting market data: {str(e)}")
+            return {'trend_data': {}, 'volume_data': {}}
         
     def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
         """Format a tweet using cached market data"""
@@ -124,12 +130,20 @@ class Elion:
             if not tweet_type:
                 tweet_type = self._get_next_tweet_type()
                 
-            # Get market data
-            market_data = self.get_market_data()
-            
-            # Format tweet
-            tweet = self.format_tweet(tweet_type, market_data)
-            
+            # Generate tweet based on type
+            tweet = None
+            if tweet_type == 'trend':
+                trend_data = self.trend_strategy.analyze()
+                if trend_data:
+                    tweet = trend_data.get('tweet')  # Trend strategy formats its own tweet
+            elif tweet_type == 'volume':
+                volume_data = self.volume_strategy.analyze()
+                if volume_data:
+                    tweet = volume_data.get('tweet')  # Volume strategy formats its own tweet
+            else:
+                # Personal tweets still use the formatter
+                tweet = self.content_generator.generate('self_aware')
+                
             # Update state
             if tweet:
                 self.state['last_strategy'] = tweet_type
