@@ -169,13 +169,12 @@ class AIGamingBot:
 
     def _setup_schedule(self):
         """Set up the tweet schedule"""
-        # Schedule tweets every 30 minutes
-        schedule.every(30).minutes.do(self.run_cycle).tag('tweets')
-        logger.info("Tweet schedule set to every 30 minutes")
-        
-        # Schedule daily cleanup
+        # Schedule daily cleanup at midnight UTC
         schedule.every().day.at("00:00").do(self._cleanup_cache)
-
+        
+        # Schedule first tweet based on market hours
+        self._schedule_next_tweet()
+        
     def _enter_recovery_mode(self):
         """Enter recovery mode when too many errors occur"""
         logger.info("Entering recovery mode...")
@@ -264,9 +263,6 @@ class AIGamingBot:
         """Main bot loop"""
         try:
             logger.info("Starting bot...")
-            
-            # Schedule first tweet
-            self._schedule_next_tweet()
             
             # Run scheduler
             while True:
