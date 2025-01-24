@@ -65,88 +65,70 @@ def test_market_tweets():
         api_base=os.getenv('AI_API_URL')
     )
     
-    # Initialize ELAI and bot
+    # Initialize ELAI
     elion = Elion(llm=llm)
-    bot = AIGamingBot()
     
-    # Test scheduling logic
-    logger.info("\nTesting Tweet Scheduling:")
-    print("-" * 50)
-    
-    # Current time is in Asian market hours
-    current_hour = datetime.now().hour
-    print(f"\nCurrent time: {current_hour}:00 UTC")
-    
-    # Get next category 5 times to see distribution
-    print("\nTesting next 5 tweet categories:")
-    for i in range(5):
-        category = bot._get_next_category()
-        print(f"Tweet {i+1}: {category}")
-    
-    # Test trend tweets
-    logger.info("\nTesting Trend Tweets:")
-    print("-" * 50)
-    
-    # Get market data once
-    market_data = elion.get_market_data()
-    
-    for i in range(3):
-        tweet = elion.format_tweet('trend', market_data)
-        if tweet:
-            print(f"\nTrend Tweet {i+1}:")
-            print(tweet)
-            print(f"Length: {len(tweet)} chars")
-            print("-" * 50)
-        else:
-            print(f"\nNo trend tweet generated (attempt {i+1})")
-            
-    # Test volume tweets
-    logger.info("\nTesting Volume Tweets:")
-    print("-" * 50)
-    
-    # Reuse market data
-    for i in range(3):
-        tweet = elion.format_tweet('volume', market_data)
-        if tweet:
-            print(f"\nVolume Tweet {i+1}:")
-            print(tweet)
-            print(f"Length: {len(tweet)} chars")
-            print("-" * 50)
-        else:
-            print(f"\nNo volume tweet generated (attempt {i+1})")
-            
-    # Write results to file
+    # Write results to file in real-time
     with open('market_tweet_results.txt', 'w', encoding='utf-8') as f:
         f.write("Market Tweet Test Results\n")
-        f.write("=" * 50 + "\n\n")
+        f.write("=" * 80 + "\n\n")
         
         # Test trend tweets
+        logger.info("\nTesting Trend Tweets:")
         f.write("Trend Tweets:\n")
-        f.write("-" * 30 + "\n")
-        for i in range(3):
-            tweet = elion.format_tweet('trend', market_data)
+        f.write("-" * 50 + "\n")
+        
+        for i in range(2):
+            f.write(f"\nTrend Tweet Test {i+1}:\n")
+            tweet = elion.generate_tweet('trend')
             if tweet:
-                f.write(f"\nTweet {i+1}:\n")
                 f.write(tweet + "\n")
                 f.write(f"Length: {len(tweet)} chars\n")
-                f.write("-" * 30 + "\n")
             else:
-                f.write(f"\nNo trend tweet generated (attempt {i+1})\n")
-                
+                f.write("No trend tweet generated\n")
+            f.write("-" * 50 + "\n")
+            f.flush()  # Force write to disk
+        
         # Test volume tweets
+        logger.info("\nTesting Volume Tweets:")
         f.write("\nVolume Tweets:\n")
-        f.write("-" * 30 + "\n")
-        for i in range(3):
-            tweet = elion.format_tweet('volume', market_data)
+        f.write("-" * 50 + "\n")
+        
+        for i in range(2):
+            f.write(f"\nVolume Tweet Test {i+1}:\n")
+            tweet = elion.generate_tweet('volume')
             if tweet:
-                f.write(f"\nTweet {i+1}:\n")
                 f.write(tweet + "\n")
                 f.write(f"Length: {len(tweet)} chars\n")
-                f.write("-" * 30 + "\n")
             else:
-                f.write(f"\nNo volume tweet generated (attempt {i+1})\n")
+                f.write("No volume tweet generated\n")
+            f.write("-" * 50 + "\n")
+            f.flush()  # Force write to disk
+        
+        # Test automatic rotation
+        logger.info("\nTesting Tweet Rotation:")
+        f.write("\nRotation Tweets:\n")
+        f.write("-" * 50 + "\n")
+        
+        for i in range(3):
+            f.write(f"\nRotation Test {i+1}:\n")
+            tweet = elion.generate_tweet()  # Let it choose type
+            if tweet:
+                f.write(f"Strategy: {elion.state['last_strategy']}\n")
+                f.write(tweet + "\n")
+                f.write(f"Length: {len(tweet)} chars\n")
+            else:
+                f.write("No tweet generated\n")
+            f.write("-" * 50 + "\n")
+            f.flush()  # Force write to disk
                 
     logger.info("Market tests completed. Results written to market_tweet_results.txt")
+    
+    # Display results from file
+    with open('market_tweet_results.txt', 'r', encoding='utf-8') as f:
+        print("\nTest Results:")
+        print("=" * 80)
+        print(f.read())
 
 def test_llm():
     """Test LLM functionality"""
@@ -170,12 +152,83 @@ def test_llm():
         logger.error(f"LLM test failed: {e}")
         return False
 
+def test_market_data_integration():
+    """Test market data storage, trend/volume strategies, and LLM integration"""
+    logger = logging.getLogger(__name__)
+    logger.info("Testing market data integration...")
+    
+    try:
+        # Initialize components
+        load_dotenv()
+        from elion.data_storage import DataStorage
+        from strategies.trend_strategy import TrendStrategy
+        from strategies.volume_strategy import VolumeStrategy
+        from elion.llm_integration import LLMIntegration
+        
+        storage = DataStorage()
+        trend_strategy = TrendStrategy(os.getenv('CRYPTORANK_API_KEY'))
+        volume_strategy = VolumeStrategy(os.getenv('CRYPTORANK_API_KEY'))
+        llm = LLMIntegration()
+        
+        # Step 1: Test trend strategy and market data storage
+        logger.info("\nStep 1: Testing trend strategy and market data storage...")
+        trend_data = trend_strategy.analyze()
+        if trend_data:
+            logger.info("✓ Trend strategy successfully fetched and analyzed data")
+            
+            # Check if data was stored
+            latest_market_data = storage.get_latest_market_data()
+            if latest_market_data:
+                logger.info("✓ Market data successfully stored in database")
+                btc_data = next((coin for coin in latest_market_data.get('coins', []) 
+                               if coin.get('symbol') == 'BTC'), None)
+                if btc_data:
+                    logger.info(f"✓ Current BTC Price: ${float(btc_data['price']):,.2f}")
+            else:
+                logger.error("✗ Failed to retrieve market data from storage")
+        else:
+            logger.error("✗ Trend strategy failed to fetch data")
+            
+        # Step 2: Test volume strategy
+        logger.info("\nStep 2: Testing volume strategy...")
+        volume_data = volume_strategy.analyze()
+        if volume_data:
+            logger.info("✓ Volume strategy successfully fetched and analyzed data")
+            if volume_data.get('spikes'):
+                logger.info(f"✓ Found {len(volume_data['spikes'])} volume spikes")
+        else:
+            logger.error("✗ Volume strategy failed to fetch data")
+            
+        # Step 3: Test LLM integration with market data
+        logger.info("\nStep 3: Testing LLM integration with market data...")
+        test_prompt = "What's the current Bitcoin price and market sentiment?"
+        response = llm.generate_response(
+            test_prompt,
+            context={'type': 'market_analysis'},
+            market_state={'state': 'analyzing'}
+        )
+        if response:
+            logger.info("✓ LLM successfully generated response with market data:")
+            logger.info(f"Prompt: {test_prompt}")
+            logger.info(f"Response: {response}")
+        else:
+            logger.error("✗ LLM failed to generate response")
+            
+        logger.info("\nMarket data integration test complete!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Market data integration test failed: {e}", exc_info=True)
+        return False
+
 def main():
     """Main entry point"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='ELAI Twitter Bot')
     parser.add_argument('--test', action='store_true', help='Run tests only')
-    parser.add_argument('--test-type', type=str, choices=['personal', 'market', 'llm'], help='Type of test to run')
+    parser.add_argument('--test-type', type=str, 
+                       choices=['personal', 'market', 'llm', 'market-data'], 
+                       help='Type of test to run')
     args = parser.parse_args()
     
     # Configure logging
@@ -199,14 +252,17 @@ def main():
                 test_market_tweets()
             elif args.test_type == 'llm':
                 test_llm()
+            elif args.test_type == 'market-data':
+                test_market_data_integration()
             else:
-                # Run both by default
+                # Run all tests by default
                 test_personal_tweets(MetaLlamaComponent(
                     api_key=os.getenv('AI_ACCESS_TOKEN'),
                     api_base=os.getenv('AI_API_URL')
                 ))
                 test_market_tweets()
                 test_llm()
+                test_market_data_integration()
         else:
             # Initialize Elion and run bot
             elai = Elion(MetaLlamaComponent(
