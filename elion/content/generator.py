@@ -66,18 +66,39 @@ class ContentGenerator:
         # Include recent market data in personality prompts
         market_context = ""
         if self.recent_market_data:
-            market_context = "\nRecent market insights:\n"
-            for data in self.recent_market_data:
-                if data.get('type') == 'trend':
-                    trend_data = data.get('data', {})
-                    signal = trend_data.get('signal', 'neutral')
-                    confidence = trend_data.get('confidence', 0.0)
-                    market_context += f"- Market trend: {signal} (confidence: {confidence:.1%})\n"
-                elif data.get('type') == 'volume':
-                    volume_data = data.get('data', {})
-                    if volume_data.get('spikes'):
-                        top_spike = volume_data['spikes'][0]
-                        market_context += f"- Volume spike: ${top_spike.get('symbol', '')} ({top_spike.get('price_change', 0):+.1f}%)\n"
+            market_context = "\nCurrent Market Data:\n"
+            
+            # Get latest market data
+            latest_data = self.recent_market_data[-1]
+            if latest_data and 'coins' in latest_data:
+                # Sort coins by market cap
+                sorted_coins = sorted(
+                    latest_data['coins'], 
+                    key=lambda x: float(x.get('marketCap', 0)), 
+                    reverse=True
+                )
+                
+                # Get top 5 coins
+                top_coins = sorted_coins[:5]
+                market_context += "\nTop Coins by Market Cap:\n"
+                for coin in top_coins:
+                    price = float(coin.get('price', 0))
+                    change_24h = float(coin.get('priceChange24h', 0))
+                    symbol = coin.get('symbol', '')
+                    market_context += f"${symbol}: ${price:,.2f} ({change_24h:+.1f}%)\n"
+                
+                # Get top volume movers
+                volume_sorted = sorted(
+                    latest_data['coins'], 
+                    key=lambda x: float(x.get('volume24h', 0)), 
+                    reverse=True
+                )
+                top_volume = volume_sorted[:3]
+                market_context += "\nHighest Volume:\n"
+                for coin in top_volume:
+                    symbol = coin.get('symbol', '')
+                    volume = float(coin.get('volume24h', 0)) / 1_000_000  # Convert to millions
+                    market_context += f"${symbol}: ${volume:,.0f}M volume\n"
         
         prompt = f"""You are ELAI, an AI crypto trading assistant.
         Your personality trait is: {trait}
@@ -87,11 +108,11 @@ class ContentGenerator:
         Generate a detailed, insightful tweet that:
         1. Shows your AI nature in a subtle way
         2. Reflects your personality trait
-        3. Incorporates market insights if available
+        3. References specific coins and their actual prices/movements from the market data
         4. Is between 260-275 characters (VERY IMPORTANT - use most of this space)
         5. Does not use hashtags (they will be added later)
-        6. Provides deep analysis and clear explanations
-        7. Uses natural, conversational language
+        6. Uses natural, conversational language
+        7. Maintains your confident AI personality while using real data
         
         Tweet:"""
         

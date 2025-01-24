@@ -2,6 +2,7 @@
 
 import os
 import requests
+import time
 from typing import Dict, List, Any, Optional
 
 class CryptoRankAPI:
@@ -59,20 +60,51 @@ class CryptoRankAPI:
         else:
             print(f"❌ API connection failed: {data['error']}")
             
-    def _make_request(self, endpoint: str, params: Dict[str, Any] = None) -> requests.Response:
-        """Make HTTP request to API endpoint"""
+    def _make_request(self, endpoint: str, params: Dict = None) -> Optional[requests.Response]:
+        """Make API request with retries and error handling"""
         if not self.api_key:
-            return {'error': 'No API key provided'}
+            return None
             
         url = f"{self.base_url}/{endpoint}"
-        headers = {'X-Api-Key': self.api_key}
+        params = params or {}
+        params['api_key'] = self.api_key
         
-        try:
-            response = self.session.get(url, params=params, headers=headers)
-            return response
-        except Exception as e:
-            print(f"Error making request: {str(e)}")
-            return None
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, params=params, timeout=10)
+                
+                # Handle rate limits
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', retry_delay))
+                    print(f"Rate limited. Waiting {retry_after} seconds...")
+                    time.sleep(retry_after)
+                    continue
+                    
+                # Handle server errors
+                if response.status_code >= 500:
+                    if attempt < max_retries - 1:
+                        print(f"Server error {response.status_code}. Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        print(f"Failed after {max_retries} attempts. Server error: {response.status_code}")
+                        return None
+                        
+                return response
+                
+            except (requests.RequestException, ValueError) as e:
+                if attempt < max_retries - 1:
+                    print(f"Request failed: {str(e)}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    print(f"Failed after {max_retries} attempts. Error: {str(e)}")
+                    return None
+                    
+        return None
 
     def get_tokens(self, orderBy='volume24h', orderDirection='DESC') -> List[Dict]:
         """Get top 500 tokens from CryptoRank API"""

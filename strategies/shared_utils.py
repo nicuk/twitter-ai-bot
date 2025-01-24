@@ -8,6 +8,19 @@ import requests
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dotenv import load_dotenv
+from datetime import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('market_data.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('market_data')
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -15,6 +28,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from strategies.cryptorank_client import CryptoRankAPI
+from elion.data_storage import DataStorage
 
 # Cache settings
 _token_cache = {}  # Dict to store different sorted results
@@ -217,7 +231,7 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
     cache_key = f"{sort_by}_{direction}"
     
     if _token_cache.get(cache_key) and current_time - _last_fetch_time < CACHE_DURATION:
-        print("Using cached token data")
+        logger.info("Using cached token data")
         return _token_cache[cache_key]
     
     # Add delay between API calls
@@ -225,6 +239,7 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
         time.sleep(2)
     
     try:
+        logger.info("Fetching fresh market data from CryptoRank API")
         # Build API URL
         base_url = "https://api.cryptorank.io/v2"
         endpoint = "/currencies"
@@ -233,70 +248,58 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
             'convert': 'USD',
             'status': 'active',
             'orderBy': sort_by if sort_by == 'volume24h' else 'percentChange.h24',
-            'orderDirection': direction,
-            'type': None,
-            'offset': None
+            'orderDirection': direction
         }
         
-        # Make API request with key in header
-        headers = {'X-Api-Key': api_key}
-        response = requests.get(f"{base_url}{endpoint}", params=params, headers=headers)
-        print(f"Response status: {response.status_code}")
+        # Add API key
+        if api_key:
+            params['api_key'] = api_key
+            
+        # Make request
+        response = requests.get(f"{base_url}{endpoint}", params=params)
         
         if response.status_code != 200:
-            print(f"Error fetching data: {response.text}")
-            print("Rate limit headers:", dict(response.headers))
+            logger.error(f"Error fetching tokens: {response.status_code}")
             return []
             
-        # Parse response
         data = response.json()
-        raw_tokens = data.get('data', [])
+        tokens = data.get('data', [])
         
-        # Format token data
-        formatted_tokens = []
-        for token in raw_tokens:
-            try:
-                # Calculate price change from high/low
-                high = float(token.get('high24h', 0))
-                low = float(token.get('low24h', 0))
-                current = float(token.get('price', 0))
-                
-                if high > 0 and low > 0:
-                    # Calculate price change as percentage from midpoint
-                    midpoint = (high + low) / 2
-                    price_change = ((current - midpoint) / midpoint) * 100
-                else:
-                    price_change = 0
-                
-                formatted_token = {
-                    'symbol': token.get('symbol', ''),
-                    'price': current,
-                    'priceChange24h': price_change,
-                    'volume24h': float(token.get('volume24h', 0)),
-                    'marketCap': float(token.get('marketCap', 0))
-                }
-                formatted_tokens.append(formatted_token)
-                
-                # Debug first few tokens
-                if len(formatted_tokens) <= 3:
-                    print(f"\n{formatted_token['symbol']}:")
-                    print(f"Price: ${formatted_token['price']:.4f}")
-                    print(f"Change: {formatted_token['priceChange24h']:.2f}%")
-                    print(f"Volume: ${formatted_token['volume24h']:,.0f}")
-                    print(f"Market Cap: ${formatted_token['marketCap']:,.0f}")
-                
-            except Exception as e:
-                print(f"Error formatting token {token.get('symbol')}: {str(e)}")
-                continue
-                
-        print(f"\nFound {len(formatted_tokens)} tokens")
-        
-        # Update cache with new data
-        _token_cache[cache_key] = formatted_tokens
+        if not tokens:
+            logger.warning("No tokens found in response")
+            return []
+            
+        # Store in database
+        try:
+            storage = DataStorage()
+            market_data = {
+                'coins': tokens,
+                'timestamp': datetime.utcnow().isoformat(),
+                'source': 'cryptorank',
+                'total_coins': len(tokens)
+            }
+            storage.store_market_data(market_data)
+            logger.info(f"Successfully stored market data for {len(tokens)} tokens")
+            
+            # Log some key metrics
+            btc_data = next((t for t in tokens if t['symbol'] == 'BTC'), None)
+            if btc_data:
+                logger.info(f"Current BTC Price: ${float(btc_data['price']):,.2f}")
+            
+        except Exception as e:
+            logger.error(f"Error storing market data: {e}")
+            
+        # Update cache
+        _token_cache[cache_key] = tokens
         _last_fetch_time = current_time
         
-        return formatted_tokens
+        # Print first N tokens if requested
+        if print_first > 0:
+            for token in tokens[:print_first]:
+                logger.info(f"{token['symbol']}: ${token['price']:.4f} | Vol: ${token['volume24h']:,.0f}")
+                
+        return tokens
         
     except Exception as e:
-        print(f"Error fetching tokens: {str(e)}")
+        logger.error(f"Error in fetch_tokens: {e}", exc_info=True)
         return []
