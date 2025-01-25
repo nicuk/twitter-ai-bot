@@ -30,7 +30,7 @@ class HashtagManager:
             "#NFTs",
             "#Web3",
             "#Alts",
-            "#Meme"
+            
         ]
         
         self.TRADING_HASHTAGS = [

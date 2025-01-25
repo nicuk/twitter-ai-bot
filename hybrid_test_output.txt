@@ -1,0 +1,35 @@
+🤖 Testing Elai's Hybrid Strategy (Template vs LLM)
+
+Using environment variables for API configuration
+
+1a. Morning Scan (Template):
+🤖 AI Morning Scan
+
+Key patterns forming:
+• L1s showing strength
+• Volume rising across majors
+• Multiple setups aligning
+
+Starting small, winning big 🎯
+
+1b. Morning Scan (LLM):
+Good morning, traders! ☀️ Positive start to the day: L1s are strong, volume's up across major cryptos, and multiple bullish technical setups are emerging. BTC at $42,000 (+2.5%), ETH at $2,800 (+3.2%), and SOL surging to $95 (+8.5%)! Interesting developments to watch.
+
+2a. Technical Analysis (Template):
+['💫 Found a beautiful setup on SOL!\n\nBuy zone: $95\nTarget: $105\nSL: $90\n\nR/R: 1:2.0 ✨', 'Ideal setup during this phase:']
+
+2b. Technical Analysis (LLM):
+$SOL bullish setup forming. Entry zone: $95, Target: $105, Stop Loss: $90 (Risk/Reward 2.0). Strong volume (+150%) & positive OI (+25%) confirm the trend. Trend score: 90/100. 👍
+
+3a. Success Post (Template):
+💎 Another win for the AI! BTC nailed it
+
++5.0% in 6 hours
+Entry $40000 → $42000
+Volume: 85% increase
+
+Like if you're in profit 💰
+
+3b. Success Post (LLM):
+🚀 Another successful BTC trade executed! $40,000 entry to $42,000 peak in just 6 hours. +5% gain & +85% volume increase. Efficient & profitable. 📈
+

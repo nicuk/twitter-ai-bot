@@ -133,29 +133,45 @@ class Elion:
             # Get tweet based on type
             tweet = None
             if tweet_type == 'trend':
-                trend_data = self.trend_strategy.analyze()
-                if trend_data:
-                    tweet = format_trend_output(trend_data['trend_tokens'])
-            elif tweet_type == 'volume':
-                volume_data = self.volume_strategy.analyze()
-                if volume_data:
-                    tweet = format_volume_output(volume_data['spikes'], volume_data.get('anomalies', []))
-            else:
-                # Personal tweets use the content generator
+                try:
+                    trend_data = self.trend_strategy.analyze()
+                    if trend_data and 'trend_tokens' in trend_data:
+                        tweet = format_trend_output(trend_data['trend_tokens'])
+                    if not tweet:
+                        print("Trend strategy failed to generate tweet, trying volume strategy")
+                        tweet_type = 'volume'  # Fallback to volume
+                except Exception as e:
+                    print(f"Error in trend strategy: {str(e)}")
+                    tweet_type = 'volume'  # Fallback to volume
+                    
+            if tweet_type == 'volume':
+                try:
+                    volume_data = self.volume_strategy.analyze()
+                    if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
+                        tweet = format_volume_output(volume_data.get('spikes', []), volume_data.get('anomalies', []))
+                    if not tweet:
+                        print("Volume strategy failed to generate tweet, trying personal")
+                        tweet_type = 'personal'  # Fallback to personal
+                except Exception as e:
+                    print(f"Error in volume strategy: {str(e)}")
+                    tweet_type = 'personal'  # Fallback to personal
+                    
+            if tweet_type == 'personal':
                 tweet = self.content_generator.generate('self_aware')
                 
-            # Update state if tweet generated
+            # Only update state if tweet was successfully generated
             if tweet:
                 self.state['last_strategy'] = tweet_type
                 self.state['last_tweet_time'] = datetime.now()
                 self.state['tweets_today'] += 1
+                return tweet
                 
-            return tweet
-            
-        except Exception as e:
-            print(f"Error generating {tweet_type} tweet: {str(e)}")
             return None
-            
+                
+        except Exception as e:
+            print(f"Error generating tweet: {str(e)}")
+            return None
+
     def engage_with_community(self) -> Optional[str]:
         """Generate a community engagement tweet"""
         try:
