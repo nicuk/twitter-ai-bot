@@ -129,6 +129,7 @@ class AIGamingBot:
     def run(self):
         """Run the bot"""
         logger.info("Starting bot...")
+        last_minutes = None
         
         while True:
             try:
@@ -137,7 +138,11 @@ class AIGamingBot:
                 if next_job:
                     time_until = next_job - datetime.now()
                     minutes = int(time_until.total_seconds() / 60)
-                    logger.info(f"Next tweet scheduled in {minutes} minutes")
+                    
+                    # Only log if minutes changed or first run
+                    if minutes != last_minutes:
+                        logger.info(f"Next tweet scheduled in {minutes} minutes")
+                        last_minutes = minutes
                 
                 schedule.run_pending()
                 time.sleep(60)  # Check every minute
