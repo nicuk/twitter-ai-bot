@@ -3,6 +3,7 @@
 from datetime import datetime
 import json
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +83,16 @@ class RateLimiter:
                 json.dump(cache_data, f)
         except Exception as e:
             logger.error(f"Error saving rate limits: {e}")
+
+    def cleanup(self) -> None:
+        """Clean up old rate limit data"""
+        try:
+            # Reset to default limits
+            self.rate_limits = self.default_limits.copy()
+            
+            # Check if cache file exists and delete it
+            if os.path.exists(self.cache_file):
+                os.remove(self.cache_file)
+                logger.info("Rate limiter cache cleaned up")
+        except Exception as e:
+            logger.error(f"Error cleaning up rate limiter: {e}")

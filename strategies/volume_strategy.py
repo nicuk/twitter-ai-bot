@@ -9,6 +9,10 @@ from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 import datetime
 import time
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -248,8 +252,9 @@ def filter_tokens_by_volume(tokens, min_volume_mcap_ratio=0.1):
             volume = float(token_info['volume'])
             
             if mcap > 0:
-                ratio = volume / mcap
-                if ratio >= min_volume_mcap_ratio:  # More than 10% volume/mcap
+                ratio = (volume / mcap) * 100  # Convert to percentage
+                logger.info(f"Token: {symbol}, Volume: ${volume:,.2f}, MCap: ${mcap:,.2f}, V/MC: {ratio:.1f}%")
+                if ratio >= min_volume_mcap_ratio * 100:  # More than 10% volume/mcap
                     filtered_tokens.append((ratio, token_info))
                     seen_symbols.add(symbol)
         except Exception as e:
@@ -308,7 +313,7 @@ def calculate_volume_score(token: Dict) -> float:
             
         # Calculate volume/mcap ratio (0-50 points)
         ratio = volume / mcap
-        ratio_score = min(50, ratio * 100)
+        ratio_score = ratio * 100
         
         # Get price metrics
         price = float(token.get('price', 0) or 0)
@@ -593,7 +598,7 @@ def format_twitter_output(spikes: list, anomalies: list) -> str:
         price = float(token['price'])
         volume = float(token['volume'])/1e6  # Convert to millions
         movement = get_movement_description(token['price_change'])
-        vol_mcap = ratio * 100
+        vol_mcap = ratio  # ratio is already a percentage, don't multiply by 100 again
         
         section = f"{direction} ${symbol} DETECTED!\n"
         section += f"💰 ${price:.4f} {movement}\n"
