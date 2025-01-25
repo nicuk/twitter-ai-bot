@@ -1,18 +1,1 @@
-{
-  "rate_limits": {
-    "post": {
-      "daily_count": 0,
-      "monthly_count": 0,
-      "last_reset": "2025-01-17T00:00:00",
-      "monthly_reset": "2025-01-01T00:00:00",
-      "daily_limit": 17,
-      "monthly_limit": 100
-    },
-    "search": {
-      "daily_searches": 0,
-      "monthly_posts_pulled": 0,
-      "monthly_post_limit": 500000,
-      "last_search": null
-    }
-  }
-}
+{"post": {"daily_count": 1, "monthly_count": 1, "last_reset": "2025-01-22T00:00:00", "monthly_reset": "2025-01-01T00:00:00", "daily_limit": 17, "monthly_limit": 100}}

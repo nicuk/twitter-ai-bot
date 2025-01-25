@@ -7,6 +7,7 @@ import logging
 import schedule
 from datetime import datetime, timedelta
 import sys
+from logging.handlers import RotatingFileHandler
 
 # Add parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('tweet_activity.log'),
+        RotatingFileHandler('tweet_activity.log', maxBytes=5*1024*1024, backupCount=3),  # 5MB per file, keep 3 backup files
         logging.StreamHandler(sys.stdout)  # Add console output
     ]
 )
@@ -48,233 +49,104 @@ class AIGamingBot:
         # Initialize Elion
         logger.info("Initializing Elion...")
         model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
-        llm = MetaLlamaComponent(
-            api_key=os.getenv('AI_ACCESS_TOKEN'),
-            api_base=os.getenv('AI_API_URL')
-        )
-        self.elion = Elion(llm=llm)
-        logger.info("Elion initialized")
+        self.elion = Elion(model_name)
         
-        # Add post categories and their daily targets
-        self.post_categories = {
-            'trend': {'target': 7, 'count': 0},    # Market trend analysis
-            'volume': {'target': 6, 'count': 0},   # Volume analysis
-            'personal': {'target': 4, 'count': 0}  # Personality-driven tweets
-        }
+        # Schedule tweets
+        self._schedule_tweets()
         
-        # Set up tweet schedule
-        self._setup_schedule()
-    
-    def run_cycle(self):
-        """Run a single tweet cycle with retries"""
+    def _schedule_tweets(self):
+        """Schedule Elion's structured daily tweets"""
+        # 2 AI Mystique Posts
+        schedule.every().day.at("02:00").do(self.post_ai_mystique)  # Early market
+        schedule.every().day.at("10:00").do(self.post_ai_mystique)  # Mid-market
+        
+        # 3 Performance Posts
+        schedule.every().day.at("06:00").do(self.post_performance)  # Early performance
+        schedule.every().day.at("14:00").do(self.post_performance)  # Mid performance
+        schedule.every().day.at("18:00").do(self.post_performance)  # Late performance
+        
+        # 2 Summary Posts
+        schedule.every().day.at("20:00").do(self.post_summary)  # Evening summary
+        schedule.every().day.at("22:00").do(self.post_summary)  # Final summary
+        
+    def post_ai_mystique(self):
+        """Post AI mystique tweet"""
         try:
-            # Try each category until we get content
-            categories_to_try = ['trend', 'volume', 'personal']
-            content = None
-            category = None
+            # Get market data
+            market_data = self.elion.get_market_data()
             
-            # First try the next category from scheduler
-            next_category = self._get_next_category()
-            if next_category in categories_to_try:
-                categories_to_try.remove(next_category)
-                categories_to_try.insert(0, next_category)
-            
-            # Try each category until we get content
-            for cat in categories_to_try:
-                try:
-                    content = self.elion.generate_tweet(cat)
-                    if content:
-                        category = cat
-                        break
-                except Exception as e:
-                    logger.error(f"Error generating {cat} content: {e}")
-                    continue
-
+            # Generate mystique tweet
+            content = self.elion.content.generate_ai_mystique(market_data)
             if not content:
-                logger.warning("No content generated for any category")
+                logger.warning("Failed to generate AI mystique tweet")
                 return
-
-            # Try to post with retries
-            for attempt in range(self.max_retries):
-                try:
-                    result = self.api.create_tweet(text=content)
-                    if result:
-                        self.history.add_tweet(result)
-                        self.rate_limiter.update_counts()
-                        
-                        # Update category count
-                        self.post_categories[category]['count'] += 1
-                        
-                        # Log tweet activity
-                        logger.info(f"Posted {category} tweet at {datetime.now().strftime('%H:%M:%S UTC')}")
-                        
-                        # Reset retry count and schedule next
-                        self.retry_count = 0
-                        self._schedule_next_tweet()
-                        return
-                except Exception as e:
-                    if "rate limit" in str(e).lower():
-                        logger.error("Twitter API rate limit reached")
-                        return
-                    
-                    # For other errors, use shorter backoff
-                    wait_time = min(self.base_wait * (1.5 ** attempt), 15)  # Cap at 15 minutes
-                    logger.warning(f"Tweet failed, attempt {attempt + 1}/{self.max_retries}. Waiting {wait_time:.1f} minutes...")
-                    time.sleep(wait_time * 60)
-            
-            # All retries failed
-            self.retry_count += 1
-            if self.retry_count >= self.max_retries:
-                logger.error("All tweet retries failed. Entering recovery mode...")
-                self._enter_recovery_mode()
-            
-        except Exception as e:
-            logger.error(f"Error in tweet cycle: {e}")
-            self.retry_count += 1
-            if self.retry_count >= self.max_retries:
-                logger.error("Too many errors. Entering recovery mode...")
-                self._enter_recovery_mode()
-
-    def _get_next_category(self) -> str:
-        """Get the next category to post based on targets"""
-        hour = datetime.now().hour
-        
-        # Asian market hours (00:00-08:00 UTC)
-        if 0 <= hour < 8:
-            # Prioritize volume and trend tweets for Asian markets
-            for category in ['volume', 'trend']:
-                if self.post_categories[category]['count'] < self.post_categories[category]['target'] // 2:
-                    return category
-                    
-        # European/American market hours (08:00-16:00 UTC)
-        elif 8 <= hour < 16:
-            # Prioritize trend and volume tweets for EU/US markets
-            for category in ['trend', 'volume']:
-                if self.post_categories[category]['count'] < self.post_categories[category]['target']:
-                    return category
-        
-        # Evening hours (16:00-00:00 UTC)
-        else:
-            # Prioritize personal tweets and remaining market tweets
-            if self.post_categories['personal']['count'] < self.post_categories['personal']['target']:
-                return 'personal'
-            # Use remaining market tweets if any left
-            for category in ['trend', 'volume']:
-                if self.post_categories[category]['count'] < self.post_categories[category]['target']:
-                    return category
-                    
-        # If all targets met, pick random category
-        logger.info("All post targets met, picking random category")
-        return random.choice(list(self.post_categories.keys()))
-
-    def _setup_schedule(self):
-        """Set up the tweet schedule"""
-        # Schedule daily cleanup at midnight UTC
-        schedule.every().day.at("00:00").do(self._cleanup_cache)
-        
-        # Schedule first tweet based on market hours
-        self._schedule_next_tweet()
-        
-    def _enter_recovery_mode(self):
-        """Enter recovery mode when too many errors occur"""
-        logger.info("Entering recovery mode...")
-        
-        try:
-            # Clear all schedules
-            schedule.clear()
-            
-            # Wait for a longer period
-            recovery_wait = 30  # minutes
-            logger.info(f"Waiting {recovery_wait} minutes before resuming...")
-            time.sleep(recovery_wait * 60)
-            
-            # Reset retry count
-            self.retry_count = 0
-            
-            # Restart scheduling
-            self._setup_schedule()
-            logger.info("Recovered successfully!")
-            
-        except Exception as e:
-            logger.error(f"Error in recovery mode: {e}")
-
-    def _schedule_next_tweet(self):
-        """Schedule the next tweet"""
-        schedule.clear('tweets')
-        
-        hour = datetime.now().hour
-        
-        # Asian market hours (00:00-08:00 UTC)
-        if 0 <= hour < 8:
-            # 6 tweets in 8 hours (focusing on Asian market activity)
-            base_interval = (8 * 60) / 6  # ~80 minutes
-            next_interval = base_interval + random.uniform(-10, 10)
-            market_period = 'Asian'
-            
-        # European/American market hours (08:00-16:00 UTC)
-        elif 8 <= hour < 16:
-            # 7 tweets in 8 hours (peak trading activity)
-            base_interval = (8 * 60) / 7  # ~69 minutes
-            next_interval = base_interval + random.uniform(-10, 10)
-            market_period = 'European/American'
-            
-        # Evening hours (16:00-00:00 UTC)
-        else:
-            # 4 tweets in 8 hours (mostly personal and analysis)
-            base_interval = (8 * 60) / 4  # ~120 minutes
-            next_interval = base_interval + random.uniform(-15, 15)
-            market_period = 'evening'
-        
-        # Schedule next tweet
-        schedule.every(next_interval).minutes.do(self.run_cycle).tag('tweets')
-        logger.info(f"Next tweet scheduled in {next_interval:.1f} minutes during {market_period} hours")
-
-    def check_responses(self):
-        """Check responses to recent tweets"""
-        try:
-            recent_tweets = self.history.get_recent_tweets()
-            for tweet in recent_tweets:
-                metrics = self.api.get_tweet(tweet['id'])
-                if metrics and metrics.data:
-                    self.history.update_metrics(
-                        tweet['id'], 
-                        metrics.data.public_metrics
-                    )
-        except Exception as e:
-            logger.error(f"Error checking responses: {e}")
-
-    def _cleanup_cache(self):
-        """Clean up old cache data and reset post counts"""
-        try:
-            # Clean up old tweets from history
-            self.history.cleanup_old_tweets()
-            
-            # Clean up rate limiter cache
-            self.rate_limiter.cleanup()
-            
-            # Reset post category counts
-            for category in self.post_categories:
-                self.post_categories[category]['count'] = 0
-            
-        except Exception as e:
-            logger.error(f"Error cleaning cache: {e}")
-
-    def run(self):
-        """Main bot loop"""
-        try:
-            logger.info("Starting bot...")
-            
-            # Run scheduler
-            while True:
-                schedule.run_pending()
-                time.sleep(1)
                 
-        except KeyboardInterrupt:
-            logger.info("\nBot stopped by user")
+            # Post tweet
+            self.api.post_tweet(content)
+            logger.info("Posted AI mystique tweet")
+            
         except Exception as e:
-            logger.error(f"Error in main loop: {e}")
-            raise
-
+            logger.error(f"Error posting AI mystique tweet: {e}")
+            
+    def post_performance(self):
+        """Post performance tweet"""
+        try:
+            # Get trade data
+            trade_data = self.elion.get_latest_trade()
+            if not trade_data:
+                logger.warning("No trade data available")
+                return
+                
+            # Generate performance tweet
+            content = self.elion.content.generate_performance_post(trade_data)
+            if not content:
+                logger.warning("Failed to generate performance tweet")
+                return
+                
+            # Post tweet
+            self.api.post_tweet(content)
+            logger.info("Posted performance tweet")
+            
+        except Exception as e:
+            logger.error(f"Error posting performance tweet: {e}")
+            
+    def post_summary(self):
+        """Post summary tweet"""
+        try:
+            # Generate summary tweet
+            content = self.elion.content.generate_summary_post()
+            if not content:
+                logger.warning("Failed to generate summary tweet")
+                return
+                
+            # Post tweet
+            self.api.post_tweet(content)
+            logger.info("Posted summary tweet")
+            
+        except Exception as e:
+            logger.error(f"Error posting summary tweet: {e}")
+            
+    def run(self):
+        """Run the bot"""
+        logger.info("Starting bot...")
+        
+        while True:
+            try:
+                schedule.run_pending()
+                time.sleep(60)  # Check every minute
+                
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                self.retry_count += 1
+                
+                if self.retry_count > self.max_retries:
+                    logger.error("Max retries exceeded. Stopping bot.")
+                    break
+                    
+                wait_time = self.base_wait * (2 ** self.retry_count)
+                logger.info(f"Waiting {wait_time} minutes before retry...")
+                time.sleep(wait_time * 60)
+                
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
