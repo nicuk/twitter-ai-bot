@@ -132,6 +132,13 @@ class AIGamingBot:
         
         while True:
             try:
+                # Get next scheduled job
+                next_job = schedule.next_run()
+                if next_job:
+                    time_until = next_job - datetime.now()
+                    minutes = int(time_until.total_seconds() / 60)
+                    logger.info(f"Next tweet scheduled in {minutes} minutes")
+                
                 schedule.run_pending()
                 time.sleep(60)  # Check every minute
                 

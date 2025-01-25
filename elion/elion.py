@@ -14,6 +14,7 @@ from elion.personality.traits import PersonalityManager
 from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy, format_twitter_output as format_trend_output
 from strategies.volume_strategy import VolumeStrategy, format_twitter_output as format_volume_output
+from strategies.portfolio_tracker import PortfolioTracker
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -25,11 +26,17 @@ class Elion:
         
         # Initialize components
         self.personality = PersonalityManager()
-        self.content_generator = ContentGenerator(self.personality, self.llm)
         
-        # Initialize market analyzers
-        self.trend_strategy = TrendStrategy(os.getenv('CRYPTORANK_API_KEY'))
-        self.volume_strategy = VolumeStrategy(os.getenv('CRYPTORANK_API_KEY'), llm=self.llm)
+        # Initialize market analyzers with API key
+        api_key = os.getenv('CRYPTORANK_API_KEY')
+        self.trend_strategy = TrendStrategy(api_key)
+        self.volume_strategy = VolumeStrategy(api_key, llm=self.llm)
+        
+        # Initialize portfolio tracker with real market data
+        self.portfolio = PortfolioTracker(initial_capital=100, api_key=api_key)
+        
+        # Initialize content generator with portfolio
+        self.content_generator = ContentGenerator(self.portfolio, self.llm)
         
         # Initialize state
         self.state = {
@@ -82,26 +89,62 @@ class Elion:
         return filtered if filtered else tokens  # Fall back to all tokens if all used
     
     def get_market_data(self) -> Dict:
-        """Get market data from strategies"""
+        """Get current market data from strategies"""
         try:
             # Get trend data
             trend_data = self.trend_strategy.analyze()
-            if trend_data:
-                self.state['trend_tokens'] = trend_data.get('trend_tokens', [])
-
+            if trend_data and 'tokens' in trend_data:
+                self.state['trend_tokens'] = trend_data['tokens']
+                
             # Get volume data
             volume_data = self.volume_strategy.analyze()
-            if volume_data:
-                self.state['volume_tokens'] = volume_data.get('volume_tokens', [])
-
-            return {
-                'trend_data': {'trend_tokens': self.state['trend_tokens']},
-                'volume_data': {'spikes': volume_data.get('spikes', []), 'anomalies': volume_data.get('anomalies', [])}
+            if volume_data and 'tokens' in volume_data:
+                self.state['volume_tokens'] = volume_data['tokens']
+                
+            # Combine data
+            market_data = {
+                'trend': trend_data if trend_data else {},
+                'volume': volume_data if volume_data else {},
+                'portfolio': self.portfolio.get_portfolio_stats()
             }
+            
+            return market_data
+            
         except Exception as e:
-            print(f"Error getting market data: {str(e)}")
-            return {'trend_data': {}, 'volume_data': {}}
-        
+            print(f"Error getting market data: {e}")
+            return {}
+            
+    def get_latest_trade(self) -> Optional[Dict]:
+        """Get latest trade data for performance posts"""
+        try:
+            # Find potential trade in trending tokens
+            for token in self.state['trend_tokens']:
+                symbol = token.get('symbol')
+                if not symbol or symbol in self.state['used_tokens']:
+                    continue
+                    
+                trade = self.portfolio.find_realistic_trade(symbol)
+                if trade:
+                    self.state['used_tokens'].add(symbol)
+                    return trade
+                    
+            # Try volume tokens if no trend trades found
+            for token in self.state['volume_tokens']:
+                symbol = token.get('symbol')
+                if not symbol or symbol in self.state['used_tokens']:
+                    continue
+                    
+                trade = self.portfolio.find_realistic_trade(symbol)
+                if trade:
+                    self.state['used_tokens'].add(symbol)
+                    return trade
+                    
+            return None
+            
+        except Exception as e:
+            print(f"Error getting latest trade: {e}")
+            return None
+            
     def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
         """Format a tweet using cached market data"""
         try:
@@ -113,14 +156,14 @@ class Elion:
             
             # Format tweet based on type
             if tweet_type == 'trend':
-                return formatter.format_trend_insight(market_data['trend_data'], trait)
+                return formatter.format_trend_insight(market_data['trend'], trait)
             elif tweet_type == 'volume':
-                return formatter.format_volume_insight(market_data['volume_data'], trait)
+                return formatter.format_volume_insight(market_data['volume'], trait)
             else:
                 return formatter.format_personal(trait)
                 
         except Exception as e:
-            print(f"Error formatting {tweet_type} tweet: {str(e)}")
+            print(f"Error formatting {tweet_type} tweet: {e}")
             return None
             
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
@@ -135,13 +178,13 @@ class Elion:
             if tweet_type == 'trend':
                 try:
                     trend_data = self.trend_strategy.analyze()
-                    if trend_data and 'trend_tokens' in trend_data:
-                        tweet = format_trend_output(trend_data['trend_tokens'])
+                    if trend_data and 'tokens' in trend_data:
+                        tweet = format_trend_output(trend_data['tokens'])
                     if not tweet:
                         print("Trend strategy failed to generate tweet, trying volume strategy")
                         tweet_type = 'volume'  # Fallback to volume
                 except Exception as e:
-                    print(f"Error in trend strategy: {str(e)}")
+                    print(f"Error in trend strategy: {e}")
                     tweet_type = 'volume'  # Fallback to volume
                     
             if tweet_type == 'volume':
@@ -153,7 +196,7 @@ class Elion:
                         print("Volume strategy failed to generate tweet, trying personal")
                         tweet_type = 'personal'  # Fallback to personal
                 except Exception as e:
-                    print(f"Error in volume strategy: {str(e)}")
+                    print(f"Error in volume strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
                     
             if tweet_type == 'personal':
@@ -169,7 +212,7 @@ class Elion:
             return None
                 
         except Exception as e:
-            print(f"Error generating tweet: {str(e)}")
+            print(f"Error generating tweet: {e}")
             return None
 
     def engage_with_community(self) -> Optional[str]:
@@ -177,5 +220,5 @@ class Elion:
         try:
             return self.content_generator.generate('self_aware')
         except Exception as e:
-            print(f"Error generating engagement tweet: {str(e)}")
+            print(f"Error generating engagement tweet: {e}")
             return None
