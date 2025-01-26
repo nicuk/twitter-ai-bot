@@ -53,11 +53,12 @@ class PythonREPLToolComponent(LCToolComponent):
     def post_tweet(self, tweet_content):
         """Post a tweet using the Twitter API"""
         try:
-            # Initialize Twitter API
-            api = TwitterAPI()
+            # Get existing TwitterAPI instance from bot
+            from twitter.bot import AIGamingBot
+            bot = AIGamingBot()
             
-            # Post tweet
-            response = api.create_tweet(tweet_content)
+            # Post tweet using bot's API instance
+            response = bot.api.create_tweet(tweet_content)
             if response:
                 logger.info("Successfully posted tweet")
                 return "Tweet posted successfully"
