@@ -261,10 +261,11 @@ class PortfolioTracker:
         with open(filename, 'w') as f:
             json.dump(state, f)
             
-    def load_state(self, state: Dict):
-        """Load portfolio state from a dictionary"""
-        if state:
-            try:
+    def load_state(self, filename: str = 'portfolio_state.json') -> None:
+        """Load portfolio state from file"""
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                state = json.load(f)
                 self.initial_capital = state['initial_capital']
                 self.current_capital = state['current_capital']
                 self.trades = state['trades']
@@ -272,17 +273,18 @@ class PortfolioTracker:
                 self.best_trade = state['best_trade']
                 self.start_date = state['start_date']
                 self.price_history = state.get('price_history', {})
-            except Exception as e:
-                print(f"Error loading state: {e}")
 
     def get_portfolio_stats(self) -> Dict:
         """Get current portfolio statistics"""
-        portfolio_stats = {
-            'initial_capital': self.initial_capital,
-            'current_capital': self.current_capital,
-            'total_trades': len(self.trades),
-            'daily_trades': len(self.daily_trades),
-            'best_trade': self.best_trade,
-            'start_date': self.start_date
-        }
-        return portfolio_stats
+        try:
+            return {
+                'initial_capital': self.initial_capital,
+                'current_capital': self.current_capital,
+                'total_trades': len(self.trades),
+                'daily_trades': len(self.daily_trades),
+                'best_trade': self.best_trade,
+                'start_date': self.start_date
+            }
+        except Exception as e:
+            print(f"Error getting portfolio stats: {e}")
+            return {}

@@ -24,11 +24,8 @@ class CryptoRankAPI:
         """Test V2 API connection"""
         params = {
             'limit': 500,
-            'category': None,
             'convert': 'USD',
-            'status': 'active',
-            'type': None,
-            'offset': None
+            'status': 'active'
         }
         
         print("\nTesting CryptoRank V2 API...")
@@ -48,18 +45,7 @@ class CryptoRankAPI:
             data = data.get('data', [])
             if data:
                 print(f"Found {len(data)} active currencies")
-                # Debug first token
-                if data:
-                    token = data[0]
-                    print("\nDebug: First token data:")
-                    print(f"Name: {token.get('name')}")
-                    print(f"Symbol: {token.get('symbol')}")
-                    print(f"Current Price: {token.get('price')}")
-                    print(f"24h Price: {token.get('price24h')}")
-                    print(f"Percent Change: {token.get('percentChange', {}).get('h24')}")
-        else:
-            print(f"❌ API connection failed: {data['error']}")
-            
+                
     def _make_request(self, endpoint: str, params: Dict = None) -> Optional[requests.Response]:
         """Make API request with retries and error handling"""
         if not self.api_key:
@@ -67,14 +53,14 @@ class CryptoRankAPI:
             
         url = f"{self.base_url}/{endpoint}"
         params = params or {}
-        params['api_key'] = self.api_key
+        headers = {'X-Api-Key': self.api_key}  # Use header instead of query param
         
         max_retries = 3
         retry_delay = 5  # seconds
         
         for attempt in range(max_retries):
             try:
-                response = self.session.get(url, params=params, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=10)
                 
                 # Handle rate limits
                 if response.status_code == 429:
@@ -99,32 +85,22 @@ class CryptoRankAPI:
                 if attempt < max_retries - 1:
                     print(f"Request failed: {str(e)}. Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
-                    continue
-                else:
-                    print(f"Failed after {max_retries} attempts. Error: {str(e)}")
-                    return None
-                    
+                continue
+                
         return None
-
+        
     def get_tokens(self, orderBy='volume24h', orderDirection='DESC') -> List[Dict]:
         """Get top 500 tokens from CryptoRank API"""
         params = {
             'limit': 500,
             'convert': 'USD',
             'status': 'active',
-            'orderBy': orderBy,
-            'orderDirection': orderDirection,
-            'type': None,
-            'offset': None
+            'orderBy': orderBy if orderBy == 'volume24h' else 'percentChange.h24',
+            'orderDirection': orderDirection
         }
         
         response = self._make_request('currencies', params)
-        if not response or not hasattr(response, 'status_code'):
-            print("Error: Invalid response from API")
-            return []
-            
-        if response.status_code != 200:
-            print(f"Error fetching tokens: {response.text}")
+        if not response or response.status_code != 200:
             return []
             
         data = response.json()

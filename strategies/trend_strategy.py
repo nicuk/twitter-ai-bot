@@ -20,7 +20,7 @@ from strategies.shared_utils import (
     is_likely_stablecoin,
     get_movement_description
 )
-from custom_llm import MetaLlamaComponent
+from llama import generate
 
 class TrendStrategy:
     """Analyzes market trends"""
@@ -33,13 +33,22 @@ class TrendStrategy:
         """Analyze current market trends"""
         try:
             # Get trending tokens
-            tokens = fetch_tokens(self.api_key, sort_by='priceChange24h', direction='DESC')
+            tokens = fetch_tokens(self.api_key, sort_by='priceChange24h', direction='DESC', limit=500)
             if not tokens:
                 print("No tokens found or error fetching tokens")
                 return {'signal': 'neutral', 'confidence': 0.0}
                 
             print("\nScanning for significant price moves (>5%):")
             print("-" * 50)
+            
+            # Debug: Show top 5 price movements
+            print("\nTop 5 price movements:")
+            for i, token in enumerate(tokens[:5]):
+                price_change = float(token.get('priceChange24h', 0))
+                volume = float(token.get('volume24h', 0))
+                mcap = float(token.get('marketCap', 0))
+                vol_mcap_ratio = (volume/mcap*100) if mcap > 0 else 0
+                print(f"{token['symbol']}: {price_change:+.1f}% (Vol/MCap: {vol_mcap_ratio:.1f}%)")
             
             # Format trend info
             trend_info = []
@@ -95,13 +104,7 @@ class TrendStrategy:
             # Format trend tokens for tweet
             trend_tokens = []
             for mover in big_movers[:6]:  # Try top 6 movers
-                token_info = {
-                    'symbol': mover['symbol'],
-                    'price_change': mover['price_change'],
-                    'volume': mover['volume'],
-                    'mcap': mover['mcap']
-                }
-                trend_tokens.append((abs(mover['price_change']), token_info))
+                trend_tokens.append(f"${mover['symbol']} {mover['price_change']:+.1f}% (${mover['mcap']/1e6:.1f}M) 🚀")
             
             return {
                 'signal': signal,
@@ -340,37 +343,48 @@ Total Volume: ${total_volume/1e6:.1f}M
 Focus on the most interesting metric or pattern. Add 1-2 relevant emojis."""
 
     # Generate insight using Llama
-    insight = MetaLlamaComponent().generate(prompt, max_tokens=60)
+    insight = generate(prompt, max_tokens=60)
     return insight if insight else "Market moves catching attention... 👀"
 
 def format_twitter_output(trend_tokens: list) -> str:
     """Format output for Twitter"""
-    tweet = "🚨 Market Movers Alert! 🚨\n\n"
+    tweet = ""
     shown_symbols = set()
     
-    for _, token in trend_tokens[:5]:  # Show top 5 movers
+    for _, token in trend_tokens:
         symbol = token['symbol']
         if symbol in shown_symbols:
             continue
             
         direction = "🟢" if token['price_change'] > 0 else "🔴"
+        price = float(token['price'])
+        
+        # Format price with dynamic decimals based on size
+        if price < 0.0001:
+            price_str = f"${price:.8f}"
+        elif price < 0.01:
+            price_str = f"${price:.6f}"
+        elif price < 1:
+            price_str = f"${price:.4f}"
+        else:
+            price_str = f"${price:.4f}"
+            
+        volume = float(token['volume'])/1e6  # Convert to millions
         price_change = float(token['price_change'])
         movement = get_movement_description(price_change)
         
-        section = f"{direction} ${symbol}: {price_change:+.1f}% {movement}\n"
+        section = f"{direction} ${symbol} TRENDING!\n"
+        section += f"💰 {price_str} {movement}\n"
+        section += f"📊 Vol: ${volume:.1f}M\n"
         
         if len(tweet + section) < 280:
             tweet += section
             shown_symbols.add(symbol)
             
     # Add ELAI's insight
-    if price_change > 0:
-        insight = "\nELAI: Bulls are charging! Keep an eye on these gems 💎"
-    else:
-        insight = "\nELAI: Dips detected! Time to do your research 🔍"
-        
-    if len(tweet + insight) < 280:
-        tweet += insight
+    insight = get_trend_insight(trend_tokens)
+    if len(tweet + "\n" + insight) < 280:
+        tweet += "\n" + insight
             
     return tweet.strip()
 
@@ -418,26 +432,11 @@ def test_analyze():
     """Test just the analyze function"""
     load_dotenv()
     api_key = os.getenv('CRYPTORANK_API_KEY')
-    if not api_key:
-        print("Error: CRYPTORANK_API_KEY not found in environment")
-        return
-        
+    
+    print("\nTesting just analyze()...")
     strategy = TrendStrategy(api_key)
     result = strategy.analyze()
     print("\nAnalyze result:", json.dumps(result, indent=2))
-    
-    # Format tweet from trend tokens if present
-    trend_tokens = result.get('trend_tokens', [])
-    if trend_tokens:
-        print("\nTWEET OUTPUT:")
-        print("-" * 40)
-        tweet = format_twitter_output(trend_tokens)
-        print(tweet)
-        print("-" * 40)
-        print(f"Character count: {len(tweet)}")
-    else:
-        print("\nNo trend tokens found in result")
 
 if __name__ == "__main__":
-    print("Warning: This is a module and should not be run directly.")
-    print("Use the bot's main.py instead.")
+    test_analyze()

@@ -6,7 +6,7 @@ import os
 import logging
 import argparse
 from dotenv import load_dotenv
-from custom_llm import MetaLlamaComponent
+from custom_llm import GeminiComponent
 from elion.elion import Elion
 from twitter.bot import AIGamingBot
 from elion.content.generator import ContentGenerator
@@ -20,33 +20,77 @@ def test_personal_tweets(llm):
     logger = logging.getLogger(__name__)
     logger.info("Testing personal tweet generation...")
     
+    # Load environment variables
+    load_dotenv()
+    
     # Initialize components
-    personality = PersonalityManager()
-    generator = ContentGenerator(personality, llm)
+    from strategies.portfolio_tracker import PortfolioTracker
+    portfolio = PortfolioTracker(initial_capital=100, api_key=os.getenv('CRYPTORANK_API_KEY'))
+    generator = ContentGenerator(portfolio, llm)
     
     print("\nTesting Personal Tweets:\n")
     
-    # Generate 5 test tweets
-    for i in range(5):
-        tweet = generator.generate('self_aware')
-        print(f"\nTweet {i+1}:\n{tweet}")
-        print(f"Length: {len(tweet)} chars\n")
+    # Sample market data for testing
+    market_data = {
+        'tokens': [
+            {
+                'symbol': 'BTC',
+                'price': 42000,
+                'volume': 1000000000,
+                'market_cap': 800000000000
+            },
+            {
+                'symbol': 'ETH',
+                'price': 2500,
+                'volume': 500000000,
+                'market_cap': 300000000000
+            }
+        ]
+    }
+    
+    # Generate test tweets using different methods
+    methods = [
+        ('AI Mystique', generator.generate_ai_mystique, {'market_data': market_data}),
+        ('Performance', generator.generate_performance_post, {'trade_data': {
+            'symbol': 'BTC',
+            'entry': 40000,
+            'exit': 42000,
+            'gain': 5,
+            'timeframe': '2d'
+        }}),
+        ('Daily Summary', generator.generate_summary_post, {}),
+        ('First Day Mystique', generator.generate_first_day_mystique, {}),
+        ('First Day Intro', generator.generate_first_day_intro, {})
+    ]
+    
+    # Test each type of personal tweet
+    for name, method, args in methods:
+        print(f"\n{name} Tweet:")
+        try:
+            tweet = method(**args)
+            print(tweet)
+            print(f"Length: {len(tweet)} chars\n")
+            print("-" * 40)
+        except Exception as e:
+            print(f"Error generating {name} tweet: {e}\n")
+            print("-" * 40)
+            
+    # Write results to file
+    with open('personal_tweet_results.txt', 'w', encoding='utf-8') as f:
+        f.write("Personal Tweet Test Results\n")
+        f.write("=" * 80 + "\n\n")
         
-    # Open file for writing test results
-    with open('tweet_test_results.txt', 'w', encoding='utf-8') as f:
-        # Generate 5 test tweets
-        for i in range(5):
-            tweet = generator.generate('self_aware')
+        for name, method, args in methods:
+            try:
+                tweet = method(**args)
+                f.write(f"{name} Tweet:\n")
+                f.write("-" * 40 + "\n")
+                f.write(tweet + "\n")
+                f.write(f"Length: {len(tweet)} chars\n\n")
+            except Exception as e:
+                f.write(f"Error generating {name} tweet: {e}\n\n")
             
-            # Write to file with clear formatting
-            header = f"\n{'='*80}\nTest Tweet {i+1}:\n{'-'*40}\n\n"
-            content_section = f"Content:\n{'-'*20}\n{tweet}\n[Length: {len(tweet)} chars]\n\n"
-            
-            # Write to file
-            f.write(header)
-            f.write(content_section)
-            
-    logger.info("Test results written to tweet_test_results.txt")
+    logger.info("Test results written to personal_tweet_results.txt")
 
 def test_market_tweets():
     """Test market-based tweet generation"""
@@ -60,7 +104,7 @@ def test_market_tweets():
         logger.error("CRYPTORANK_API_KEY not found")
         return
         
-    llm = MetaLlamaComponent(
+    llm = GeminiComponent(
         api_key=os.getenv('AI_ACCESS_TOKEN'),
         api_base=os.getenv('AI_API_URL')
     )
@@ -136,7 +180,7 @@ def test_llm():
     logger.info("Testing LLM...")
     
     # Initialize LLM
-    llm = MetaLlamaComponent(
+    llm = GeminiComponent(
         api_key=os.getenv('AI_ACCESS_TOKEN'),
         api_base=os.getenv('AI_API_URL')
     )
@@ -244,7 +288,7 @@ def main():
         if args.test:
             # Run tests based on type
             if args.test_type == 'personal':
-                test_personal_tweets(MetaLlamaComponent(
+                test_personal_tweets(GeminiComponent(
                     api_key=os.getenv('AI_ACCESS_TOKEN'),
                     api_base=os.getenv('AI_API_URL')
                 ))
@@ -256,7 +300,7 @@ def main():
                 test_market_data_integration()
             else:
                 # Run all tests by default
-                test_personal_tweets(MetaLlamaComponent(
+                test_personal_tweets(GeminiComponent(
                     api_key=os.getenv('AI_ACCESS_TOKEN'),
                     api_base=os.getenv('AI_API_URL')
                 ))
@@ -265,7 +309,7 @@ def main():
                 test_market_data_integration()
         else:
             # Initialize Elion and run bot
-            elai = Elion(MetaLlamaComponent(
+            elai = Elion(GeminiComponent(
                 api_key=os.getenv('AI_ACCESS_TOKEN'),
                 api_base=os.getenv('AI_API_URL')
             ))
