@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info("Starting Twitter bot...")
 
-from custom_llm import MetaLlamaComponent
+from custom_llm import GeminiComponent
 from twitter.api_client import TwitterAPI
 from twitter.rate_limiter import RateLimiter
 from twitter.history_manager import TweetHistory
@@ -48,27 +48,48 @@ class AIGamingBot:
         
         # Initialize Elion
         logger.info("Initializing Elion...")
-        model_name = os.getenv('AI_MODEL_NAME', 'meta-llama-3.3-70b-instruct')
-        self.elion = Elion(model_name)
+        self.elion = Elion(GeminiComponent(
+            api_key=os.getenv('AI_ACCESS_TOKEN'),
+            api_base=os.getenv('AI_API_URL')
+        ))
         
-        # Schedule tweets
+        # Setup tweet schedule
+        logger.info("Setting up tweet schedule...")
         self._schedule_tweets()
-        
+
     def _schedule_tweets(self):
         """Schedule Elion's structured daily tweets"""
-        # 2 AI Mystique Posts
-        schedule.every().day.at("02:00").do(self.post_ai_mystique)  # Early market
-        schedule.every().day.at("10:00").do(self.post_ai_mystique)  # Mid-market
+        # === Asian Trading Session (00:00-08:00 UTC) ===
         
-        # 3 Performance Posts
-        schedule.every().day.at("06:00").do(self.post_performance)  # Early performance
-        schedule.every().day.at("14:00").do(self.post_performance)  # Mid performance
-        schedule.every().day.at("18:00").do(self.post_performance)  # Late performance
+        # Early Asian Market (00:00-03:00)
+        schedule.every().day.at("00:00").do(self.post_trend)    # Opening trends
+        schedule.every().day.at("01:30").do(self.post_volume)   # Early volume check
+        schedule.every().day.at("02:30").do(self.post_ai_mystique)  # AI insights
         
-        # 2 Summary Posts
-        schedule.every().day.at("20:00").do(self.post_summary)  # Evening summary
-        schedule.every().day.at("22:00").do(self.post_summary)  # Final summary
+        # Main Asian Market (03:00-08:00)
+        schedule.every().day.at("04:00").do(self.post_trend)    # Mid-Asian trends
+        schedule.every().day.at("05:30").do(self.post_volume)   # Volume analysis
+        schedule.every().day.at("06:00").do(self.post_performance)  # Performance update
+        schedule.every().day.at("07:30").do(self.post_trend)    # Late Asian trends
+
+        # === US Trading Session (11:00-21:00 UTC) ===
         
+        # Pre-market (11:00-14:30)
+        schedule.every().day.at("11:30").do(self.post_trend)    # Pre-market trends
+        schedule.every().day.at("12:30").do(self.post_volume)   # Pre-market volume
+        schedule.every().day.at("13:30").do(self.post_ai_mystique)  # Market insights
+        
+        # Main US Session (14:30-21:00)
+        schedule.every().day.at("15:00").do(self.post_performance)  # Mid-day performance
+        schedule.every().day.at("16:30").do(self.post_trend)    # Mid-session trends
+        schedule.every().day.at("17:30").do(self.post_volume)   # Volume check
+        schedule.every().day.at("18:30").do(self.post_performance)  # Performance update
+        schedule.every().day.at("19:30").do(self.post_trend)    # Late session trends
+        
+        # Evening wrap-up (20:00-23:00)
+        schedule.every().day.at("20:30").do(self.post_summary)    # Evening summary
+        schedule.every().day.at("22:30").do(self.post_summary)    # Final summary
+
     def post_ai_mystique(self):
         """Post AI mystique tweet"""
         try:
@@ -126,39 +147,53 @@ class AIGamingBot:
         except Exception as e:
             logger.error(f"Error posting summary tweet: {e}")
             
+    def post_volume(self):
+        """Post volume analysis tweet"""
+        try:
+            # Generate volume tweet using Elion's volume strategy
+            tweet = self.elion.generate_tweet('volume')
+            if tweet:
+                # Post tweet
+                self.api.post_tweet(tweet)
+                logger.info("Posted volume analysis tweet")
+            else:
+                logger.warning("Failed to generate volume tweet")
+        except Exception as e:
+            logger.error(f"Error posting volume tweet: {e}")
+
+    def post_trend(self):
+        """Post trend analysis tweet"""
+        try:
+            # Generate trend tweet using Elion's trend strategy
+            tweet = self.elion.generate_tweet('trend')
+            if tweet:
+                # Post tweet
+                self.api.post_tweet(tweet)
+                logger.info("Posted trend analysis tweet")
+            else:
+                logger.warning("Failed to generate trend tweet")
+        except Exception as e:
+            logger.error(f"Error posting trend tweet: {e}")
+
     def run(self):
         """Run the bot"""
         logger.info("Starting bot...")
-        last_minutes = None
         
         while True:
             try:
-                # Get next scheduled job
+                schedule.run_pending()
                 next_job = schedule.next_run()
                 if next_job:
-                    time_until = next_job - datetime.now()
-                    minutes = int(time_until.total_seconds() / 60)
-                    
-                    # Only log if minutes changed or first run
-                    if minutes != last_minutes:
-                        logger.info(f"Next tweet scheduled in {minutes} minutes")
-                        last_minutes = minutes
-                
-                schedule.run_pending()
-                time.sleep(60)  # Check every minute
-                
+                    minutes_until = int((next_job - datetime.now()).total_seconds() / 60)
+                    logger.info(f"Next tweet in {minutes_until} minutes")
+                time.sleep(60)
+            except KeyboardInterrupt:
+                logger.info("Bot stopped by user")
+                break
             except Exception as e:
-                logger.error(f"Error in main loop: {e}")
-                self.retry_count += 1
-                
-                if self.retry_count > self.max_retries:
-                    logger.error("Max retries exceeded. Stopping bot.")
-                    break
-                    
-                wait_time = self.base_wait * (2 ** self.retry_count)
-                logger.info(f"Waiting {wait_time} minutes before retry...")
-                time.sleep(wait_time * 60)
-                
+                logger.error(f"Error: {e}")
+                time.sleep(60)
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
