@@ -4,23 +4,21 @@ Core ELAI class - Streamlined for better maintainability
 
 from datetime import datetime, timedelta
 import random
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from dotenv import load_dotenv
 import os
 
-from custom_llm import MetaLlamaComponent
 from elion.content.generator import ContentGenerator
 from elion.personality.traits import PersonalityManager
 from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy, format_twitter_output as format_trend_output
 from strategies.volume_strategy import VolumeStrategy, format_twitter_output as format_volume_output
 from strategies.portfolio_tracker import PortfolioTracker
-from strategies.llm_formatter import LLMFormatter
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
     
-    def __init__(self, llm: MetaLlamaComponent):
+    def __init__(self, llm: Any):
         """Initialize ELAI with core components"""
         # Store LLM
         self.llm = llm
@@ -36,11 +34,8 @@ class Elion:
         # Initialize portfolio tracker with real market data
         self.portfolio = PortfolioTracker(initial_capital=100, api_key=api_key)
         
-        # Initialize LLM formatter
-        self.llm_formatter = LLMFormatter(self.llm)
-        
         # Initialize content generator with portfolio and LLM
-        self.content = ContentGenerator(self.portfolio, self.llm_formatter)
+        self.content = ContentGenerator(self.portfolio, self.llm)
         
         # Initialize state
         self.state = {
@@ -149,6 +144,18 @@ class Elion:
             print(f"Error getting latest trade: {e}")
             return None
             
+    def format_trend_output(self, tokens):
+        """Format trend data into a tweet"""
+        if not tokens:
+            return None
+        token = tokens[0]  # Use first token
+        return f"🤖 Analyzing $SOL: Price +{token['price_change']}% with {token['volume']}x volume increase! Historical success rate: {token['success_rate']}% on similar setups. My algorithms suggest high probability of significant moves. Stay tuned... 📊"
+
+    def format_volume_output(self, spikes, anomalies):
+        """Format volume data into a tweet"""
+        data = spikes[0] if spikes else anomalies[0]  # Use first item
+        return f"🔍 Volume Alert! $SOL showing {data['volume']}x average volume with {data['success_rate']}% historical success rate on similar patterns. Price currently at ${data['price']}. This could be the start of a significant move... 👀"
+
     def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
         """Format a tweet using cached market data"""
         try:
@@ -182,8 +189,8 @@ class Elion:
             if tweet_type == 'trend':
                 try:
                     trend_data = self.trend_strategy.analyze()
-                    if trend_data and 'tokens' in trend_data:
-                        tweet = format_trend_output(trend_data['tokens'])
+                    if trend_data:
+                        tweet = trend_data.get('formatted_tweet')  # Use trend's own formatting
                     if not tweet:
                         print("Trend strategy failed to generate tweet, trying volume strategy")
                         tweet_type = 'volume'  # Fallback to volume
@@ -194,8 +201,12 @@ class Elion:
             if tweet_type == 'volume':
                 try:
                     volume_data = self.volume_strategy.analyze()
-                    if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
-                        tweet = format_volume_output(volume_data.get('spikes', []), volume_data.get('anomalies', []))
+                    if volume_data:
+                        # Use volume strategy's own formatting
+                        tweet = self.volume_strategy.format_twitter_output(
+                            volume_data.get('spikes', []), 
+                            volume_data.get('anomalies', [])
+                        )
                     if not tweet:
                         print("Volume strategy failed to generate tweet, trying personal")
                         tweet_type = 'personal'  # Fallback to personal
@@ -204,8 +215,15 @@ class Elion:
                     tweet_type = 'personal'  # Fallback to personal
                     
             if tweet_type == 'personal':
-                tweet = self.content.generate('self_aware')
-                
+                try:
+                    tweet = self.content.generate('self_aware')  # Already formatted by generator
+                    if not tweet:
+                        print("Failed to generate personal tweet")
+                        return None
+                except Exception as e:
+                    print(f"Error generating personal tweet: {e}")
+                    return None
+                    
             # Only update state if tweet was successfully generated
             if tweet:
                 self.state['last_strategy'] = tweet_type

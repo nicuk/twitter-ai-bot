@@ -1,5 +1,5 @@
 """
-Custom LLM implementation for Meta Llama model
+Custom LLM implementation for Google's Gemini API
 """
 from typing import Any, Dict, List, Optional
 import json
@@ -10,20 +10,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class MetaLlamaComponent:
-    """Custom LLM component for Meta-Llama"""
+class GeminiComponent:
+    """Custom LLM component for Gemini"""
     
     def __init__(self, api_key: str = None, api_base: str = None):
-        """Initialize Meta Llama component"""
+        """Initialize Gemini component"""
         # Use provided values or fall back to env vars
         self.api_key = api_key or os.getenv('AI_ACCESS_TOKEN')
-        self.api_base = api_base or os.getenv('AI_API_URL')
-        self.model = os.getenv('AI_MODEL_NAME', 'Meta-Llama-3.3-70B-Instruct')
+        self.api_base = api_base or os.getenv('AI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent')
+        self.model = 'gemini-1.5-flash'
         
         # Initialize session with longer timeouts
         self.session = requests.Session()
         self.session.headers.update({
-            'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json'
         })
         
@@ -36,58 +35,52 @@ class MetaLlamaComponent:
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)
         
-        self.display_name = "Meta-Llama"
+        self.display_name = "Gemini"
 
     def generate(self, prompt: str, max_tokens: int = 300, system_message: str = None) -> str:
         """Generate text from prompt"""
         try:
-            # Format request body
+            # Format request body for Gemini API
             data = {
-                "messages": [
-                    {"role": "system", "content": system_message or "You are ELAI, an AI crypto trading bot. Keep your responses focused on market analysis."},
-                    {"role": "user", "content": prompt}
-                ],
-                "model": self.model,
-                "max_tokens": max_tokens,
-                "temperature": 0.7,
-                "stream": False  # Use non-streaming mode
+                "contents": [{
+                    "parts": [{
+                        "text": f"{system_message}\n\n{prompt}" if system_message else prompt
+                    }]
+                }],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": max_tokens,
+                    "topP": 0.95,
+                    "topK": 40
+                }
             }
             
-            logger.info(f"Making API request to: {self.api_base}")
+            # Add API key to URL
+            url = f"{self.api_base}?key={self.api_key}"
+            logger.info(f"Making API request to Gemini")
             
             # Make API request with longer timeout
             response = self.session.post(
-                self.api_base,
+                url,
                 json=data,
                 timeout=(10, 60)  # (connect timeout, read timeout)
             )
             
-            # Check for HTTP errors (200 or 201 are valid)
-            if response.status_code not in [200, 201]:
+            # Check for HTTP errors
+            if response.status_code != 200:
                 logger.error(f"API Error: {response.status_code} - {response.text}")
                 return None
             
             # Parse response
             try:
                 data = response.json()
-                if 'choices' in data and len(data['choices']) > 0:
-                    # Try different response formats
-                    choice = data['choices'][0]
-                    
-                    # Try message.content (chat format)
-                    message = choice.get('message', {})
-                    if message and 'content' in message:
-                        return message['content'].strip()
-                    
-                    # Try delta.content (streaming format)
-                    delta = choice.get('delta', {})
-                    if delta and 'content' in delta:
-                        return delta['content'].strip()
-                    
-                    # Try text (completion format)
-                    if 'text' in choice:
-                        return choice['text'].strip()
-                        
+                if 'candidates' in data and len(data['candidates']) > 0:
+                    candidate = data['candidates'][0]
+                    if 'content' in candidate and 'parts' in candidate['content']:
+                        parts = candidate['content']['parts']
+                        if parts and 'text' in parts[0]:
+                            return parts[0]['text'].strip()
+                            
                 logger.error(f"Unexpected API response format: {data}")
                 return None
                 
@@ -104,7 +97,28 @@ class MetaLlamaComponent:
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             return None
-
+            
+    def generate_post(self, prompt: str) -> str:
+        """Generate a tweet-length post from prompt"""
+        # Add tweet length constraint to system message
+        system_message = """
+        You are ELAI, an AI crypto trading bot. Keep your responses focused on market analysis.
+        IMPORTANT: Your response must be under 280 characters and suitable for Twitter.
+        Use emojis appropriately but don't overdo it.
+        """
+        
+        # Generate with smaller max tokens since we need tweet-length
+        response = self.generate(prompt, max_tokens=100, system_message=system_message)
+        
+        if response:
+            # Ensure response is tweet-length
+            if len(response) > 280:
+                response = response[:277] + "..."
+            return response
+        
+        return "🤖 *Processing market data... neural nets recalibrating* Meanwhile, stay sharp and watch those charts! 👀"
+            
     def __call__(self, prompt: str, **kwargs) -> str:
         """Make the class callable"""
         return self.generate(prompt, **kwargs)
+# Added a comment to force file save
