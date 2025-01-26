@@ -15,6 +15,7 @@ from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy, format_twitter_output as format_trend_output
 from strategies.volume_strategy import VolumeStrategy, format_twitter_output as format_volume_output
 from strategies.portfolio_tracker import PortfolioTracker
+from strategies.llm_formatter import LLMFormatter
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -35,8 +36,11 @@ class Elion:
         # Initialize portfolio tracker with real market data
         self.portfolio = PortfolioTracker(initial_capital=100, api_key=api_key)
         
-        # Initialize content generator with portfolio
-        self.content_generator = ContentGenerator(self.portfolio, self.llm)
+        # Initialize LLM formatter
+        self.llm_formatter = LLMFormatter(self.llm)
+        
+        # Initialize content generator with portfolio and LLM
+        self.content = ContentGenerator(self.portfolio, self.llm_formatter)
         
         # Initialize state
         self.state = {
@@ -200,7 +204,7 @@ class Elion:
                     tweet_type = 'personal'  # Fallback to personal
                     
             if tweet_type == 'personal':
-                tweet = self.content_generator.generate('self_aware')
+                tweet = self.content.generate('self_aware')
                 
             # Only update state if tweet was successfully generated
             if tweet:
@@ -218,7 +222,7 @@ class Elion:
     def engage_with_community(self) -> Optional[str]:
         """Generate a community engagement tweet"""
         try:
-            return self.content_generator.generate('self_aware')
+            return self.content.generate('self_aware')
         except Exception as e:
             print(f"Error generating engagement tweet: {e}")
             return None

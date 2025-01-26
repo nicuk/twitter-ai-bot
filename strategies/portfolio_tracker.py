@@ -273,3 +273,18 @@ class PortfolioTracker:
                 self.best_trade = state['best_trade']
                 self.start_date = state['start_date']
                 self.price_history = state.get('price_history', {})
+
+    def get_portfolio_stats(self) -> Dict:
+        """Get current portfolio statistics"""
+        try:
+            return {
+                'initial_capital': self.initial_capital,
+                'current_capital': self.current_capital,
+                'total_trades': len(self.trades),
+                'daily_trades': len(self.daily_trades),
+                'best_trade': self.best_trade,
+                'start_date': self.start_date
+            }
+        except Exception as e:
+            print(f"Error getting portfolio stats: {e}")
+            return {}
