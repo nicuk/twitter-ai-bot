@@ -99,12 +99,15 @@ class AIGamingBot:
             # Generate mystique tweet
             content = self.elion.content.generate_ai_mystique(market_data)
             if not content:
-                logger.warning("Failed to generate AI mystique tweet")
-                return
+                logger.warning("Failed to generate AI mystique tweet, using fallback")
+                content = "🤖 *Processing market data... neural nets recalibrating* Meanwhile, stay sharp and watch those charts! 👀"
                 
-            # Post tweet
-            self.api.post_tweet(content)
-            logger.info("Posted AI mystique tweet")
+            # Post tweet using correct method name
+            response = self.api.create_tweet(content)
+            if response:
+                logger.info("Posted AI mystique tweet")
+            else:
+                logger.error("Failed to post AI mystique tweet")
             
         except Exception as e:
             logger.error(f"Error posting AI mystique tweet: {e}")
@@ -125,8 +128,11 @@ class AIGamingBot:
                 return
                 
             # Post tweet
-            self.api.post_tweet(content)
-            logger.info("Posted performance tweet")
+            response = self.api.create_tweet(content)
+            if response:
+                logger.info("Posted performance tweet")
+            else:
+                logger.error("Failed to post performance tweet")
             
         except Exception as e:
             logger.error(f"Error posting performance tweet: {e}")
@@ -141,8 +147,11 @@ class AIGamingBot:
                 return
                 
             # Post tweet
-            self.api.post_tweet(content)
-            logger.info("Posted summary tweet")
+            response = self.api.create_tweet(content)
+            if response:
+                logger.info("Posted summary tweet")
+            else:
+                logger.error("Failed to post summary tweet")
             
         except Exception as e:
             logger.error(f"Error posting summary tweet: {e}")
@@ -152,12 +161,17 @@ class AIGamingBot:
         try:
             # Generate volume tweet using Elion's volume strategy
             tweet = self.elion.generate_tweet('volume')
-            if tweet:
-                # Post tweet
-                self.api.post_tweet(tweet)
+            if not tweet:
+                logger.warning("Failed to generate volume tweet")
+                return
+                
+            # Post tweet
+            response = self.api.create_tweet(tweet)
+            if response:
                 logger.info("Posted volume analysis tweet")
             else:
-                logger.warning("Failed to generate volume tweet")
+                logger.error("Failed to post volume tweet")
+                
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
 
@@ -166,12 +180,17 @@ class AIGamingBot:
         try:
             # Generate trend tweet using Elion's trend strategy
             tweet = self.elion.generate_tweet('trend')
-            if tweet:
-                # Post tweet
-                self.api.post_tweet(tweet)
+            if not tweet:
+                logger.warning("Failed to generate trend tweet")
+                return
+                
+            # Post tweet using TwitterAPI's create_tweet method
+            response = self.api.create_tweet(tweet)
+            if response:
                 logger.info("Posted trend analysis tweet")
             else:
-                logger.warning("Failed to generate trend tweet")
+                logger.error("Failed to post trend tweet")
+                
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
 
