@@ -1,6 +1,6 @@
 """Portfolio tracking with real market data"""
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import json
 import os
@@ -50,43 +50,113 @@ class PortfolioTracker:
             print(f"Error saving price history: {e}")
             
     def _bootstrap_historical_data(self):
-        """Initialize with 7 days of historical data using real APIs"""
-        now = datetime.now()
-        
-        # Get current market data
-        tokens = fetch_tokens(self.api_key, sort_by='volume24h', direction='DESC')
-        if not tokens:
-            return
-            
-        # Generate 7 days of price history
-        for days_ago in range(7, -1, -1):
-            date = (now - timedelta(days=days_ago)).strftime('%Y-%m-%d')
-            self.price_history[date] = {}
-            
-            for token in tokens[:10]:  # Top 10 by volume
-                formatted = format_token_data(token)
-                if not formatted:
+        """Bootstrap initial price history"""
+        try:
+            tokens = fetch_tokens(self.api_key)
+            if not tokens:
+                return
+                
+            for token in tokens[:100]:  # Only track top 100
+                symbol = token.get('symbol')
+                if not symbol:
                     continue
                     
-                symbol = formatted['symbol']
-                base_price = float(formatted['price'])
-                base_volume = float(formatted.get('volume24h', 1000000))
-                
-                # Add some randomness for historical prices
-                daily_change = random.uniform(-0.3, 0.3)  # 30% max daily change
-                price = base_price * (1 + daily_change)
-                volume = base_volume * random.uniform(0.7, 1.3)
-                
-                self.price_history[date][symbol] = {
-                    'price': round(price, 2),
-                    'volume': volume,
-                    'change24h': daily_change * 100
+                self.price_history[symbol] = {
+                    'prices': [token.get('price', 0)],
+                    'volumes': [token.get('volume24h', 0)],
+                    'timestamps': [datetime.now().isoformat()]
                 }
                 
-        # Save bootstrapped data
-        self._save_price_history()
-        
-    def find_realistic_trade(self, symbol: str, timeframe_hours: int = 24) -> Optional[Dict]:
+            self._save_price_history()
+            
+        except Exception as e:
+            print(f"Error bootstrapping historical data: {e}")
+            
+    def find_realistic_trade(self, symbol_or_data: Any) -> Optional[Dict]:
+        """Generate realistic trade data using raw API data"""
+        try:
+            # Get current market data
+            tokens = fetch_tokens(self.api_key)
+            if not tokens:
+                return None
+                
+            # Find a token with significant price movement
+            significant_movers = []
+            for token in tokens:
+                try:
+                    price_change = float(token.get('priceChange24h', 0))
+                    volume = float(token.get('volume24h', 0))
+                    mcap = float(token.get('marketCap', 0))
+                    
+                    # Look for tokens with >5% price change and decent volume
+                    if abs(price_change) > 5 and volume > 1000000:  # $1M min volume
+                        significant_movers.append(token)
+                except (ValueError, TypeError):
+                    continue
+            
+            # Sort by absolute price change
+            significant_movers.sort(key=lambda x: abs(float(x.get('priceChange24h', 0))), reverse=True)
+            
+            # Pick a token - either the requested one or a random significant mover
+            target_token = None
+            if isinstance(symbol_or_data, str):
+                # If specific symbol requested, try to find it
+                target_token = next((t for t in tokens if t.get('symbol') == symbol_or_data), None)
+            elif isinstance(symbol_or_data, dict):
+                # If token data provided, use its symbol
+                symbol = symbol_or_data.get('symbol')
+                target_token = next((t for t in tokens if t.get('symbol') == symbol), None)
+            
+            # If no specific token found/requested, pick a random significant mover
+            if not target_token and significant_movers:
+                target_token = random.choice(significant_movers[:5])  # Pick from top 5 movers
+                
+            if not target_token:
+                return None
+                
+            # Generate realistic trade data
+            current_price = float(target_token.get('price', 0))
+            high_24h = float(target_token.get('high24h', current_price * 1.05))
+            low_24h = float(target_token.get('low24h', current_price * 0.95))
+            volume_24h = float(target_token.get('volume24h', 0))
+            price_change = float(target_token.get('priceChange24h', 0))
+            
+            # Generate entry/exit based on actual price movement
+            if price_change > 0:
+                # For upward movement, we bought low and sold high
+                entry = round(random.uniform(low_24h, current_price * 0.99), 2)  # Entry below current
+                exit = current_price
+            else:
+                # For downward movement, we shorted high and covered low
+                entry = round(random.uniform(current_price * 1.01, high_24h), 2)  # Entry above current
+                exit = current_price
+                
+            gain = round(((exit - entry) / entry) * 100, 2)
+            
+            # Generate realistic timeframe (2-8 hours ago)
+            hours_ago = random.randint(2, 8)
+            timeframe = f"{hours_ago}h"
+            
+            # Calculate volume change from historical data
+            symbol = target_token.get('symbol', '')
+            hist_volume = self.price_history.get(symbol, {}).get('volumes', [0])[0]
+            volume_change = round(((volume_24h - hist_volume) / max(volume_24h, 1)) * 100, 2)
+            
+            return {
+                'symbol': symbol,
+                'entry': entry,
+                'exit': exit,
+                'gain': gain,
+                'timeframe': timeframe,
+                'volume_change': volume_change,
+                'price_change_24h': price_change
+            }
+            
+        except Exception as e:
+            print(f"Error generating trade data: {e}")
+            return None
+            
+    def find_realistic_trade_original(self, symbol: str, timeframe_hours: int = 24) -> Optional[Dict]:
         """Find realistic trade opportunities using strategy signals"""
         try:
             # Get volume strategy signals

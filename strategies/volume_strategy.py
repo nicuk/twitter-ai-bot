@@ -534,6 +534,51 @@ class VolumeStrategy:
             print(f"Error generating insight: {e}")
             return "ELAI: Analyzing volume patterns... 🔄"
 
+    def format_twitter_output(self, spikes: list, anomalies: list) -> str:
+        """Format output for Twitter (max 280 chars)"""
+        tweet = ""
+        shown_symbols = set()  # Track which symbols we've shown
+        
+        # Helper function to format token info
+        def format_token_section(token, ratio, is_anomaly=False):
+            symbol = token['symbol']
+            if symbol in shown_symbols:
+                return ""
+                
+            direction = "🟢" if token['price_change'] > 0 else "🔴"
+            price = float(token['price'])
+            volume = float(token['volume'])/1e6  # Convert to millions
+            movement = get_movement_description(token['price_change'])
+            vol_mcap = ratio  # ratio is already a percentage, don't multiply by 100 again
+            
+            section = f"{direction} ${symbol} DETECTED!\n"
+            section += f"💰 ${price:.4f} {movement}\n"
+            section += f"📊 Vol: ${volume:.1f}M\n"
+            section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
+            
+            return section
+        
+        # First add volume anomalies
+        for ratio, token in anomalies:
+            section = format_token_section(token, ratio, is_anomaly=True)
+            if section and len(tweet + section) < 280:
+                tweet += section
+                shown_symbols.add(token['symbol'])
+                
+        # Then add volume spikes
+        for ratio, token in spikes:
+            section = format_token_section(token, ratio)
+            if section and len(tweet + section) < 280:
+                tweet += section
+                shown_symbols.add(token['symbol'])
+                
+        # Add ELAI's insight at the bottom
+        insight = get_elai_insight(anomalies + spikes)
+        if len(tweet + "\n" + insight) < 280:
+            tweet += "\n" + insight
+            
+        return tweet.strip()
+
 def get_elai_message(change: float, volume_ratio: float) -> str:
     """Get ELAI's insight message based on price change and volume"""
     if change < -10 and volume_ratio > 500:
@@ -582,51 +627,6 @@ def get_elai_insight(tokens) -> str:
             return "ELAI: Monitoring these dips with interest 📊"
         else:
             return "ELAI: Unusual volume patterns detected 🧪"
-
-def format_twitter_output(spikes: list, anomalies: list) -> str:
-    """Format output for Twitter (max 280 chars)"""
-    tweet = ""
-    shown_symbols = set()  # Track which symbols we've shown
-    
-    # Helper function to format token info
-    def format_token_section(token, ratio, is_anomaly=False):
-        symbol = token['symbol']
-        if symbol in shown_symbols:
-            return ""
-            
-        direction = "🟢" if token['price_change'] > 0 else "🔴"
-        price = float(token['price'])
-        volume = float(token['volume'])/1e6  # Convert to millions
-        movement = get_movement_description(token['price_change'])
-        vol_mcap = ratio  # ratio is already a percentage, don't multiply by 100 again
-        
-        section = f"{direction} ${symbol} DETECTED!\n"
-        section += f"💰 ${price:.4f} {movement}\n"
-        section += f"📊 Vol: ${volume:.1f}M\n"
-        section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
-        
-        return section
-    
-    # First add volume anomalies
-    for ratio, token in anomalies:
-        section = format_token_section(token, ratio, is_anomaly=True)
-        if section and len(tweet + section) < 280:
-            tweet += section
-            shown_symbols.add(token['symbol'])
-            
-    # Then add volume spikes
-    for ratio, token in spikes:
-        section = format_token_section(token, ratio)
-        if section and len(tweet + section) < 280:
-            tweet += section
-            shown_symbols.add(token['symbol'])
-            
-    # Add ELAI's insight at the bottom
-    insight = get_elai_insight(anomalies + spikes)
-    if len(tweet + "\n" + insight) < 280:
-        tweet += "\n" + insight
-            
-    return tweet.strip()
 
 def get_opportunity_message() -> str:
     """Generate varied opportunity messages"""
@@ -679,7 +679,7 @@ def test_volume_strategy():
             print(f"Anomaly: {anomaly[1]['symbol']}")
             
         print("\nTweet Content:")
-        print(format_twitter_output(result1['spikes'], result1['anomalies']))
+        print(strategy.format_twitter_output(result1['spikes'], result1['anomalies']))
     else:
         print("No results from first analysis")
     
@@ -696,7 +696,7 @@ def test_volume_strategy():
             print(f"Anomaly: {anomaly[1]['symbol']}")
             
         print("\nTweet Content:")
-        print(format_twitter_output(result2['spikes'], result2['anomalies']))
+        print(strategy.format_twitter_output(result2['spikes'], result2['anomalies']))
     else:
         print("No results from second analysis")
         
@@ -716,7 +716,7 @@ def test_volume_strategy():
             print(f"Anomaly: {anomaly[1]['symbol']}")
             
         print("\nTweet Content:")
-        print(format_twitter_output(result3['spikes'], result3['anomalies']))
+        print(strategy.format_twitter_output(result3['spikes'], result3['anomalies']))
     else:
         print("No results from third analysis")
             

@@ -36,7 +36,7 @@ class TrendStrategy:
             tokens = fetch_tokens(self.api_key, sort_by='priceChange24h', direction='DESC', limit=500)
             if not tokens:
                 print("No tokens found or error fetching tokens")
-                return {'signal': 'neutral', 'confidence': 0.0}
+                return {'signal': 'neutral', 'confidence': 0.0, 'trend_tokens': []}
                 
             print("\nScanning for significant price moves (>5%):")
             print("-" * 50)
@@ -69,14 +69,9 @@ class TrendStrategy:
                             'price_change': price_change,
                             'volume': volume,
                             'mcap': mcap,
+                            'price': price,
                             'vol_mcap_ratio': (volume / mcap * 100) if mcap > 0 else 0
                         })
-                        
-                    # Original high-engagement criteria
-                    if (abs(price_change) > 5 and 
-                        volume/mcap*100 > 20 and 
-                        1_000_000 < mcap < 50_000_000_000):
-                        trend_info.append(f"${symbol} {price_change:+.1f}% 🚀 Vol/MCap: {volume/mcap*100:.1f}%")
                         
                 except (ValueError, TypeError) as e:
                     continue
@@ -101,20 +96,68 @@ class TrendStrategy:
             signal = 'bullish' if up_moves > down_moves else 'bearish'
             confidence = abs(up_moves - down_moves) / len(top_movers) if top_movers else 0.0
             
-            # Format trend tokens for tweet
-            trend_tokens = []
-            for mover in big_movers[:6]:  # Try top 6 movers
-                trend_tokens.append(f"${mover['symbol']} {mover['price_change']:+.1f}% (${mover['mcap']/1e6:.1f}M) 🚀")
-            
+            # Return formatted trend data
             return {
                 'signal': signal,
                 'confidence': confidence,
-                'trend_tokens': trend_tokens
+                'trend_tokens': big_movers  # Return all big movers as trend tokens
             }
-            
+                
         except Exception as e:
-            print(f"Error analyzing trends: {str(e)}")
-            return {'signal': 'neutral', 'confidence': 0.0}
+            print(f"Error in trend analysis: {e}")
+            return {'signal': 'neutral', 'confidence': 0.0, 'trend_tokens': []}
+
+    def format_twitter_output(self, trend_tokens: list) -> str:
+        """Format output for Twitter (max 280 chars)"""
+        if not trend_tokens:
+            return None
+            
+        tweet = ""
+        shown_symbols = set()
+        
+        for token in trend_tokens:
+            symbol = token['symbol']
+            if symbol in shown_symbols:
+                continue
+                
+            direction = "🟢" if token['price_change'] > 0 else "🔴"
+            price = float(token['price'])
+            
+            # Format price with dynamic decimals based on size
+            if price < 0.0001:
+                price_str = f"${price:.8f}"
+            elif price < 0.01:
+                price_str = f"${price:.6f}"
+            elif price < 1:
+                price_str = f"${price:.4f}"
+            else:
+                price_str = f"${price:.2f}"
+                
+            volume = float(token['volume'])/1e6  # Convert to millions
+            mcap = float(token['mcap'])/1e6  # Convert to millions
+            price_change = float(token['price_change'])
+            movement = get_movement_description(price_change)
+            vol_mcap = token['vol_mcap_ratio']
+            
+            section = f"{direction} ${symbol} TRENDING!\n"
+            section += f"💰 {price_str} {movement}\n"
+            section += f"📊 Vol: ${volume:.1f}M\n"
+            section += f"🎯 MCap: ${mcap:.1f}M\n"
+            section += f"📈 V/MC: {vol_mcap:.1f}%\n"
+            
+            if len(tweet + section) < 280:
+                tweet += section
+                shown_symbols.add(symbol)
+                
+        # Add market signal
+        if len(tweet) < 240:  # Leave room for signal
+            signal_emoji = "🐂" if self.analyze()['signal'] == "bullish" else "🐻"
+            confidence_str = f"{self.analyze()['confidence']*100:.0f}%" if self.analyze()['confidence'] > 0 else "Low"
+            signal_str = f"\n{signal_emoji} Market Signal: {self.analyze()['signal'].title()} ({confidence_str} confidence)"
+            if len(tweet + signal_str) < 280:
+                tweet += signal_str
+                
+        return tweet.strip()
 
 def calculate_trend_score(token: Dict) -> float:
     """Calculate trend-based score (0-100) with strict criteria"""
@@ -345,48 +388,6 @@ Focus on the most interesting metric or pattern. Add 1-2 relevant emojis."""
     # Generate insight using Llama
     insight = generate(prompt, max_tokens=60)
     return insight if insight else "Market moves catching attention... 👀"
-
-def format_twitter_output(trend_tokens: list) -> str:
-    """Format output for Twitter"""
-    tweet = ""
-    shown_symbols = set()
-    
-    for _, token in trend_tokens:
-        symbol = token['symbol']
-        if symbol in shown_symbols:
-            continue
-            
-        direction = "🟢" if token['price_change'] > 0 else "🔴"
-        price = float(token['price'])
-        
-        # Format price with dynamic decimals based on size
-        if price < 0.0001:
-            price_str = f"${price:.8f}"
-        elif price < 0.01:
-            price_str = f"${price:.6f}"
-        elif price < 1:
-            price_str = f"${price:.4f}"
-        else:
-            price_str = f"${price:.4f}"
-            
-        volume = float(token['volume'])/1e6  # Convert to millions
-        price_change = float(token['price_change'])
-        movement = get_movement_description(price_change)
-        
-        section = f"{direction} ${symbol} TRENDING!\n"
-        section += f"💰 {price_str} {movement}\n"
-        section += f"📊 Vol: ${volume:.1f}M\n"
-        
-        if len(tweet + section) < 280:
-            tweet += section
-            shown_symbols.add(symbol)
-            
-    # Add ELAI's insight
-    insight = get_trend_insight(trend_tokens)
-    if len(tweet + "\n" + insight) < 280:
-        tweet += "\n" + insight
-            
-    return tweet.strip()
 
 def test_trend_strategy():
     """Test the trend-based analysis strategy"""
