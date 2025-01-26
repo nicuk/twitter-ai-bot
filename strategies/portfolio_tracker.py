@@ -261,11 +261,10 @@ class PortfolioTracker:
         with open(filename, 'w') as f:
             json.dump(state, f)
             
-    def load_state(self, filename: str = 'portfolio_state.json') -> None:
-        """Load portfolio state from file"""
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                state = json.load(f)
+    def load_state(self, state: Dict):
+        """Load portfolio state from a dictionary"""
+        if state:
+            try:
                 self.initial_capital = state['initial_capital']
                 self.current_capital = state['current_capital']
                 self.trades = state['trades']
