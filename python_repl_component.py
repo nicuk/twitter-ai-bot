@@ -7,16 +7,9 @@ from pydantic import BaseModel, Field
 from langflow.base.langchain_utilities.model import LCToolComponent
 from langflow.inputs import StrInput
 from langflow.schema import Data
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import os
 from dotenv import load_dotenv
-import time
+from twitter.api_client import TwitterAPI
 
 load_dotenv()
 
@@ -37,13 +30,13 @@ class PythonREPLToolComponent(LCToolComponent):
             name="description",
             display_name="Tool Description",
             info="A description of the tool.",
-            value="Posts tweets to Twitter using Selenium automation.",
+            value="Posts tweets to Twitter using Twitter API.",
         ),
         StrInput(
             name="global_imports",
             display_name="Global Imports",
-            info="Required imports for Twitter automation",
-            value="selenium,os,time,dotenv",
+            info="Required imports for Twitter API",
+            value="os,dotenv,twitter",
         ),
         StrInput(
             name="input_data",
@@ -58,46 +51,29 @@ class PythonREPLToolComponent(LCToolComponent):
         tweet: str = Field(..., description="The tweet content to post")
 
     def post_tweet(self, tweet_content):
-        options = webdriver.ChromeOptions()
-        options.add_argument('--start-maximized')
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), 
-                                options=options)
-        wait = WebDriverWait(driver, 20)
-        
+        """Post a tweet using the Twitter API"""
         try:
-            # Login
-            driver.get('https://twitter.com/login')
-            username_input = wait.until(EC.presence_of_element_located((By.NAME, "text")))
-            username_input.send_keys(os.getenv('TWITTER_USERNAME'))
-            username_input.send_keys(Keys.RETURN)
+            # Initialize Twitter API
+            api = TwitterAPI()
             
-            password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-            password_input.send_keys(os.getenv('TWITTER_PASSWORD'))
-            password_input.send_keys(Keys.RETURN)
-            
-            # Wait for home timeline and post tweet
-            wait.until(EC.presence_of_element_located((By.ARIA_LABEL, "Home timeline")))
-            tweet_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]')))
-            tweet_button.click()
-            
-            tweet_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]')))
-            tweet_input.send_keys(tweet_content)
-            
-            post_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="tweetButton"]')))
-            post_button.click()
-            
-            time.sleep(5)
-            return f"Tweet posted successfully: {tweet_content}"
-            
+            # Post tweet
+            response = api.create_tweet(tweet_content)
+            if response:
+                logger.info("Successfully posted tweet")
+                return "Tweet posted successfully"
+            else:
+                logger.error("Failed to post tweet")
+                return "Failed to post tweet"
+                
         except Exception as e:
-            return f"Error posting tweet: {e}"
-        finally:
-            driver.quit()
+            logger.error(f"Error posting tweet: {e}")
+            raise ToolException(f"Error posting tweet: {e}")
 
     def get_globals(self, global_imports: str | list[str]) -> dict:
+        """Get global imports for the REPL environment"""
         global_dict = {}
         if isinstance(global_imports, str):
-            modules = [module.strip() for module in global_imports.split(",")]
+            modules = [imp.strip() for imp in global_imports.split(",")]
         elif isinstance(global_imports, list):
             modules = global_imports
         else:
