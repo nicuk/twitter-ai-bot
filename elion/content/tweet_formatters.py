@@ -4,6 +4,9 @@ Tweet formatting utilities for ELAI
 
 import random
 from typing import Dict, Optional
+import os
+from strategies.volume_strategy import VolumeStrategy
+from strategies.trend_strategy import TrendStrategy
 
 class TweetFormatters:
     """Formats different types of tweets with personality"""
@@ -100,6 +103,25 @@ class TweetFormatters:
         insight = random.choice(self.thoughts)
         return template.format(emoji=emoji, insight=insight)
 
+    def format_volume_insight(self, market_data: Dict, trait: str) -> str:
+        """Format volume insight tweet with personality"""
+        # Get volume spikes and anomalies
+        spikes = market_data.get('spikes', [])
+        anomalies = market_data.get('anomalies', [])
+        
+        # Use VolumeStrategy's format_twitter_output
+        volume_strategy = VolumeStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
+        return volume_strategy.format_twitter_output(spikes, anomalies)
+
+    def format_trend_insight(self, market_data: Dict, trait: str) -> str:
+        """Format trend insight tweet with personality"""
+        # Get trend tokens
+        trend_tokens = market_data.get('trend_tokens', [])
+        
+        # Use TrendStrategy's format_twitter_output
+        trend_strategy = TrendStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
+        return trend_strategy.format_twitter_output(trend_tokens)
+
     def get_template(self, template_type: str) -> str:
         """Get a template of the given type, avoiding repetition"""
         templates = self.templates[template_type]
@@ -110,25 +132,3 @@ class TweetFormatters:
             template = random.choice([t for t in templates if t != last_used])
         self.last_used[template_type] = template
         return template
-
-    def format_volume_insight(self, market_data: Dict, trait: str) -> str:
-        """Format volume insight tweet with personality"""
-        # Get volume spikes and anomalies
-        spikes = market_data.get('spikes', [])
-        anomalies = market_data.get('anomalies', [])
-        
-        # Use VolumeStrategy's format_twitter_output
-        from strategies.volume_strategy import format_twitter_output
-        return format_twitter_output(spikes, anomalies)
-
-    def format_trend_insight(self, market_data: Dict, trait: str) -> str:
-        """Format trend insight tweet with personality"""
-        # Get trend tokens
-        trend_tokens = market_data.get('trend_tokens', [])
-        
-        # Use TrendStrategy's format_twitter_output
-        from strategies.trend_strategy import format_twitter_output
-        return format_twitter_output([(1, {'symbol': t.split()[0][1:], 
-                                         'price': 0.0,
-                                         'price_change': float(t.split()[1].rstrip('%')),
-                                         'volume': 1e6}) for t in trend_tokens])
