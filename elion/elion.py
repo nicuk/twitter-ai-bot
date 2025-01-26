@@ -11,8 +11,8 @@ import os
 from elion.content.generator import ContentGenerator
 from elion.personality.traits import PersonalityManager
 from elion.content.tweet_formatters import TweetFormatters
-from strategies.trend_strategy import TrendStrategy, format_twitter_output as format_trend_output
-from strategies.volume_strategy import VolumeStrategy, format_twitter_output as format_volume_output
+from strategies.trend_strategy import TrendStrategy
+from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
 
 class Elion:
@@ -25,6 +25,7 @@ class Elion:
         
         # Initialize components
         self.personality = PersonalityManager()
+        self.tweet_formatters = TweetFormatters()
         
         # Initialize market analyzers with API key
         api_key = os.getenv('CRYPTORANK_API_KEY')
@@ -50,9 +51,10 @@ class Elion:
         
         # Tweet type weights (out of 100)
         self.tweet_weights = {
-            'trend': 35,    # Market trend analysis
-            'volume': 35,   # Volume analysis
-            'personal': 30  # Personality-driven tweets
+            'trend': 40,  # Market trend analysis
+            'volume': 30,  # Volume analysis
+            'mystique': 20,  # AI mystique
+            'personal': 10  # Personal/engagement
         }
         
     def _get_next_tweet_type(self) -> str:
@@ -92,13 +94,13 @@ class Elion:
         try:
             # Get trend data
             trend_data = self.trend_strategy.analyze()
-            if trend_data and 'tokens' in trend_data:
-                self.state['trend_tokens'] = trend_data['tokens']
+            if trend_data and 'trend_tokens' in trend_data:
+                self.state['trend_tokens'] = trend_data['trend_tokens']
                 
             # Get volume data
             volume_data = self.volume_strategy.analyze()
-            if volume_data and 'tokens' in volume_data:
-                self.state['volume_tokens'] = volume_data['tokens']
+            if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
+                self.state['volume_tokens'] = volume_data.get('spikes', []) + volume_data.get('anomalies', [])
                 
             # Combine data
             market_data = {
@@ -159,19 +161,16 @@ class Elion:
     def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
         """Format a tweet using cached market data"""
         try:
-            # Get formatter
-            formatter = TweetFormatters()
-            
             # Get personality trait
             trait = self.personality.get_trait()
             
             # Format tweet based on type
             if tweet_type == 'trend':
-                return formatter.format_trend_insight(market_data['trend'], trait)
+                return self.tweet_formatters.format_trend_insight(market_data['trend'], trait)
             elif tweet_type == 'volume':
-                return formatter.format_volume_insight(market_data['volume'], trait)
+                return self.tweet_formatters.format_volume_insight(market_data['volume'], trait)
             else:
-                return formatter.format_personal(trait)
+                return self.tweet_formatters.format_personal(trait)
                 
         except Exception as e:
             print(f"Error formatting {tweet_type} tweet: {e}")
@@ -180,40 +179,39 @@ class Elion:
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
         """Generate a tweet of the specified type"""
         try:
-            # Get next tweet type from weights if not specified
+            # Reset used tokens daily
+            today = datetime.now().date()
+            if today > self.state['last_reset']:
+                self.state['used_tokens'].clear()
+                self.state['last_reset'] = today
+                
+            # Get tweet type if not specified
             if not tweet_type:
                 tweet_type = self._get_next_tweet_type()
                 
-            # Get tweet based on type
             tweet = None
+            
+            # Handle trend tweets
             if tweet_type == 'trend':
                 try:
                     trend_data = self.trend_strategy.analyze()
                     if trend_data:
-                        tweet = trend_data.get('formatted_tweet')  # Use trend's own formatting
-                    if not tweet:
-                        print("Trend strategy failed to generate tweet, trying volume strategy")
-                        tweet_type = 'volume'  # Fallback to volume
+                        tweet = self.tweet_formatters.format_trend_insight(trend_data, self.personality.get_trait())
                 except Exception as e:
                     print(f"Error in trend strategy: {e}")
-                    tweet_type = 'volume'  # Fallback to volume
+                    tweet_type = 'personal'  # Fallback to personal
                     
+            # Handle volume tweets
             if tweet_type == 'volume':
                 try:
                     volume_data = self.volume_strategy.analyze()
                     if volume_data:
-                        # Use volume strategy's own formatting
-                        tweet = self.volume_strategy.format_twitter_output(
-                            volume_data.get('spikes', []), 
-                            volume_data.get('anomalies', [])
-                        )
-                    if not tweet:
-                        print("Volume strategy failed to generate tweet, trying personal")
-                        tweet_type = 'personal'  # Fallback to personal
+                        tweet = self.tweet_formatters.format_volume_insight(volume_data, self.personality.get_trait())
                 except Exception as e:
                     print(f"Error in volume strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
                     
+            # Handle personal tweets
             if tweet_type == 'personal':
                 try:
                     tweet = self.content.generate('self_aware')  # Already formatted by generator
