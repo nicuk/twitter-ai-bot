@@ -264,13 +264,13 @@ def filter_tokens_by_volume(tokens, min_volume_mcap_ratio=0.1):
     filtered_tokens.sort(key=lambda x: x[0], reverse=True)
     return filtered_tokens
 
-def find_volume_anomalies(tokens, limit=5):
+def find_volume_anomalies(tokens, limit=10):
     """Find tokens with unusual volume patterns"""
-    # Use shared filtering function with higher threshold for anomalies
-    anomalies = filter_tokens_by_volume(tokens, min_volume_mcap_ratio=1.0)
+    # Use shared filtering function with lower threshold for anomalies
+    anomalies = filter_tokens_by_volume(tokens, min_volume_mcap_ratio=0.8)  # Lowered from 1.0 to 0.8
     return anomalies[:limit]
 
-def find_volume_spikes(tokens, limit=10):
+def find_volume_spikes(tokens, limit=20):
     """Find tokens with sudden volume increases"""
     # Calculate volume spike scores
     spikes = []
@@ -291,7 +291,7 @@ def find_volume_spikes(tokens, limit=10):
                 
             # Calculate volume spike score
             spike_score = calculate_volume_score(token)
-            if spike_score >= 40:  # Increased minimum threshold
+            if spike_score >= 30:  # Lowered threshold from 40 to 30
                 spikes.append((spike_score, token_info))
                 seen_symbols.add(symbol)
         except Exception as e:
@@ -420,16 +420,16 @@ class VolumeStrategy:
                 if symbol not in self.recent_tokens:
                     filtered_spikes.append(spike)
                     self.recent_tokens.add(symbol)
-                    if len(filtered_spikes) >= 2:  # Only take up to 2 spikes
+                    if len(filtered_spikes) >= 4:  # Show up to 4 spikes
                         break
-            
+        
             filtered_anomalies = []
             for anomaly in anomalies:
                 symbol = anomaly[1]['symbol']
                 if symbol not in self.recent_tokens:
                     filtered_anomalies.append(anomaly)
                     self.recent_tokens.add(symbol)
-                    if len(filtered_anomalies) >= 1:  # Only take 1 anomaly
+                    if len(filtered_anomalies) >= 1:  # Keep 1 anomaly to make total of 4
                         break
             
             # Reset token history if we're not finding new tokens
@@ -642,13 +642,13 @@ def get_opportunity_message() -> str:
 def get_movement_description(change: float) -> str:
     """Get a descriptive term for the price movement"""
     if change > 10:
-        return "🚀 Surging"
+        return "🌙 Mooning"
     elif change > 3:
-        return "📈 Rising"
+        return "🚀 Surging"
     elif change < -10:
-        return "📉 Major dip"
+        return "🩸 Bleeding"
     elif change < -3:
-        return "🔻 Dipping"
+        return "📉 Dipping"
     else:
         return "➡️ Stable"
 

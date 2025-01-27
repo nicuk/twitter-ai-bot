@@ -86,7 +86,6 @@ class TrendStrategy:
                     print(f"Price Change: {mover['price_change']:+.1f}%")
                     print(f"Volume: ${mover['volume']:,.0f}")
                     print(f"Market Cap: ${mover['mcap']:,.0f}")
-                    print(f"Volume/MCap Ratio: {mover['vol_mcap_ratio']:.2f}%")
                     
             # Calculate overall trend signal based on top movers we're showing
             top_movers = big_movers[:5]  # Same as what we show in tweet
@@ -107,6 +106,19 @@ class TrendStrategy:
             print(f"Error in trend analysis: {e}")
             return {'signal': 'neutral', 'confidence': 0.0, 'trend_tokens': []}
 
+    def get_movement_icon(self, change: float) -> str:
+        """Get icon for the price movement"""
+        if change > 10:
+            return "🌙"  # Mooning
+        elif change > 3:
+            return "🚀"  # Surging
+        elif change < -10:
+            return "🩸"  # Bleeding
+        elif change < -3:
+            return "📉"  # Dipping
+        else:
+            return "➡️"  # Stable
+
     def format_twitter_output(self, trend_tokens: list) -> str:
         """Format output for Twitter (max 280 chars)"""
         if not trend_tokens:
@@ -114,9 +126,18 @@ class TrendStrategy:
             
         tweet = ""
         shown_symbols = set()
+        trend_data = self.analyze()
         
-        for token in trend_tokens:
-            symbol = token['symbol']
+        # Calculate market signal first
+        signal = trend_data['signal']
+        confidence = trend_data['confidence']
+        signal_emoji = "🐂" if signal == "bullish" else "🐻"
+        confidence_str = f"{confidence*100:.0f}%" if confidence > 0 else "Low"
+        signal_str = f"\n\n{signal_emoji} Market: {signal.title()} ({confidence_str} conf)"
+        
+        # Show max 6 tokens to ensure room for market signal
+        for token in trend_tokens[:6]:
+            symbol = token.get('symbol', '')
             if symbol in shown_symbols:
                 continue
                 
@@ -133,27 +154,21 @@ class TrendStrategy:
             else:
                 price_str = f"${price:.2f}"
                 
-            movement = get_movement_description(token['price_change'])
-            vol_mcap = token['vol_mcap_ratio']
+            movement_icon = self.get_movement_icon(token['price_change'])
             
             section = f"{direction} ${symbol} TRENDING!\n"
-            section += f"💰 {price_str} {movement}\n"
-            section += f"📈 Vol/MC: {vol_mcap:.1f}%"
+            section += f"💰 {price_str} ({token['price_change']:+.1f}%) {movement_icon}"
             
-            if len(tweet + "\n" + section) < 280:  # Account for newline only if not first token
+            if len(tweet + "\n" + section) < 280:
                 if tweet:  # If not the first token, add a newline
                     tweet += "\n"
                 tweet += section
                 shown_symbols.add(symbol)
                 
-        # Add market signal
-        if len(tweet) < 240:  # Leave room for signal
-            signal_emoji = "🐂" if self.analyze()['signal'] == "bullish" else "🐻"
-            confidence_str = f"{self.analyze()['confidence']*100:.0f}%" if self.analyze()['confidence'] > 0 else "Low"
-            signal_str = f"\n{signal_emoji} Market Signal: {self.analyze()['signal'].title()} ({confidence_str} confidence)"
-            if len(tweet + signal_str) < 280:
-                tweet += signal_str
-                
+        # Add market signal at the end
+        if len(tweet + signal_str) < 280:
+            tweet += signal_str
+            
         return tweet.strip()
 
 def calculate_trend_score(token: Dict) -> float:
