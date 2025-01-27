@@ -133,19 +133,16 @@ class TrendStrategy:
             else:
                 price_str = f"${price:.2f}"
                 
-            volume = float(token['volume'])/1e6  # Convert to millions
-            mcap = float(token['mcap'])/1e6  # Convert to millions
-            price_change = float(token['price_change'])
-            movement = get_movement_description(price_change)
+            movement = get_movement_description(token['price_change'])
             vol_mcap = token['vol_mcap_ratio']
             
             section = f"{direction} ${symbol} TRENDING!\n"
             section += f"💰 {price_str} {movement}\n"
-            section += f"📊 Vol: ${volume:.1f}M\n"
-            section += f"🎯 MCap: ${mcap:.1f}M\n"
-            section += f"📈 V/MC: {vol_mcap:.1f}%\n"
+            section += f"📈 Vol/MC: {vol_mcap:.1f}%"
             
-            if len(tweet + section) < 280:
+            if len(tweet + "\n" + section) < 280:  # Account for newline only if not first token
+                if tweet:  # If not the first token, add a newline
+                    tweet += "\n"
                 tweet += section
                 shown_symbols.add(symbol)
                 
@@ -404,25 +401,18 @@ def test_trend_strategy():
         strategy = TrendStrategy(api_key)
         trend_info = strategy.analyze()
         
-        # Format tweet like in ELAI
+        # Format tweet using our formatter
         if trend_info and trend_info.get('trend_tokens'):
-            tweet = "🔥 Top Movers:\n" + "\n".join(trend_info['trend_tokens'])
+            tweet = strategy.format_twitter_output(trend_info['trend_tokens'])
             
-            # Add volume insight
-            volume_insight = "\n\n💡 High volume activity detected"
-            if len(tweet + volume_insight) < 280:
-                tweet += volume_insight
-            
-            # Add market sentiment without confidence
-            sentiment = f"\n\nMarket is {trend_info['signal']} 📊"
-            if len(tweet + sentiment) < 280:
-                tweet += sentiment
-                
-            print("\nTweet Generated:")
-            print("-" * 40)
-            print(tweet)
-            print("-" * 40)
-            print(f"Character count: {len(tweet)}")
+            if tweet:
+                print("\nTweet Generated:")
+                print("-" * 40)
+                print(tweet)
+                print("-" * 40)
+                print(f"Character count: {len(tweet)}")
+            else:
+                print("No tweet generated")
         else:
             print("No significant trends found")
             
