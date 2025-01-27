@@ -97,6 +97,11 @@ class PortfolioTracker:
             # Sort by absolute price change
             significant_movers.sort(key=lambda x: abs(float(x.get('priceChange24h', 0))), reverse=True)
             
+            # Check if we have any positive movers first
+            positive_movers = [t for t in significant_movers if float(t.get('priceChange24h', 0)) > 0]
+            if positive_movers:
+                significant_movers = positive_movers  # Use only positive movers if available
+            
             # Pick a token - either the requested one or a random significant mover
             target_token = None
             if isinstance(symbol_or_data, str):
