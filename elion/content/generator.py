@@ -14,29 +14,57 @@ class ContentGenerator:
         
     def generate_ai_mystique(self, market_data: Dict) -> str:
         """Generate AI mystique tweet showing pattern detection"""
-        # Find potential trade setup
-        symbol = random.choice(['SOL', 'ETH', 'BTC'])
-        trade = self.portfolio.find_realistic_trade(symbol)
-        
-        if not trade:
-            return self._generate_general_mystique()
+        try:
+            # Find potential trade setup
+            symbol = random.choice(['SOL', 'ETH', 'BTC'])
+            trade = self.portfolio.find_realistic_trade(symbol)
             
-        # Format prompt for LLM
-        prompt = f"""
-        Generate an AI mystique tweet about detecting a pattern in {symbol}.
-        - Entry zone: ${trade['entry']} (whale accumulation)
-        - Previous similar patterns averaged {trade['gain']}% gains
-        - Volume increased by {trade['volume_change']}%
-        - Keep mysterious but data-driven
-        - No price predictions
-        - Format: emoji + analysis
-        """
-        
-        return self.llm.generate_post(prompt)
+            # If no trade data or market data available, generate general mystique
+            if not trade or not isinstance(trade, dict):
+                return self._generate_general_mystique()
+                
+            # Validate required trade data fields
+            required_fields = ['entry', 'gain', 'volume_change']
+            if not all(field in trade for field in required_fields):
+                return self._generate_general_mystique()
+                
+            # Format prompt for LLM
+            prompt = f"""
+            Generate an AI mystique tweet about detecting a pattern in {symbol}.
+            - Entry zone: ${trade['entry']} (whale accumulation)
+            - Previous similar patterns averaged {trade['gain']}% gains
+            - Volume increased by {trade['volume_change']}%
+            - Keep mysterious but data-driven
+            - No price predictions
+            - Format: emoji + analysis
+            """
+            
+            return self.llm.generate_post(prompt)
+            
+        except Exception as e:
+            print(f"Error in generate_ai_mystique: {e}")
+            return self._generate_general_mystique()
         
     def generate_performance_post(self, trade_data: Dict) -> str:
-        """Generate performance tweet for completed trade"""
-        # Format prompt for LLM
+        """Generate performance tweet for completed trade or market update"""
+        
+        # Check if we're skipping trading due to market conditions
+        if trade_data.get('skip_trading'):
+            prompt = f"""
+            Generate a market update tweet about skipping trades:
+            - Over 70% of tokens showing red
+            - Market conditions unfavorable
+            - Being patient and preserving capital
+            
+            Format:
+            - Emoji + "Market Update"
+            - Brief market stats
+            - Mention preserving capital
+            - Professional tone
+            """
+            return self.llm.generate_post(prompt)
+            
+        # Normal trade performance tweet
         prompt = f"""
         Generate a performance tweet for a completed trade:
         Symbol: {trade_data['symbol']}

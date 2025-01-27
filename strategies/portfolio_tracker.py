@@ -8,6 +8,9 @@ import random
 from strategies.shared_utils import fetch_tokens, format_token_data
 from strategies.volume_strategy import VolumeStrategy
 from strategies.trend_strategy import TrendStrategy
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PortfolioTracker:
     """Tracks virtual portfolio performance with realistic trade entries/exits"""
@@ -73,92 +76,128 @@ class PortfolioTracker:
             print(f"Error bootstrapping historical data: {e}")
             
     def find_realistic_trade(self, symbol_or_data: Any) -> Optional[Dict]:
-        """Generate realistic trade data using raw API data"""
+        """Find trading opportunities based on market conditions"""
         try:
             # Get current market data
             tokens = fetch_tokens(self.api_key)
             if not tokens:
                 return None
                 
-            # Find a token with significant price movement
-            significant_movers = []
+            # Analyze market health
+            valid_tokens = []
+            down_tokens = 0
+            for token in tokens:
+                try:
+                    price_change = float(token.get('priceChange24h', 0))
+                    volume = float(token.get('volume24h', 0))
+                    
+                    # Only count tokens with meaningful volume
+                    if volume > 1000000:  # $1M minimum volume
+                        valid_tokens.append(token)
+                        if price_change < 0:
+                            down_tokens += 1
+                except (ValueError, TypeError):
+                    continue
+            
+            if not valid_tokens:
+                return None
+                
+            # Calculate market health metrics
+            down_percentage = (down_tokens / len(valid_tokens)) * 100
+            up_percentage = 100 - down_percentage
+            
+            # Determine market condition and trading strategy
+            if down_percentage > 70:  # Extremely bearish
+                logger.info(f"Market bleeding: Over 70% tokens down. Halting trades.")
+                return {
+                    'market_condition': 'extreme_bearish',
+                    'down_percentage': 70,  # Fixed at 70% for messaging
+                    'skip_trading': True,
+                    'message': 'Market bleeding - preserving capital'
+                }
+                
+            elif down_percentage > 50:  # Weak market
+                # 80% chance to skip trading
+                if random.random() < 0.8:
+                    logger.info(f"Weak market: {down_percentage:.1f}% tokens down. Reducing trade frequency.")
+                    return {
+                        'market_condition': 'bearish',
+                        'down_percentage': round(down_percentage, 1),
+                        'skip_trading': True,
+                        'message': 'Reduced trading in weak market'
+                    }
+                # Small gains in weak market
+                target_gain = random.uniform(2, 5)
+                min_volume = 5000000  # Higher volume requirement
+                
+            elif down_percentage > 30:  # Normal market
+                # 20% chance to skip trading
+                if random.random() < 0.2:
+                    return None
+                # Medium gains in normal market    
+                target_gain = random.uniform(5, 10)
+                min_volume = 2000000  # Standard volume
+                
+            else:  # Strong market (>70% up)
+                # Large gains in strong market
+                target_gain = random.uniform(10, 20)
+                min_volume = 1000000  # Regular volume ok
+            
+            # Find potential trades based on market condition
+            candidates = []
             for token in tokens:
                 try:
                     price_change = float(token.get('priceChange24h', 0))
                     volume = float(token.get('volume24h', 0))
                     mcap = float(token.get('marketCap', 0))
                     
-                    # Look for tokens with >5% price change and decent volume
-                    if abs(price_change) > 5 and volume > 1000000:  # $1M min volume
-                        significant_movers.append(token)
+                    if volume > min_volume and mcap > 10000000:
+                        candidates.append(token)
                 except (ValueError, TypeError):
                     continue
             
-            # Sort by absolute price change
-            significant_movers.sort(key=lambda x: abs(float(x.get('priceChange24h', 0))), reverse=True)
-            
-            # Check if we have any positive movers first
-            positive_movers = [t for t in significant_movers if float(t.get('priceChange24h', 0)) > 0]
-            if positive_movers:
-                significant_movers = positive_movers  # Use only positive movers if available
-            
-            # Pick a token - either the requested one or a random significant mover
-            target_token = None
-            if isinstance(symbol_or_data, str):
-                # If specific symbol requested, try to find it
-                target_token = next((t for t in tokens if t.get('symbol') == symbol_or_data), None)
-            elif isinstance(symbol_or_data, dict):
-                # If token data provided, use its symbol
-                symbol = symbol_or_data.get('symbol')
-                target_token = next((t for t in tokens if t.get('symbol') == symbol), None)
-            
-            # If no specific token found/requested, pick a random significant mover
-            if not target_token and significant_movers:
-                target_token = random.choice(significant_movers[:5])  # Pick from top 5 movers
-                
-            if not target_token:
+            if not candidates:
                 return None
                 
-            # Generate realistic trade data
-            current_price = float(target_token.get('price', 0))
-            high_24h = float(target_token.get('high24h', current_price * 1.05))
-            low_24h = float(target_token.get('low24h', current_price * 0.95))
-            volume_24h = float(target_token.get('volume24h', 0))
-            price_change = float(target_token.get('priceChange24h', 0))
-            
-            # Generate entry/exit based on actual price movement
-            if price_change > 0:
-                # For upward movement, we bought low and sold high
-                entry = round(random.uniform(low_24h, current_price * 0.99), 2)  # Entry below current
-                exit = current_price
+            # Sort by our preferred metric (volume or price change based on market)
+            if down_percentage > 50:
+                # In weak markets, prefer higher volume tokens
+                candidates.sort(key=lambda x: float(x.get('volume24h', 0)), reverse=True)
             else:
-                # For downward movement, we shorted high and covered low
-                entry = round(random.uniform(current_price * 1.01, high_24h), 2)  # Entry above current
-                exit = current_price
-                
+                # In normal/strong markets, balance volume and price change
+                candidates.sort(key=lambda x: (
+                    float(x.get('volume24h', 0)) * abs(float(x.get('priceChange24h', 0)))
+                ), reverse=True)
+            
+            target_token = candidates[0]
+            
+            # Calculate entry/exit to match our target gain
+            current_price = float(target_token.get('price', 0))
+            
+            # Work backwards from current price to get entry
+            entry = round(current_price / (1 + target_gain/100), 8)
+            exit = round(current_price, 8)
             gain = round(((exit - entry) / entry) * 100, 2)
             
-            # Generate realistic timeframe (2-8 hours ago)
-            hours_ago = random.randint(2, 8)
-            timeframe = f"{hours_ago}h"
-            
-            # Calculate volume change from historical data
-            symbol = target_token.get('symbol', '')
-            hist_volume = self.price_history.get(symbol, {}).get('volumes', [0])[0]
-            volume_change = round(((volume_24h - hist_volume) / max(volume_24h, 1)) * 100, 2)
+            # Generate timeframe based on market condition
+            if down_percentage > 50:
+                hours = random.randint(12, 24)  # Longer holds in weak market
+            else:
+                hours = random.randint(4, 12)  # Faster trades in strong market
             
             return {
-                'symbol': symbol,
+                'symbol': target_token.get('symbol', ''),
                 'entry': entry,
                 'exit': exit,
                 'gain': gain,
-                'timeframe': timeframe,
-                'volume_change': volume_change,
-                'price_change_24h': price_change
+                'timeframe': f"{hours}h",
+                'volume_change': float(target_token.get('volume24h', 0)),
+                'price_change_24h': float(target_token.get('priceChange24h', 0)),
+                'market_condition': 'weak' if down_percentage > 50 else 'normal' if down_percentage > 30 else 'strong'
             }
             
         except Exception as e:
-            print(f"Error generating trade data: {e}")
+            logger.error(f"Error generating trade data: {e}")
             return None
             
     def find_realistic_trade_original(self, symbol: str, timeframe_hours: int = 24) -> Optional[Dict]:
