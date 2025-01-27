@@ -156,8 +156,8 @@ class TrendStrategy:
                 
             movement_icon = self.get_movement_icon(token['price_change'])
             
-            section = f"{direction} ${symbol} TRENDING!\n"
-            section += f"💰 {price_str} ({token['price_change']:+.1f}%) {movement_icon}"
+            section = f"{direction} ${symbol} TRENDING! {movement_icon}\n"
+            section += f"💰 {price_str} ({token['price_change']:+.1f}%)"
             
             if len(tweet + "\n" + section) < 280:
                 if tweet:  # If not the first token, add a newline
