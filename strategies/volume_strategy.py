@@ -341,6 +341,22 @@ def calculate_volume_score(token: Dict) -> float:
         print(f"Error calculating score: {e}")
         return 0
 
+def calculate_volume_change(current_volume: float, previous_volume: float) -> float:
+    """Calculate percentage change in volume
+    
+    Args:
+        current_volume: Current 24h volume
+        previous_volume: Previous 24h volume
+        
+    Returns:
+        Percentage change in volume
+    """
+    if previous_volume == 0:
+        return 0
+    
+    change = ((current_volume - previous_volume) / previous_volume) * 100
+    return round(change, 2)
+
 class VolumeStrategy:
     """Volume-based analysis strategy"""
     

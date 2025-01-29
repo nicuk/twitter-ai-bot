@@ -60,20 +60,31 @@ def get_price_change(token: Dict) -> tuple:
         return 0.0, 0.0
 
 def format_token_info(token: Dict) -> Dict:
-    """Format token info into a standardized dictionary"""
-    return {
+    """Format token information for consistent display"""
+    price_change, price = get_price_change(token)
+    
+    volume = float(token.get('volume24h', 0) or 0)
+    mcap = float(token.get('marketCap', 0) or 0)
+    
+    token_info = {
         'symbol': token.get('symbol', ''),
-        'price_change': float(token.get('priceChange24h', 0)),
-        'volume': float(token.get('volume24h', 0))
+        'name': token.get('name', ''),
+        'price': float(token.get('price', 0) or 0),  # Get price directly
+        'price_change': price_change,
+        'volume': volume,
+        'mcap': mcap,
+        'activity_score': calculate_activity_score(volume, mcap, price_change)
     }
+    
+    return token_info
 
 def get_movement_description(change: float) -> str:
     """Get descriptive text for price movement"""
-    if change > 15:
-        return "surging"
+    if change > 30:
+        return "mooning"
     elif change > 5:
         return "rising"
-    elif change < -15:
+    elif change < -30:
         return "bleeding"
     elif change < -5:
         return "dipping"
@@ -304,3 +315,79 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
     except Exception as e:
         print(f"Error fetching tokens: {str(e)}")
         return []
+
+def get_portfolio_data(tokens: List[Dict], holdings: Dict) -> Dict:
+    """Calculate portfolio metrics from token data
+    
+    Args:
+        tokens: List of token data from API
+        holdings: Dict of {symbol: amount} representing user's holdings
+        
+    Returns:
+        Dict containing portfolio metrics for each token
+    """
+    portfolio = {}
+    for symbol, amount in holdings.items():
+        token = next((t for t in tokens if t['symbol'] == symbol), None)
+        if token:
+            token_info = format_token_info(token)
+            portfolio[symbol] = {
+                'amount': amount,
+                'value': amount * token_info['price'],
+                'change_24h': token_info['price_change'],
+                'volume': token_info['volume'],
+                'mcap': token_info['mcap'],
+                'price': token_info['price']
+            }
+    return portfolio
+
+def calculate_portfolio_metrics(portfolio: Dict) -> Dict:
+    """Calculate overall portfolio metrics
+    
+    Args:
+        portfolio: Dict of portfolio data from get_portfolio_data()
+        
+    Returns:
+        Dict containing total value, 24h change, etc.
+    """
+    if not portfolio:
+        return {
+            'total_value': 0,
+            'total_change_24h': 0,
+            'total_change_percent': 0,
+            'tokens': 0,
+            'biggest_gainer': None,
+            'biggest_loser': None
+        }
+        
+    total_value = sum(t['value'] for t in portfolio.values())
+    total_change = sum(t['value'] * t['change_24h']/100 for t in portfolio.values())
+    
+    # Find biggest gainer and loser
+    sorted_tokens = sorted(portfolio.items(), key=lambda x: x[1]['change_24h'])
+    biggest_loser = sorted_tokens[0] if sorted_tokens else None
+    biggest_gainer = sorted_tokens[-1] if sorted_tokens else None
+    
+    return {
+        'total_value': total_value,
+        'total_change_24h': total_change,
+        'total_change_percent': (total_change / total_value * 100) if total_value > 0 else 0,
+        'tokens': len(portfolio),
+        'biggest_gainer': biggest_gainer[0] if biggest_gainer else None,
+        'biggest_loser': biggest_loser[0] if biggest_loser else None
+    }
+
+def get_movement_icon_portfolio(change: float) -> str:
+    """Get movement icon for portfolio token
+    Uses same thresholds as trend/volume for consistency
+    """
+    if change > 30:
+        return "🌙"  # Mooning
+    elif change > 3:
+        return "🚀"  # Surging
+    elif change < -30:
+        return "🩸"  # Bleeding
+    elif change < -3:
+        return "📉"  # Dipping
+    else:
+        return "➡️"  # Stable

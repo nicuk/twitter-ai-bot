@@ -108,11 +108,11 @@ class TrendStrategy:
 
     def get_movement_icon(self, change: float) -> str:
         """Get icon for the price movement"""
-        if change > 10:
+        if change > 30:
             return "🌙"  # Mooning
         elif change > 3:
             return "🚀"  # Surging
-        elif change < -10:
+        elif change < -30:
             return "🩸"  # Bleeding
         elif change < -3:
             return "📉"  # Dipping
