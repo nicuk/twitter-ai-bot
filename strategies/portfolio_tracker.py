@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 class PortfolioTracker:
     """Tracks virtual portfolio performance with realistic trade entries/exits"""
     
+    EXCLUDED_TOKENS = {'BTC', 'ETH'}  # Only exclude BTC and ETH
+    
     def __init__(self, initial_capital: float = 100, api_key: str = None):
         """Initialize portfolio tracker with $100 and market data"""
         self.initial_capital = initial_capital
@@ -74,6 +76,10 @@ class PortfolioTracker:
             
         except Exception as e:
             print(f"Error bootstrapping historical data: {e}")
+            
+    def is_valid_token(self, symbol: str) -> bool:
+        """Check if token is valid for trading"""
+        return symbol not in self.EXCLUDED_TOKENS
             
     def find_realistic_trade(self, symbol_or_data: Any) -> Optional[Dict]:
         """Find trading opportunities based on market conditions"""
@@ -171,6 +177,10 @@ class PortfolioTracker:
             
             target_token = candidates[0]
             
+            # Skip large caps
+            if not self.is_valid_token(target_token.get('symbol')):
+                return None
+                
             # Calculate entry/exit to match our target gain
             current_price = float(target_token.get('price', 0))
             
@@ -225,17 +235,32 @@ class PortfolioTracker:
             if not token_data:
                 return None
                 
-            # Calculate realistic entry/exit
+            # Skip BTC and ETH
+            if not self.is_valid_token(symbol):
+                return None
+                
+            # Calculate realistic entry/exit based on actual price ranges
             current_price = float(token_data['price'])
-            low_price = current_price * 0.7  # Assume 30% range
-            high_price = current_price * 1.3
             
-            # 3-5% above low for entry
-            entry_buffer = random.uniform(0.03, 0.05)
+            # Validate price is realistic
+            if not self.validate_price_range(symbol, current_price):
+                return None
+            
+            # Use more realistic ranges for BTC (5-10% for normal market conditions)
+            range_factor = 0.05 if symbol == 'BTC' else 0.15  # 5% for BTC, 15% for others
+            
+            low_price = current_price * (1 - range_factor)
+            high_price = current_price * (1 + range_factor)
+            
+            # Tighter entry/exit buffers for BTC
+            if symbol == 'BTC':
+                entry_buffer = random.uniform(0.01, 0.02)  # 1-2% for BTC
+                exit_buffer = random.uniform(0.01, 0.02)
+            else:
+                entry_buffer = random.uniform(0.03, 0.05)  # 3-5% for other tokens
+                exit_buffer = random.uniform(0.03, 0.05)
+                
             entry_price = low_price * (1 + entry_buffer)
-            
-            # 3-5% below high for exit
-            exit_buffer = random.uniform(0.03, 0.05)
             exit_price = high_price * (1 - exit_buffer)
             
             # Only return if profitable
@@ -257,6 +282,30 @@ class PortfolioTracker:
         except Exception as e:
             print(f"Error finding trade: {e}")
             return None
+            
+    def validate_price_range(self, symbol: str, price: float) -> bool:
+        """Validate if a price is within realistic historical ranges"""
+        try:
+            # For BTC, enforce stricter validation
+            if symbol == 'BTC':
+                # Get historical price data
+                historical_data = self.price_history.get(symbol, {})
+                if not historical_data:
+                    return False
+                    
+                # Get 24h high and low
+                high_24h = float(historical_data.get('high_24h', price * 1.1))
+                low_24h = float(historical_data.get('low_24h', price * 0.9))
+                
+                # Price must be within 5% of 24h range
+                if price < low_24h * 0.95 or price > high_24h * 1.05:
+                    return False
+                    
+            return True
+            
+        except Exception as e:
+            print(f"Error validating price range: {e}")
+            return False
             
     def record_trade(self, trade_data: Dict) -> None:
         """Record a new completed trade"""
@@ -318,16 +367,16 @@ class PortfolioTracker:
         """Update current prices and save history"""
         date = datetime.now().strftime('%Y-%m-%d')
         
-        if 'coins' in market_data:
+        if isinstance(market_data, list):  # Handle validated token list
             # Store today's prices
-            self.price_history[date] = {
-                coin['symbol']: {
-                    'price': coin['price'],
-                    'volume': coin.get('volume24h', 0),
-                    'change24h': coin.get('priceChange24h', 0)
-                }
-                for coin in market_data['coins']
-            }
+            self.price_history[date] = {}
+            for token in market_data:
+                if all(k in token for k in ['symbol', 'price']):
+                    self.price_history[date][token['symbol']] = {
+                        'price': float(token['price']),
+                        'volume': float(token.get('volume24h', 0)),
+                        'change24h': float(token.get('priceChange24h', 0))
+                    }
             
             # Save updated history
             self._save_price_history()

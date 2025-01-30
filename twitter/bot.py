@@ -32,6 +32,11 @@ from twitter.history_manager import TweetHistory
 from elion.elion import Elion
 
 class AIGamingBot:
+    """Twitter bot for AI-powered crypto insights"""
+    
+    # Tokens to exclude from all analysis
+    EXCLUDED_TOKENS = {'BTC', 'ETH'}
+    
     def __init__(self):
         """Initialize Twitter bot"""
         logger.info("\nInitializing Twitter bot...")
@@ -89,6 +94,12 @@ class AIGamingBot:
         # Evening wrap-up (20:00-23:00)
         schedule.every().day.at("20:30").do(self.post_summary)    # Evening summary
         schedule.every().day.at("22:30").do(self.post_summary)    # Final summary
+
+    def is_valid_token(self, symbol: str) -> bool:
+        """Check if token should be included in analysis"""
+        if not symbol:
+            return False
+        return symbol.upper() not in self.EXCLUDED_TOKENS
 
     def post_ai_mystique(self):
         """Post AI mystique tweet"""
@@ -159,6 +170,22 @@ class AIGamingBot:
     def post_volume(self):
         """Post volume analysis tweet"""
         try:
+            # Get volume analysis
+            volume_data = self.elion.analyze_volume()
+            
+            # Filter out excluded tokens
+            if 'spikes' in volume_data:
+                volume_data['spikes'] = [
+                    (score, data) for score, data in volume_data['spikes']
+                    if self.is_valid_token(data.get('symbol'))
+                ]
+            
+            if 'anomalies' in volume_data:
+                volume_data['anomalies'] = [
+                    data for data in volume_data['anomalies']
+                    if self.is_valid_token(data.get('symbol'))
+                ]
+            
             # Generate volume tweet using Elion's volume strategy
             tweet = self.elion.generate_tweet('volume')
             if not tweet:
