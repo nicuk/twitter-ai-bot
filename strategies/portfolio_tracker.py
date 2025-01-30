@@ -15,7 +15,14 @@ logger = logging.getLogger(__name__)
 class PortfolioTracker:
     """Tracks virtual portfolio performance with realistic trade entries/exits"""
     
-    EXCLUDED_TOKENS = {'BTC', 'ETH'}  # Only exclude BTC and ETH
+    # Excluded tokens (top market cap coins)
+    EXCLUDED_TOKENS = {'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX'}
+    
+    # Price validation limits
+    MAX_PRICE = 1000  # Max price for any token
+    MAX_VOLUME_CHANGE = 500  # Max 500% volume change
+    MAX_24H_CHANGE = 50  # Max 50% price change in 24h for market data
+    MIN_VOLUME = 1000000  # $1M minimum volume
     
     def __init__(self, initial_capital: float = 100, api_key: str = None):
         """Initialize portfolio tracker with $100 and market data"""
@@ -77,9 +84,66 @@ class PortfolioTracker:
         except Exception as e:
             print(f"Error bootstrapping historical data: {e}")
             
-    def is_valid_token(self, symbol: str) -> bool:
-        """Check if token is valid for trading"""
-        return symbol not in self.EXCLUDED_TOKENS
+    def _validate_token(self, token: Dict) -> bool:
+        """Validate token data against rules"""
+        try:
+            if not token or not isinstance(token, dict):
+                return False
+                
+            symbol = token.get('symbol')
+            if not symbol or symbol in self.EXCLUDED_TOKENS:
+                return False
+                
+            # Price validation
+            price = float(token.get('price', 0))
+            if not (0 < price < self.MAX_PRICE):
+                return False
+                
+            # Volume validation
+            volume = float(token.get('volume24h', 0))
+            if volume < self.MIN_VOLUME:
+                return False
+                
+            # Volume change validation
+            volume_change = float(token.get('volumeChange24h', 0))
+            if not (-100 <= volume_change <= self.MAX_VOLUME_CHANGE):
+                return False
+                
+            # Price change validation - only for market data validation
+            # Not used for trade entry/exit which is handled separately
+            price_change = float(token.get('priceChange24h', 0))
+            if abs(price_change) > self.MAX_24H_CHANGE:
+                return False
+                
+            return True
+            
+        except (ValueError, TypeError):
+            return False
+            
+    def _validate_basic_token(self, token: Dict) -> bool:
+        """Basic token validation for finding trades"""
+        try:
+            if not token or not isinstance(token, dict):
+                return False
+                
+            symbol = token.get('symbol')
+            if not symbol or symbol in self.EXCLUDED_TOKENS:
+                return False
+                
+            # Price validation
+            price = float(token.get('price', 0))
+            if not (0 < price < self.MAX_PRICE):
+                return False
+                
+            # Volume validation
+            volume = float(token.get('volume24h', 0))
+            if volume < self.MIN_VOLUME:
+                return False
+                
+            return True
+            
+        except (ValueError, TypeError):
+            return False
             
     def find_realistic_trade(self, symbol_or_data: Any) -> Optional[Dict]:
         """Find trading opportunities based on market conditions"""
@@ -93,17 +157,15 @@ class PortfolioTracker:
             valid_tokens = []
             down_tokens = 0
             for token in tokens:
-                try:
-                    price_change = float(token.get('priceChange24h', 0))
-                    volume = float(token.get('volume24h', 0))
-                    
-                    # Only count tokens with meaningful volume
-                    if volume > 1000000:  # $1M minimum volume
-                        valid_tokens.append(token)
-                        if price_change < 0:
-                            down_tokens += 1
-                except (ValueError, TypeError):
+                # For finding trades, we only validate basic token data
+                # Not the 24h price change since we're looking for volatile moves
+                if not self._validate_basic_token(token):
                     continue
+                    
+                price_change = float(token.get('priceChange24h', 0))
+                if price_change < 0:
+                    down_tokens += 1
+                valid_tokens.append(token)
             
             if not valid_tokens:
                 return None
@@ -178,7 +240,7 @@ class PortfolioTracker:
             target_token = candidates[0]
             
             # Skip large caps
-            if not self.is_valid_token(target_token.get('symbol')):
+            if not self._validate_token(target_token):
                 return None
                 
             # Calculate entry/exit to match our target gain
@@ -236,14 +298,14 @@ class PortfolioTracker:
                 return None
                 
             # Skip BTC and ETH
-            if not self.is_valid_token(symbol):
+            if not self._validate_token(token_data):
                 return None
                 
             # Calculate realistic entry/exit based on actual price ranges
             current_price = float(token_data['price'])
             
             # Validate price is realistic
-            if not self.validate_price_range(symbol, current_price):
+            if not self._validate_token(token_data):
                 return None
             
             # Use more realistic ranges for BTC (5-10% for normal market conditions)

@@ -57,6 +57,15 @@ class Elion:
             'personal': 10  # Personal/engagement
         }
         
+        # List of excluded tokens (top market cap coins)
+        self.excluded_tokens = {'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX'}
+        
+        # Price validation limits
+        self.max_price = 1000  # Max price for any token
+        self.max_volume_change = 500  # Max 500% volume change
+        self.max_price_change = 30  # Max 30% price change
+        self.min_volume = 1000000  # $1M minimum volume
+        
     def _get_next_tweet_type(self) -> str:
         """Get next tweet type based on weights"""
         # Get available types
@@ -89,18 +98,53 @@ class Elion:
                 
         return filtered if filtered else tokens  # Fall back to all tokens if all used
     
+    def _validate_token(self, token: Dict) -> bool:
+        """Validate token data against rules"""
+        try:
+            if not token or not isinstance(token, dict):
+                return False
+                
+            symbol = token.get('symbol')
+            if not symbol or symbol in self.excluded_tokens:
+                return False
+                
+            # Price validation
+            price = float(token.get('price', 0))
+            if not (0 < price < self.max_price):
+                return False
+                
+            # Volume validation
+            volume = float(token.get('volume24h', 0))
+            if volume < self.min_volume:
+                return False
+                
+            # Volume change validation
+            volume_change = float(token.get('volumeChange24h', 0))
+            if not (-100 <= volume_change <= self.max_volume_change):
+                return False
+                
+            # Price change validation
+            price_change = float(token.get('priceChange24h', 0))
+            if abs(price_change) > self.max_price_change:
+                return False
+                
+            return True
+            
+        except (ValueError, TypeError):
+            return False
+            
     def get_market_data(self) -> Dict:
         """Get current market data from strategies"""
         try:
             # Get trend data
             trend_data = self.trend_strategy.analyze()
             if trend_data and 'trend_tokens' in trend_data:
-                self.state['trend_tokens'] = trend_data['trend_tokens']
+                self.state['trend_tokens'] = [token for token in trend_data['trend_tokens'] if self._validate_token(token)]
                 
             # Get volume data
             volume_data = self.volume_strategy.analyze()
             if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
-                self.state['volume_tokens'] = volume_data.get('spikes', []) + volume_data.get('anomalies', [])
+                self.state['volume_tokens'] = [token for token in volume_data.get('spikes', []) + volume_data.get('anomalies', []) if self._validate_token(token)]
                 
             # Combine data
             market_data = {
@@ -120,8 +164,11 @@ class Elion:
         try:
             # Find potential trade in trending tokens
             for token in self.state['trend_tokens']:
+                if not self._validate_token(token):
+                    continue
+                    
                 symbol = token.get('symbol')
-                if not symbol or symbol in self.state['used_tokens']:
+                if symbol in self.state['used_tokens']:
                     continue
                     
                 trade = self.portfolio.find_realistic_trade(symbol)
@@ -131,8 +178,11 @@ class Elion:
                     
             # Try volume tokens if no trend trades found
             for token in self.state['volume_tokens']:
+                if not self._validate_token(token):
+                    continue
+                    
                 symbol = token.get('symbol')
-                if not symbol or symbol in self.state['used_tokens']:
+                if symbol in self.state['used_tokens']:
                     continue
                     
                 trade = self.portfolio.find_realistic_trade(symbol)
@@ -150,13 +200,22 @@ class Elion:
         """Format trend data into a tweet"""
         if not tokens:
             return None
+            
         token = tokens[0]  # Use first token
-        return f"🤖 Analyzing $SOL: Price +{token['price_change']}% with {token['volume']}x volume increase! Historical success rate: {token['success_rate']}% on similar setups. My algorithms suggest high probability of significant moves. Stay tuned... 📊"
+        symbol = token.get('symbol', '')
+        if not symbol or not self._validate_token(token):
+            return None
+            
+        return f"🤖 Analyzing ${symbol}: Price +{token['price_change']}% with {token['volume']}x volume increase! Historical success rate: {token['success_rate']}% on similar setups. My algorithms suggest high probability of significant moves. Stay tuned... 📊"
 
     def format_volume_output(self, spikes, anomalies):
         """Format volume data into a tweet"""
         data = spikes[0] if spikes else anomalies[0]  # Use first item
-        return f"🔍 Volume Alert! $SOL showing {data['volume']}x average volume with {data['success_rate']}% historical success rate on similar patterns. Price currently at ${data['price']}. This could be the start of a significant move... 👀"
+        symbol = data.get('symbol', '')
+        if not symbol or not self._validate_token(data):
+            return None
+            
+        return f"🔍 Volume Alert! ${symbol} showing {data['volume']}x average volume with {data['success_rate']}% historical success rate on similar patterns. Price currently at ${data['price']}. This could be the start of a significant move... 👀"
 
     def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
         """Format a tweet using cached market data"""

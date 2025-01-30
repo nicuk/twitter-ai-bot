@@ -12,13 +12,70 @@ class ContentGenerator:
         self.portfolio = portfolio
         self.llm = llm
         
+        # List of excluded tokens (top market cap coins)
+        self.excluded_tokens = {'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX'}
+        
+        # Price validation limits
+        self.max_price = 1000  # Max price for any token
+        self.max_volume_change = 500  # Max 500% volume change
+        self.max_price_change = 30  # Max 30% price change
+        
+    def _validate_trade_data(self, trade_data: Dict) -> bool:
+        """Validate trade data against rules"""
+        try:
+            if not trade_data or not isinstance(trade_data, dict):
+                return False
+                
+            # Check required fields
+            required_fields = ['symbol', 'entry', 'exit', 'gain', 'timeframe']
+            if not all(field in trade_data for field in required_fields):
+                return False
+                
+            symbol = trade_data['symbol']
+            entry = float(trade_data['entry'])
+            exit_price = float(trade_data['exit'])
+            gain = float(trade_data['gain'])
+            
+            # Validate against excluded tokens
+            if symbol in self.excluded_tokens:
+                return False
+                
+            # Validate prices
+            if not (0 < entry < self.max_price and 0 < exit_price < self.max_price):
+                return False
+                
+            # Validate price change
+            price_change = abs(exit_price - entry) / entry * 100
+            if price_change > self.max_price_change:
+                return False
+                
+            return True
+            
+        except (ValueError, TypeError):
+            return False
+            
     def generate_ai_mystique(self, market_data: Dict) -> str:
         """Generate AI mystique tweet showing pattern detection"""
         try:
-            # Find potential trade setup
-            symbol = random.choice(['SOL', 'ETH', 'BTC'])
+            # Get valid tokens from market data
+            valid_tokens = [
+                token for token in market_data.get('tokens', [])
+                if token.get('symbol') not in self.excluded_tokens
+                and 0 < float(token.get('price', 0)) < self.max_price
+            ]
+            
+            if not valid_tokens:
+                return self._generate_general_mystique()
+                
+            # Select random valid token
+            token = random.choice(valid_tokens)
+            symbol = token['symbol']
             trade = self.portfolio.find_realistic_trade(symbol)
             
+            # Validate trade data
+            if not trade or not self._validate_trade_data(trade):
+                return self._generate_general_mystique()
+                
             # If no trade data or market data available, generate general mystique
             if not trade or not isinstance(trade, dict):
                 return self._generate_general_mystique()
@@ -63,6 +120,10 @@ class ContentGenerator:
             - Professional tone
             """
             return self.llm.generate_post(prompt)
+            
+        # Validate trade data
+        if not self._validate_trade_data(trade_data):
+            return None
             
         # Normal trade performance tweet
         prompt = f"""
