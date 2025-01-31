@@ -20,7 +20,6 @@ from strategies.shared_utils import (
     is_likely_stablecoin,
     get_movement_description
 )
-from llama import generate
 
 class TrendStrategy:
     """Analyzes market trends"""
@@ -369,37 +368,6 @@ def analyze_memeai_tokens(tokens: List[Dict], limit: int = 3) -> List[Dict]:
     
     filtered_tokens.sort(key=lambda x: x.get('trend_score', 0), reverse=True)
     return filtered_tokens[:limit]
-
-def get_trend_insight(tokens: list) -> str:
-    """Generate a brief market insight about trending tokens"""
-    # Format token data for LLM
-    token_info = []
-    total_volume = 0
-    for _, t in tokens[:3]:  # Just use top 3 tokens
-        volume = float(t['volume'])
-        total_volume += volume
-        token_info.append({
-            'symbol': t['symbol'],
-            'price_change': f"{float(t['price_change']):+.1f}%",
-            'volume': f"${volume/1e6:.1f}M"
-        })
-    
-    # Create prompt with key metrics
-    prompt = f"""Analyze these trending crypto tokens and give a very brief insight (max 100 chars):
-
-Top Movers:
-{', '.join(f"${t['symbol']} ({t['price_change']})" for t in token_info)}
-
-Volumes:
-{', '.join(f"${t['symbol']}: {t['volume']}" for t in token_info)}
-
-Total Volume: ${total_volume/1e6:.1f}M
-
-Focus on the most interesting metric or pattern. Add 1-2 relevant emojis."""
-
-    # Generate insight using Llama
-    insight = generate(prompt, max_tokens=60)
-    return insight if insight else "Market moves catching attention... 👀"
 
 def test_trend_strategy():
     """Test the trend-based analysis strategy"""

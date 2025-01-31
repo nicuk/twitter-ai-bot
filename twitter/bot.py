@@ -124,30 +124,31 @@ class AIGamingBot:
             logger.error(f"Error posting AI mystique tweet: {e}")
             
     def post_performance(self):
-        """Post performance tweet"""
+        """Post performance update, alternating between token and portfolio performance"""
         try:
-            # Get trade data
-            trade_data = self.elion.get_latest_trade()
-            if not trade_data:
-                logger.warning("No trade data available")
-                return
-                
-            # Generate performance tweet
-            content = self.elion.content.generate_performance_post(trade_data)
-            if not content:
-                logger.warning("Failed to generate performance tweet")
-                return
-                
-            # Post tweet
-            response = self.api.create_tweet(content)
-            if response:
-                logger.info("Posted performance tweet")
+            # Get portfolio data
+            portfolio = self.elion.portfolio_tracker.get_portfolio_summary()
+            
+            # Alternate between token and portfolio updates
+            if random.random() < 0.5:  # 50% chance for each type
+                # Token performance update
+                token_data = self.elion.token_history.get_recent_performance()
+                tweet = self.elion.format_tweet('performance_compare', token_data, variant='A')
             else:
-                logger.error("Failed to post performance tweet")
+                # Portfolio performance update
+                tweet = self.elion.format_tweet('performance_compare', portfolio, variant='B')
+            
+            # Post tweet with rate limiting
+            self.rate_limiter.wait()
+            self.api.post_tweet(tweet)
+            
+            logger.info(f"Posted performance update: {tweet[:100]}...")
+            return True
             
         except Exception as e:
-            logger.error(f"Error posting performance tweet: {e}")
-            
+            logger.error(f"Error posting performance update: {str(e)}")
+            return False
+
     def post_summary(self):
         """Post summary tweet"""
         try:
@@ -205,6 +206,15 @@ class AIGamingBot:
             if response:
                 logger.info("Posted volume analysis tweet")
                 self.elion.state['last_strategy'] = 'volume'
+                
+                # Track tokens mentioned in tweet
+                for _, token_data in volume_data.get('spikes', []):
+                    if 'symbol' in token_data:
+                        self.elion.token_monitor.update_token(token_data)
+                        
+                for _, token_data in volume_data.get('anomalies', []):
+                    if 'symbol' in token_data:
+                        self.elion.token_monitor.update_token(token_data)
             else:
                 logger.error("Failed to post volume tweet")
                 
@@ -212,23 +222,26 @@ class AIGamingBot:
             logger.error(f"Error posting volume tweet: {e}")
 
     def post_trend(self):
-        """Post trend analysis tweet"""
+        """Post portfolio performance update"""
         try:
-            # Generate trend tweet using Elion's trend strategy
-            tweet = self.elion.generate_tweet('trend')
+            # Get portfolio data
+            portfolio = self.elion.portfolio_tracker.get_portfolio_summary()
+            
+            # Generate portfolio performance tweet
+            tweet = self.elion.format_tweet('performance_compare', portfolio, variant='B')
             if not tweet:
-                logger.warning("Failed to generate trend tweet")
+                logger.warning("Failed to format portfolio tweet")
                 return
                 
             # Post tweet using TwitterAPI's create_tweet method
             response = self.api.create_tweet(tweet)
             if response:
-                logger.info("Posted trend analysis tweet")
+                logger.info("Posted portfolio performance tweet")
             else:
-                logger.error("Failed to post trend tweet")
+                logger.error("Failed to post portfolio tweet")
                 
         except Exception as e:
-            logger.error(f"Error posting trend tweet: {e}")
+            logger.error(f"Error posting portfolio tweet: {e}")
 
     def run(self):
         """Run the bot"""
