@@ -23,23 +23,23 @@ class TokenMonitor:
         trend_data = self.trend_strategy.analyze()
         
         # Track tokens from volume strategy
-        if 'volume_spikes' in volume_data:
-            for token in volume_data['volume_spikes']:
+        if volume_data and 'spikes' in volume_data:
+            for score, token in volume_data['spikes']:
                 self.history_tracker.update_token(token)
                 
-        if 'volume_anomalies' in volume_data:
-            for token in volume_data['volume_anomalies']:
+        if volume_data and 'anomalies' in volume_data:
+            for score, token in volume_data['anomalies']:
                 self.history_tracker.update_token(token)
         
         # Track tokens from trend strategy
-        if 'trend_tokens' in trend_data:
+        if trend_data and 'trend_tokens' in trend_data:
             for token in trend_data['trend_tokens']:
                 self.history_tracker.update_token(token)
         
         # Return original strategy data unchanged
         return {
-            'volume_data': volume_data,
-            'trend_data': trend_data
+            'volume_data': volume_data or {},
+            'trend_data': trend_data or {}
         }
     
     def get_performance_insights(self, days: int = 30) -> Dict:

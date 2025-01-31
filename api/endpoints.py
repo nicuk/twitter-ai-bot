@@ -75,60 +75,68 @@ def setup_routes(app: FastAPI):
         
     @app.get("/analysis/current")
     async def get_current_analysis() -> Dict:
-        """Get current analysis from volume and trend strategies"""
-        analysis = monitor.run_analysis()
-        
-        # Format volume data
-        volume_data = analysis['volume_data']
-        volume_tokens = []
-        
-        if 'volume_spikes' in volume_data:
-            for token in volume_data['volume_spikes']:
-                volume_tokens.append({
-                    'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume_24h': token['volume24h'],
-                    'market_cap': token['marketCap'],
-                    'volume_mcap_ratio': token['volume24h'] / token['marketCap'] if token['marketCap'] > 0 else 0,
-                    'type': 'spike'
-                })
-                
-        if 'volume_anomalies' in volume_data:
-            for token in volume_data['volume_anomalies']:
-                volume_tokens.append({
-                    'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume_24h': token['volume24h'],
-                    'market_cap': token['marketCap'],
-                    'volume_mcap_ratio': token['volume24h'] / token['marketCap'] if token['marketCap'] > 0 else 0,
-                    'type': 'anomaly'
-                })
-                
-        # Format trend data
-        trend_data = analysis['trend_data']
-        trend_tokens = []
-        
-        if 'trend_tokens' in trend_data:
-            for token in trend_data['trend_tokens']:
-                trend_tokens.append({
-                    'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume_24h': token['volume24h'],
-                    'market_cap': token['marketCap'],
-                    'trend_score': token.get('trend_score', 0),
-                    'momentum_score': token.get('momentum_score', 0)
-                })
-                
-        return {
-            'volume_analysis': {
-                'total_tokens': len(volume_tokens),
-                'tokens': volume_tokens
-            },
-            'trend_analysis': {
-                'total_tokens': len(trend_tokens),
-                'tokens': trend_tokens
+        """Get real-time analysis from volume and trend strategies"""
+        try:
+            # Get real-time analysis
+            analysis = monitor.run_analysis()
+            volume_data = analysis.get('volume_data', {})
+            trend_data = analysis.get('trend_data', {})
+            volume_tokens = []
+            
+            if 'spikes' in volume_data:
+                for score, token in volume_data['spikes']:
+                    volume_tokens.append({
+                        'symbol': token['symbol'],
+                        'price': token['price'],
+                        'volume_24h': token['volume'],
+                        'market_cap': token['mcap'],
+                        'volume_mcap_ratio': token['volume'] / token['mcap'] if token['mcap'] > 0 else 0,
+                        'type': 'spike'
+                    })
+                    
+            if 'anomalies' in volume_data:
+                for score, token in volume_data['anomalies']:
+                    volume_tokens.append({
+                        'symbol': token['symbol'],
+                        'price': token['price'],
+                        'volume_24h': token['volume'],
+                        'market_cap': token['mcap'],
+                        'volume_mcap_ratio': token['volume'] / token['mcap'] if token['mcap'] > 0 else 0,
+                        'type': 'anomaly'
+                    })
+            
+            # Format trend data
+            trend_tokens = []
+            if 'trend_tokens' in trend_data:
+                for token in trend_data['trend_tokens']:
+                    trend_tokens.append({
+                        'symbol': token['symbol'],
+                        'price': token['price'],
+                        'volume_24h': token['volume'],
+                        'market_cap': token['mcap'],
+                        'trend_score': token.get('trend_score', 0),
+                        'momentum_score': token.get('momentum_score', 0)
+                    })
+                    
+            return {
+                'volume_analysis': {
+                    'total_tokens': len(volume_tokens),
+                    'tokens': volume_tokens
+                },
+                'trend_analysis': {
+                    'total_tokens': len(trend_tokens),
+                    'tokens': trend_tokens
+                }
             }
-        }
+        except Exception as e:
+            import traceback
+            print(f"Error in get_current_analysis: {str(e)}")
+            print(traceback.format_exc())
+            return {
+                'volume_analysis': {'total_tokens': 0, 'tokens': []},
+                'trend_analysis': {'total_tokens': 0, 'tokens': []},
+                'error': str(e)
+            }
         
     @app.get("/analysis/performance")
     async def get_performance_insights(
