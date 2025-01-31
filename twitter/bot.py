@@ -171,7 +171,10 @@ class AIGamingBot:
         """Post volume analysis tweet"""
         try:
             # Get volume analysis
-            volume_data = self.elion.analyze_volume()
+            volume_data = self.elion.volume_strategy.analyze()
+            if not volume_data:
+                logger.warning("No volume data available")
+                return
             
             # Filter out excluded tokens
             if 'spikes' in volume_data:
@@ -182,20 +185,26 @@ class AIGamingBot:
             
             if 'anomalies' in volume_data:
                 volume_data['anomalies'] = [
-                    data for data in volume_data['anomalies']
+                    (score, data) for score, data in volume_data['anomalies']
                     if self.is_valid_token(data.get('symbol'))
                 ]
             
-            # Generate volume tweet using Elion's volume strategy
-            tweet = self.elion.generate_tweet('volume')
+            # Skip if no valid tokens after filtering
+            if not (volume_data.get('spikes') or volume_data.get('anomalies')):
+                logger.warning("No valid tokens after filtering")
+                return
+            
+            # Format volume tweet using filtered data
+            tweet = self.elion.tweet_formatters.format_volume_insight(volume_data, self.elion.personality.get_trait())
             if not tweet:
-                logger.warning("Failed to generate volume tweet")
+                logger.warning("Failed to format volume tweet")
                 return
                 
             # Post tweet
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info("Posted volume analysis tweet")
+                self.elion.state['last_strategy'] = 'volume'
             else:
                 logger.error("Failed to post volume tweet")
                 
