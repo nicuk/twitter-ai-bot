@@ -3,6 +3,7 @@
 import os
 import tweepy
 import logging
+import asyncio
 from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,22 @@ class TwitterAPI:
                 text=text,
                 in_reply_to_tweet_id=reply_to_id
             )
+            if response and hasattr(response, 'data'):
+                logger.info(f"Tweet posted successfully! ID: {response.data['id']}")
+                return response.data
+            else:
+                logger.error("Failed to post tweet - invalid response")
+                return None
+        except Exception as e:
+            logger.error(f"Error posting tweet: {e}")
+            return None
+    
+    async def create_tweet_async(self, text: str, reply_to_id: str = None) -> Optional[Dict]:
+        """Create a new tweet asynchronously"""
+        try:
+            # Run tweepy call in a thread pool since it's blocking
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, self.api.create_tweet, text, in_reply_to_tweet_id=reply_to_id)
             if response and hasattr(response, 'data'):
                 logger.info(f"Tweet posted successfully! ID: {response.data['id']}")
                 return response.data
@@ -84,6 +101,16 @@ class TwitterAPI:
             logger.error(f"Error getting responses for tweet {tweet_id}: {e}")
             return []
             
+    def verify_credentials(self) -> bool:
+        """Verify Twitter API credentials"""
+        try:
+            # Try to get the authenticated user's info
+            user = self.api.get_me()
+            return user is not None
+        except Exception as e:
+            logger.error(f"Error verifying credentials: {e}")
+            return False
+
     def calculate_engagement_score(self, metrics: Dict) -> float:
         """Calculate engagement score from tweet metrics"""
         if not metrics:
