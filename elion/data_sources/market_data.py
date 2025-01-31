@@ -6,6 +6,9 @@ from datetime import timedelta
 from typing import Dict, List, Optional, Any
 from .base import BaseDataSource
 from .cryptorank_api import CryptoRankAPI
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MarketDataSource(BaseDataSource):
     """Handles market data from CryptoRank API"""
@@ -22,12 +25,59 @@ class MarketDataSource(BaseDataSource):
             'market_condition': timedelta(minutes=15)
         })
         
-    def _validate_data(self, data: Any) -> bool:
+        # Configure price limits and excluded tokens
+        self.max_prices = {
+            'default': 1000  # Default max for other tokens
+        }
+        
+        # List of excluded tokens (top market cap coins)
+        self.excluded_tokens = {'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX'}
+        
+    def _validate_data(self, data: Any) -> List[Dict]:
         """Validate market data"""
         if not isinstance(data, (list, dict)):
-            return False
-        return True
+            return []
+            
+        # If it's a list of tokens, validate each token
+        if isinstance(data, list):
+            valid_tokens = []
+            for token in data:
+                if self._validate_token(token):
+                    valid_tokens.append(token)
+            return valid_tokens
+            
+        return []
         
+    def _validate_token(self, token: Dict) -> bool:
+        """Validate individual token data"""
+        try:
+            # Required fields
+            if not all(k in token for k in ['symbol', 'price']):
+                return False
+                
+            symbol = token['symbol']
+            
+            # Exclude top tokens
+            if symbol in self.excluded_tokens:
+                return False
+                
+            # Basic data validation - just ensure numbers are valid
+            try:
+                price = float(token['price'])
+                volume = float(token.get('volume24h', 0))
+                if price <= 0:  # Only check if price is positive
+                    logger.warning(f"Invalid price for {symbol}: ${price}")
+                    return False
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid numeric data for {symbol}")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating token {token.get('symbol', 'unknown')}: {e}")
+            return False
+            
     def get_market_data(self) -> List[Dict]:
         """Get current market data"""
         # Check cache first
@@ -35,14 +85,18 @@ class MarketDataSource(BaseDataSource):
         if cached:
             return cached
             
-        # Get fresh data
-        data = self.cryptorank_api.get_currencies()
-        if not data:
+        # Fetch fresh data
+        tokens = self.cryptorank_api.fetch_tokens()
+        if not tokens:
             return []
             
-        # Cache and return
-        self._cache_data('market_data', data)
-        return data
+        # Validate tokens
+        valid_tokens = self._validate_data(tokens)
+        if valid_tokens:
+            self._set_cached('market_data', valid_tokens)
+            return valid_tokens
+            
+        return []
         
     def get_market_sentiment(self, btc_data: Dict) -> str:
         """Determine market sentiment based on BTC performance"""
