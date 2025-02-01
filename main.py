@@ -29,7 +29,6 @@ def run_bot():
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.error(f"Error running bot: {e}")
-        raise
 
 def main():
     """Main entry point"""
@@ -40,14 +39,20 @@ def main():
     app = FastAPI()
     setup_routes(app)
     
-    # Start bot in a separate thread
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
+    # Only start bot on the first worker process
+    worker_id = os.getenv('WORKER_ID', '0')
+    if worker_id == '0':
+        logger.info("Starting bot on primary worker")
+        # Start bot in a separate thread
+        bot_thread = threading.Thread(target=run_bot)
+        bot_thread.daemon = True
+        bot_thread.start()
+    else:
+        logger.info(f"Skipping bot on worker {worker_id}")
     
-    # Run FastAPI server
+    # Run FastAPI server with 3 workers
     port = int(os.getenv('PORT', 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, workers=3)
 
 if __name__ == "__main__":
     main()

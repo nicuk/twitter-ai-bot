@@ -8,6 +8,8 @@ import schedule
 from datetime import datetime, timedelta
 import sys
 from logging.handlers import RotatingFileHandler
+import tempfile
+import atexit
 
 # Add parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,7 +25,33 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-logger.info("Starting Twitter bot...")
+
+def is_bot_running() -> bool:
+    """Check if another instance is running"""
+    lock_file = os.path.join(tempfile.gettempdir(), 'elai_bot.lock')
+    
+    try:
+        if os.path.exists(lock_file):
+            # Check if process is actually running
+            with open(lock_file, 'r') as f:
+                pid = int(f.read().strip())
+            try:
+                os.kill(pid, 0)  # Check if process exists
+                return True
+            except OSError:
+                pass  # Process not running
+        
+        # Create lock file with current PID
+        with open(lock_file, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        # Register cleanup
+        atexit.register(lambda: os.remove(lock_file) if os.path.exists(lock_file) else None)
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking lock file: {e}")
+        return False
 
 from custom_llm import GeminiComponent
 from twitter.api_client import TwitterAPI
@@ -96,6 +124,10 @@ class AIGamingBot:
 
     def _schedule_tweets(self):
         """Schedule Elion's structured daily tweets"""
+        # Clear existing schedule
+        schedule.clear()
+        logger.info("Cleared existing schedule")
+        
         # === Trend Posts (6 per day) ===
         schedule.every().day.at("01:00").do(self.post_trend)     # Early Asian
         schedule.every().day.at("05:00").do(self.post_trend)     # Mid Asian
@@ -366,5 +398,10 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     
+    if is_bot_running():
+        logger.error("Another instance of the bot is already running!")
+        sys.exit(1)
+    
+    logger.info("Starting Twitter bot...")
     bot = AIGamingBot()
     bot.run()
