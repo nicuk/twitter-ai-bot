@@ -110,11 +110,29 @@ class TokenHistoryTracker:
         """Initialize tracker with Railway's persistent storage"""
         # Use Railway's persistent storage directory
         self.data_dir = '/data'
-        if not os.path.exists(self.data_dir):
-            # If running locally, use current directory
+        
+        # If /data doesn't exist, try creating it
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Error creating /data directory: {e}")
+            # If we can't create /data, use current directory
+            self.data_dir = os.path.dirname(os.path.abspath(__file__))
+            
+        # Try writing a test file to check permissions
+        test_file = os.path.join(self.data_dir, '.test')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logger.info(f"Successfully verified write access to {self.data_dir}")
+        except Exception as e:
+            logger.error(f"No write access to {self.data_dir}: {e}")
+            # If we can't write to /data, use current directory
             self.data_dir = os.path.dirname(os.path.abspath(__file__))
             
         self.history_file = os.path.join(self.data_dir, 'token_history.json')
+        logger.info(f"Using token history file: {self.history_file}")
         self.token_history: Dict[str, TokenHistoricalData] = {}
         self.load_history()
     
