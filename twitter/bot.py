@@ -5,6 +5,8 @@ import time
 import random
 import logging
 import schedule
+import threading
+import redis
 from datetime import datetime, timedelta
 import sys
 from logging.handlers import RotatingFileHandler
@@ -26,31 +28,23 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def is_bot_running() -> bool:
-    """Check if another instance is running"""
-    lock_file = os.path.join(tempfile.gettempdir(), 'elai_bot.lock')
-    
+def is_bot_running():
+    """Check if another instance is running using Redis lock"""
     try:
-        if os.path.exists(lock_file):
-            # Check if process is actually running
-            with open(lock_file, 'r') as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, 0)  # Check if process exists
-                return True
-            except OSError:
-                pass  # Process not running
-        
-        # Create lock file with current PID
-        with open(lock_file, 'w') as f:
-            f.write(str(os.getpid()))
-        
-        # Register cleanup
-        atexit.register(lambda: os.remove(lock_file) if os.path.exists(lock_file) else None)
-        return False
-        
+        redis_url = os.getenv('REDIS_URL')
+        if not redis_url:
+            logger.warning("REDIS_URL not set, skipping lock check")
+            return False
+            
+        redis_client = redis.from_url(redis_url)
+        lock = redis_client.setnx('twitter_bot_lock', 'locked')
+        if lock:
+            # Set expiry to avoid deadlock if process crashes
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
+            return False
+        return True
     except Exception as e:
-        logger.error(f"Error checking lock file: {e}")
+        logger.error(f"Error checking Redis lock: {e}")
         return False
 
 from custom_llm import GeminiComponent
@@ -113,8 +107,11 @@ class AIGamingBot:
     def _get_next_extra_type(self) -> str:
         """Get next additional type to use and increment counter"""
         extra_types = [
-            'self_aware', 'alpha', 'personal', 
-            'volume_alert', 'performance_update'
+            'volume_alert',        # High volume signals
+            'performance_update',  # Weekly stats
+            'alpha',              # Trading opportunities
+            'winners_recap',      # Recent successful calls
+            'vmc_alert'          # Volume/MCap analysis
         ]
         
         extra_type = extra_types[self.current_extra_index]
@@ -159,17 +156,30 @@ class AIGamingBot:
             logger.info("=== Starting A/B Format Post ===")
             format_type, variant = self._get_next_format()
             
-            # Get market data from Elion
-            market_data = self.elion.get_market_data()
-            if not market_data:
-                logger.warning(f"No market data available for {format_type}")
-                return
+            # Try to get market data from volume strategy first
+            market_data = self.elion.volume_strategy.analyze()
+            if not market_data or ('spikes' not in market_data and 'anomalies' not in market_data):
+                # Fallback to trend strategy
+                logger.info("No volume data, trying trend strategy")
+                market_data = self.elion.trend_strategy.analyze()
+                if not market_data or 'trend_tokens' not in market_data:
+                    logger.warning("No market data available from either strategy")
+                    return
+                logger.info("Using trend strategy data")
+            else:
+                logger.info("Using volume strategy data")
                 
             # Generate tweet using format
             tweet = self.elion.format_tweet(format_type, market_data, variant=variant)
             if not tweet:
                 logger.warning(f"Failed to format {format_type} tweet")
-                return
+                # Try a different format as fallback
+                fallback_format = 'winners_recap' if format_type != 'winners_recap' else 'volume_alert'
+                tweet = self.elion.format_tweet(fallback_format, market_data, variant='A')
+                if not tweet:
+                    logger.warning("Failed to format fallback tweet")
+                    return
+                logger.info(f"Using fallback format: {fallback_format}")
                 
             # Post tweet
             response = self.api.create_tweet(tweet)
@@ -237,17 +247,16 @@ class AIGamingBot:
     def post_performance(self):
         """Post performance update, alternating between token and portfolio performance"""
         try:
-            # Get portfolio data
-            portfolio = self.elion.portfolio_tracker.get_portfolio_summary()
+            # Get token performance data
+            token_data = self.elion.token_history.get_recent_performance()
             
             # Alternate between token and portfolio updates
             if random.random() < 0.5:  # 50% chance for each type
                 # Token performance update
-                token_data = self.elion.token_history.get_recent_performance()
                 tweet = self.elion.format_tweet('performance_compare', token_data, variant='A')
             else:
-                # Portfolio performance update
-                tweet = self.elion.format_tweet('performance_compare', portfolio, variant='B')
+                # Portfolio performance update - use token data as fallback
+                tweet = self.elion.format_tweet('performance_compare', token_data, variant='B')
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()

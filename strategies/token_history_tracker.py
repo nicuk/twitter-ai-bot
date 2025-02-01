@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 import json
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TokenHistoricalData:
@@ -126,7 +129,7 @@ class TokenHistoryTracker:
                         for symbol, token_data in data.items()
                     }
         except Exception as e:
-            print(f"Error loading token history: {e}")
+            logger.error(f"Error loading token history: {e}")
             self.token_history = {}
     
     def save_history(self):
@@ -142,17 +145,37 @@ class TokenHistoryTracker:
                     indent=2
                 )
         except Exception as e:
-            print(f"Error saving token history: {e}")
+            logger.error(f"Error saving token history: {e}")
     
     def update_token(self, token: Dict):
         """Update token data in history"""
         try:
-            symbol = token['symbol']
-            price = float(token.get('price', 0))
-            volume = float(token.get('volume24h', 0))
-            mcap = float(token.get('marketCap', 0))
+            # Extract token data using correct keys from CryptoRank API
+            symbol = token.get('symbol', '').upper()
+            if not symbol:
+                return
+                
+            # Try different key formats (CryptoRank API vs Strategy format)
+            price = float(token.get('current_price', 
+                token.get('price', 
+                token.get('lastPrice', 0))))
+                
+            volume = float(token.get('24h_volume',
+                token.get('volume24h',
+                token.get('volume', 0))))
+                
+            mcap = float(token.get('market_cap',
+                token.get('marketCap',
+                token.get('mcap', 0))))
+                
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
             current_time = datetime.now()
+            
+            # Add debug logging
+            logger.debug(f"Updating token {symbol}:")
+            logger.debug(f"Price: {price}")
+            logger.debug(f"Volume: {volume}")
+            logger.debug(f"Market Cap: {mcap}")
             
             if symbol not in self.token_history:
                 # First mention of token
@@ -168,6 +191,7 @@ class TokenHistoryTracker:
                     current_mcap=mcap,
                     last_updated=current_time
                 )
+                logger.info(f"Added new token {symbol} to history")
             else:
                 # Update existing token data
                 token_data = self.token_history[symbol]
@@ -175,18 +199,24 @@ class TokenHistoryTracker:
                 
                 # Update performance metrics within first 7 days
                 if time_since_mention <= timedelta(days=7):
-                    # Update 24h metrics
-                    if time_since_mention >= timedelta(hours=24) and token_data.price_24h_after == 0:
+                    # Always update current metrics
+                    token_data.current_price = price
+                    token_data.current_volume = volume
+                    token_data.current_mcap = mcap
+                    token_data.last_updated = current_time
+                    
+                    # Update 24h metrics if enough time has passed
+                    if time_since_mention >= timedelta(hours=24):
                         token_data.price_24h_after = price
                         token_data.volume_24h_after = volume
                     
-                    # Update 48h metrics
-                    if time_since_mention >= timedelta(hours=48) and token_data.price_48h_after == 0:
+                    # Update 48h metrics if enough time has passed
+                    if time_since_mention >= timedelta(hours=48):
                         token_data.price_48h_after = price
                         token_data.volume_48h_after = volume
                     
-                    # Update 7d metrics
-                    if time_since_mention >= timedelta(days=7) and token_data.price_7d_after == 0:
+                    # Update 7d metrics if enough time has passed
+                    if time_since_mention >= timedelta(days=7):
                         token_data.price_7d_after = price
                         token_data.volume_7d_after = volume
                     
@@ -195,22 +225,19 @@ class TokenHistoryTracker:
                         token_data.max_price_7d = price
                         token_data.max_price_7d_date = current_time
                         token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
-                    
+                        
                     if volume > token_data.max_volume_7d:
                         token_data.max_volume_7d = volume
                         token_data.max_volume_7d_date = current_time
-                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
-                
-                # Always update current values
-                token_data.current_price = price
-                token_data.current_volume = volume
-                token_data.current_mcap = mcap
-                token_data.last_updated = current_time
-            
+                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100 if token_data.first_mention_volume_24h > 0 else 0
+                        
+                    logger.debug(f"Updated existing token {symbol}")
+                    
+            # Save after each update
             self.save_history()
             
         except Exception as e:
-            print(f"Error updating token {token.get('symbol')}: {e}")
+            logger.error(f"Error updating token {symbol}: {str(e)}")
     
     def get_token_history(self, symbol: str) -> Optional[TokenHistoricalData]:
         """Get historical data for a specific token"""
