@@ -7,6 +7,9 @@ import random
 from typing import Dict, Optional, Any
 from dotenv import load_dotenv
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from elion.content.generator import ContentGenerator
 from elion.personality.traits import PersonalityManager
@@ -14,7 +17,7 @@ from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
-from strategies.token_monitor import TokenMonitor
+from elion.token_monitor import TokenMonitor
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -138,33 +141,39 @@ class Elion:
             return False
             
     def get_market_data(self) -> Dict:
-        """Get current market data from strategies"""
+        """Get combined market data from all strategies"""
         try:
-            # Use TokenMonitor to track tokens while getting market data
-            monitor_data = self.token_monitor.run_analysis()
+            # Get trend data
+            trend_data = self.trend_strategy.analyze()
             
-            # Extract strategy data from monitor results
-            trend_data = monitor_data['trend_data']
-            volume_data = monitor_data['volume_data']
+            # Get volume data
+            volume_data = self.volume_strategy.analyze()
             
-            if trend_data and 'trend_tokens' in trend_data:
-                self.state['trend_tokens'] = [token for token in trend_data['trend_tokens'] if self._validate_token(token)]
-                
-            if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
-                self.state['volume_tokens'] = [token for token in volume_data.get('spikes', []) + volume_data.get('anomalies', []) if self._validate_token(token)]
-                
-            # Combine data
+            # Get portfolio data
+            portfolio_data = self.portfolio_tracker.get_portfolio_summary()
+            
+            # Track tokens while getting market data
+            for token in trend_data.get('trend_tokens', []):
+                if 'symbol' in token:
+                    self.token_monitor.track_token(
+                        token['symbol'],
+                        price=token.get('price'),
+                        volume=token.get('volume24h')
+                    )
+            
+            # Combine all data
             market_data = {
-                'trend': trend_data if trend_data else {},
-                'volume': volume_data if volume_data else {},
-                'performance': self.token_monitor.get_performance_insights()
+                'trend': trend_data,
+                'volume': volume_data,
+                'portfolio': portfolio_data,
+                'timestamp': datetime.now()
             }
             
             return market_data
             
         except Exception as e:
-            print(f"Error getting market data: {e}")
-            return {}
+            logger.error(f"Error getting market data: {e}")
+            return None
             
     def get_latest_trade(self) -> Optional[Dict]:
         """Get latest trade data for performance posts"""
@@ -224,22 +233,38 @@ class Elion:
             
         return f"🔍 Volume Alert! ${symbol} showing {data['volume']}x average volume with {data['success_rate']}% historical success rate on similar patterns. Price currently at ${data['price']}. This could be the start of a significant move... 👀"
 
-    def format_tweet(self, tweet_type: str, market_data: Dict) -> str:
-        """Format a tweet using cached market data"""
+    def format_tweet(self, tweet_type: str, market_data: Dict, variant: str = 'A') -> str:
+        """Format a tweet using market data"""
         try:
             # Get personality trait
             trait = self.personality.get_trait()
             
-            # Format tweet based on type
-            if tweet_type == 'trend':
-                return self.tweet_formatters.format_trend_insight(market_data['trend'], trait)
-            elif tweet_type == 'volume':
-                return self.tweet_formatters.format_volume_insight(market_data['volume'], trait)
-            else:
+            # Core A/B formats
+            if tweet_type in ['performance_compare', 'volume_breakout', 'trend_momentum',
+                            'winners_recap', 'vmc_alert', 'pattern_alert']:
+                # Get method from tweet_formatters
+                method_name = f'format_{tweet_type}'
+                if hasattr(self.tweet_formatters, method_name):
+                    format_method = getattr(self.tweet_formatters, method_name)
+                    return format_method(market_data, variant=variant)
+                
+            # Additional types
+            elif tweet_type == 'self_aware':
+                return self.tweet_formatters.format_self_aware(trait)
+            elif tweet_type == 'alpha':
+                return self.tweet_formatters.format_alpha(market_data, trait)
+            elif tweet_type == 'personal':
                 return self.tweet_formatters.format_personal(trait)
+            elif tweet_type == 'volume_alert':
+                return self.tweet_formatters.format_volume_alert(market_data, trait)
+            elif tweet_type == 'performance_update':
+                return self.tweet_formatters.format_performance_update(market_data, trait)
+            else:
+                logger.error(f"Unknown tweet type: {tweet_type}")
+                return None
                 
         except Exception as e:
-            print(f"Error formatting {tweet_type} tweet: {e}")
+            logger.error(f"Error formatting {tweet_type} tweet: {e}")
             return None
             
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:

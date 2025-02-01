@@ -51,6 +51,10 @@ class AIGamingBot:
         self.rate_limiter = RateLimiter()
         self.history = TweetHistory()
         
+        # Track which format to use next
+        self.current_format_index = 0  # 0-11 for A/B formats
+        self.current_extra_index = 0   # 0-4 for additional types
+        
         # Initialize Elion
         logger.info("Initializing Elion...")
         self.elion = Elion(GeminiComponent(
@@ -62,38 +66,113 @@ class AIGamingBot:
         logger.info("Setting up tweet schedule...")
         self._schedule_tweets()
 
+    def _get_next_format(self) -> tuple:
+        """Get next format to use and increment counter"""
+        formats = [
+            ('performance_compare', 'A'), ('performance_compare', 'B'),
+            ('volume_breakout', 'A'), ('volume_breakout', 'B'),
+            ('trend_momentum', 'A'), ('trend_momentum', 'B'),
+            ('winners_recap', 'A'), ('winners_recap', 'B'),
+            ('vmc_alert', 'A'), ('vmc_alert', 'B'),
+            ('pattern_alert', 'A'), ('pattern_alert', 'B')
+        ]
+        
+        format_type, variant = formats[self.current_format_index]
+        self.current_format_index = (self.current_format_index + 1) % len(formats)
+        logger.info(f"Using A/B format: {format_type} (variant {variant}), next index: {self.current_format_index}")
+        return format_type, variant
+
+    def _get_next_extra_type(self) -> str:
+        """Get next additional type to use and increment counter"""
+        extra_types = [
+            'self_aware', 'alpha', 'personal', 
+            'volume_alert', 'performance_update'
+        ]
+        
+        extra_type = extra_types[self.current_extra_index]
+        self.current_extra_index = (self.current_extra_index + 1) % len(extra_types)
+        logger.info(f"Using extra type: {extra_type}, next index: {self.current_extra_index}")
+        return extra_type
+
     def _schedule_tweets(self):
         """Schedule Elion's structured daily tweets"""
-        # === Asian Trading Session (00:00-08:00 UTC) ===
-        
-        # Early Asian Market (00:00-03:00)
-        schedule.every().day.at("00:00").do(self.post_trend)    # Opening trends
-        schedule.every().day.at("01:30").do(self.post_volume)   # Early volume check
-        schedule.every().day.at("02:30").do(self.post_ai_mystique)  # AI insights
-        
-        # Main Asian Market (03:00-08:00)
-        schedule.every().day.at("04:00").do(self.post_trend)    # Mid-Asian trends
-        schedule.every().day.at("05:30").do(self.post_volume)   # Volume analysis
-        schedule.every().day.at("06:00").do(self.post_performance)  # Performance update
-        schedule.every().day.at("07:30").do(self.post_trend)    # Late Asian trends
+        # === Trend Posts (6 per day) ===
+        schedule.every().day.at("01:00").do(self.post_trend)     # Early Asian
+        schedule.every().day.at("05:00").do(self.post_trend)     # Mid Asian
+        schedule.every().day.at("09:00").do(self.post_trend)     # Early EU
+        schedule.every().day.at("13:00").do(self.post_trend)     # Mid EU
+        schedule.every().day.at("17:00").do(self.post_trend)     # Early US
+        schedule.every().day.at("21:00").do(self.post_trend)     # Mid US
 
-        # === US Trading Session (11:00-21:00 UTC) ===
-        
-        # Pre-market (11:00-14:30)
-        schedule.every().day.at("11:30").do(self.post_trend)    # Pre-market trends
-        schedule.every().day.at("12:30").do(self.post_volume)   # Pre-market volume
-        schedule.every().day.at("13:30").do(self.post_ai_mystique)  # Market insights
-        
-        # Main US Session (14:30-21:00)
-        schedule.every().day.at("15:00").do(self.post_performance)  # Mid-day performance
-        schedule.every().day.at("16:30").do(self.post_trend)    # Mid-session trends
-        schedule.every().day.at("17:30").do(self.post_volume)   # Volume check
-        schedule.every().day.at("18:30").do(self.post_performance)  # Performance update
-        schedule.every().day.at("19:30").do(self.post_trend)    # Late session trends
-        
-        # Evening wrap-up (20:00-23:00)
-        schedule.every().day.at("20:30").do(self.post_summary)    # Evening summary
-        schedule.every().day.at("22:30").do(self.post_summary)    # Final summary
+        # === Volume Posts (4 per day) ===
+        schedule.every().day.at("03:00").do(self.post_volume)    # Asian
+        schedule.every().day.at("11:00").do(self.post_volume)    # European
+        schedule.every().day.at("15:00").do(self.post_volume)    # Early US
+        schedule.every().day.at("19:00").do(self.post_volume)    # Mid US
+
+        # === Core A/B Format Posts (6 per day) ===
+        schedule.every().day.at("02:00").do(self.post_format_tweet)  # Early Asian
+        schedule.every().day.at("06:00").do(self.post_format_tweet)  # Mid Asian
+        schedule.every().day.at("10:00").do(self.post_format_tweet)  # Early EU
+        schedule.every().day.at("14:00").do(self.post_format_tweet)  # Mid EU
+        schedule.every().day.at("18:00").do(self.post_format_tweet)  # Early US
+        schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US
+
+        # === Additional Type Post (1 per day) ===
+        schedule.every().day.at("12:00").do(self.post_extra_tweet)   # Mid-day personality
+
+    def post_format_tweet(self):
+        """Post tweet using next A/B format in rotation"""
+        try:
+            logger.info("=== Starting A/B Format Post ===")
+            format_type, variant = self._get_next_format()
+            
+            # Get market data from Elion
+            market_data = self.elion.get_market_data()
+            if not market_data:
+                logger.warning(f"No market data available for {format_type}")
+                return
+                
+            # Generate tweet using format
+            tweet = self.elion.format_tweet(format_type, market_data, variant=variant)
+            if not tweet:
+                logger.warning(f"Failed to format {format_type} tweet")
+                return
+                
+            # Post tweet
+            response = self.api.create_tweet(tweet)
+            if response:
+                logger.info(f"Posted {format_type} tweet (variant {variant})")
+            else:
+                logger.error(f"Failed to post {format_type} tweet")
+                
+        except Exception as e:
+            logger.error(f"Error posting format tweet: {e}")
+
+    def post_extra_tweet(self):
+        """Post tweet using next additional type in rotation"""
+        try:
+            logger.info("=== Starting Extra Type Post ===")
+            extra_type = self._get_next_extra_type()
+            
+            # Get market data if needed
+            market_data = self.elion.get_market_data() if extra_type in ['alpha', 'volume_alert', 'performance_update'] else None
+            
+            # Generate tweet using format
+            tweet = self.elion.format_tweet(extra_type, market_data)
+            if not tweet:
+                logger.warning(f"Failed to format {extra_type} tweet")
+                return
+                
+            # Post tweet
+            response = self.api.create_tweet(tweet)
+            if response:
+                logger.info(f"Posted {extra_type} tweet")
+            else:
+                logger.error(f"Failed to post {extra_type} tweet")
+                
+        except Exception as e:
+            logger.error(f"Error posting extra tweet: {e}")
 
     def is_valid_token(self, symbol: str) -> bool:
         """Check if token should be included in analysis"""
@@ -168,9 +247,51 @@ class AIGamingBot:
         except Exception as e:
             logger.error(f"Error posting summary tweet: {e}")
             
+    def post_trend(self):
+        """Post trend analysis tweet"""
+        try:
+            logger.info("=== Starting Trend Analysis Post ===")
+            # Get trend analysis
+            trend_data = self.elion.trend_strategy.analyze()
+            if not trend_data:
+                logger.warning("No trend data available")
+                return
+            
+            # Filter out excluded tokens
+            trend_tokens = [
+                token for token in trend_data.get('trend_tokens', [])
+                if self.is_valid_token(token.get('symbol'))
+            ]
+            
+            if not trend_tokens:
+                logger.warning("No valid tokens after filtering")
+                return
+            
+            # Format trend tweet using strategy's own formatter
+            tweet = self.elion.trend_strategy.format_twitter_output(trend_tokens)
+            if not tweet:
+                logger.warning("Failed to format trend tweet")
+                return
+                
+            # Post tweet
+            response = self.api.create_tweet(tweet)
+            if response:
+                logger.info("Posted trend analysis tweet")
+                
+                # Track tokens mentioned in tweet
+                for token_data in trend_tokens:
+                    if 'symbol' in token_data:
+                        self.elion.token_monitor.track_token(token_data['symbol'])
+            else:
+                logger.error("Failed to post trend tweet")
+                
+        except Exception as e:
+            logger.error(f"Error posting trend tweet: {e}")
+
     def post_volume(self):
         """Post volume analysis tweet"""
         try:
+            logger.info("=== Starting Volume Analysis Post ===")
             # Get volume analysis
             volume_data = self.elion.volume_strategy.analyze()
             if not volume_data:
@@ -217,31 +338,13 @@ class AIGamingBot:
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
 
-    def post_trend(self):
-        """Post portfolio performance update"""
-        try:
-            # Get portfolio data
-            portfolio = self.elion.portfolio_tracker.get_portfolio_summary()
-            
-            # Generate portfolio performance tweet
-            tweet = self.elion.format_tweet('performance_compare', portfolio, variant='B')
-            if not tweet:
-                logger.warning("Failed to format portfolio tweet")
-                return
-                
-            # Post tweet using TwitterAPI's create_tweet method
-            response = self.api.create_tweet(tweet)
-            if response:
-                logger.info("Posted portfolio performance tweet")
-            else:
-                logger.error("Failed to post portfolio tweet")
-                
-        except Exception as e:
-            logger.error(f"Error posting portfolio tweet: {e}")
-
     def run(self):
         """Run the bot"""
-        logger.info("Starting bot...")
+        logger.info("=== Starting Bot with Schedule ===")
+        logger.info("Trend Posts: 01:00, 05:00, 09:00, 13:00, 17:00, 21:00 UTC")
+        logger.info("Volume Posts: 03:00, 11:00, 15:00, 19:00 UTC")
+        logger.info("A/B Format Posts: 02:00, 06:00, 10:00, 14:00, 18:00, 22:00 UTC")
+        logger.info("Extra Type Post: 12:00 UTC")
         
         while True:
             try:
@@ -249,7 +352,8 @@ class AIGamingBot:
                 next_job = schedule.next_run()
                 if next_job:
                     minutes_until = int((next_job - datetime.now()).total_seconds() / 60)
-                    logger.info(f"Next tweet in {minutes_until} minutes")
+                    next_job_time = next_job.strftime("%H:%M UTC")
+                    logger.info(f"Next tweet scheduled for {next_job_time} ({minutes_until} minutes from now)")
                 time.sleep(60)
             except KeyboardInterrupt:
                 logger.info("Bot stopped by user")
