@@ -324,15 +324,12 @@ class AIGamingBot:
                 logger.warning("Failed to format trend tweet")
                 return
                 
-            # Post tweet
+            # Post tweet and track tokens
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info("Posted trend analysis tweet")
-                
-                # Track tokens mentioned in tweet
-                for token_data in trend_tokens:
-                    if 'symbol' in token_data:
-                        self.elion.token_monitor.track_token(token_data['symbol'])
+                # Track tokens using TokenMonitor
+                self.elion.token_monitor.run_analysis()
             else:
                 logger.error("Failed to post trend tweet")
                 
@@ -373,16 +370,12 @@ class AIGamingBot:
                 logger.warning("Failed to format volume tweet")
                 return
                 
-            # Post tweet
+            # Post tweet and track tokens
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info("Posted volume analysis tweet")
-                
-                # Track tokens mentioned in tweet
-                for token_list in [volume_data.get('spikes', []), volume_data.get('anomalies', [])]:
-                    for _, token_data in token_list:
-                        if 'symbol' in token_data:
-                            self.elion.token_monitor.track_token(token_data['symbol'])
+                # Track tokens using TokenMonitor
+                self.elion.token_monitor.run_analysis()
             else:
                 logger.error("Failed to post volume tweet")
                 
