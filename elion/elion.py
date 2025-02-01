@@ -14,6 +14,7 @@ from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
+from strategies.token_monitor import TokenMonitor
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -33,10 +34,13 @@ class Elion:
         self.volume_strategy = VolumeStrategy(api_key, llm=self.llm)
         
         # Initialize portfolio tracker with real market data
-        self.portfolio = PortfolioTracker(initial_capital=100, api_key=api_key)
+        self.portfolio_tracker = PortfolioTracker(initial_capital=100, api_key=api_key)
+        
+        # Initialize token monitor
+        self.token_monitor = TokenMonitor(api_key)
         
         # Initialize content generator with portfolio and LLM
-        self.content = ContentGenerator(self.portfolio, self.llm)
+        self.content = ContentGenerator(self.portfolio_tracker, self.llm)
         
         # Initialize state
         self.state = {
@@ -136,13 +140,16 @@ class Elion:
     def get_market_data(self) -> Dict:
         """Get current market data from strategies"""
         try:
-            # Get trend data
-            trend_data = self.trend_strategy.analyze()
+            # Use TokenMonitor to track tokens while getting market data
+            monitor_data = self.token_monitor.run_analysis()
+            
+            # Extract strategy data from monitor results
+            trend_data = monitor_data['trend_data']
+            volume_data = monitor_data['volume_data']
+            
             if trend_data and 'trend_tokens' in trend_data:
                 self.state['trend_tokens'] = [token for token in trend_data['trend_tokens'] if self._validate_token(token)]
                 
-            # Get volume data
-            volume_data = self.volume_strategy.analyze()
             if volume_data and ('spikes' in volume_data or 'anomalies' in volume_data):
                 self.state['volume_tokens'] = [token for token in volume_data.get('spikes', []) + volume_data.get('anomalies', []) if self._validate_token(token)]
                 
@@ -150,7 +157,7 @@ class Elion:
             market_data = {
                 'trend': trend_data if trend_data else {},
                 'volume': volume_data if volume_data else {},
-                'portfolio': self.portfolio.get_portfolio_stats()
+                'performance': self.token_monitor.get_performance_insights()
             }
             
             return market_data
@@ -171,7 +178,7 @@ class Elion:
                 if symbol in self.state['used_tokens']:
                     continue
                     
-                trade = self.portfolio.find_realistic_trade(symbol)
+                trade = self.portfolio_tracker.find_realistic_trade(symbol)
                 if trade:
                     self.state['used_tokens'].add(symbol)
                     return trade
@@ -185,7 +192,7 @@ class Elion:
                 if symbol in self.state['used_tokens']:
                     continue
                     
-                trade = self.portfolio.find_realistic_trade(symbol)
+                trade = self.portfolio_tracker.find_realistic_trade(symbol)
                 if trade:
                     self.state['used_tokens'].add(symbol)
                     return trade

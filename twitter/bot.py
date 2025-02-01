@@ -205,16 +205,12 @@ class AIGamingBot:
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info("Posted volume analysis tweet")
-                self.elion.state['last_strategy'] = 'volume'
                 
                 # Track tokens mentioned in tweet
-                for _, token_data in volume_data.get('spikes', []):
-                    if 'symbol' in token_data:
-                        self.elion.token_monitor.update_token(token_data)
-                        
-                for _, token_data in volume_data.get('anomalies', []):
-                    if 'symbol' in token_data:
-                        self.elion.token_monitor.update_token(token_data)
+                for token_list in [volume_data.get('spikes', []), volume_data.get('anomalies', [])]:
+                    for _, token_data in token_list:
+                        if 'symbol' in token_data:
+                            self.elion.token_monitor.track_token(token_data['symbol'])
             else:
                 logger.error("Failed to post volume tweet")
                 
