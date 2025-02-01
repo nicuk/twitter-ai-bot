@@ -6,13 +6,19 @@ import random
 import logging
 import schedule
 import threading
-import redis
 from datetime import datetime, timedelta
 import sys
 from logging.handlers import RotatingFileHandler
 import tempfile
 import atexit
 
+# Optional Redis import
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    
 # Add parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -31,6 +37,10 @@ logger = logging.getLogger(__name__)
 def is_bot_running():
     """Check if another instance is running using Redis lock"""
     try:
+        if not REDIS_AVAILABLE:
+            logger.warning("Redis not available, skipping lock check")
+            return False
+            
         redis_url = os.getenv('REDIS_URL')
         if not redis_url:
             logger.warning("REDIS_URL not set, skipping lock check")
