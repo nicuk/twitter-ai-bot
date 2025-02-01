@@ -34,7 +34,15 @@ class TokenMonitor:
         # Track tokens from trend strategy
         if trend_data and 'trend_tokens' in trend_data:
             for token in trend_data['trend_tokens']:
-                self.history_tracker.update_token(token)
+                # Convert trend token format to match volume format
+                formatted_token = {
+                    'symbol': token['symbol'],
+                    'price': token['price'],
+                    'volume24h': token['volume'],
+                    'marketCap': token['mcap'],
+                    'priceChange24h': token['price_change']
+                }
+                self.history_tracker.update_token(formatted_token)
         
         # Return original strategy data unchanged
         return {
