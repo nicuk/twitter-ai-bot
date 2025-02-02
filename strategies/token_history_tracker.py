@@ -107,21 +107,21 @@ class TokenHistoryTracker:
     """Tracks historical data for tokens that pass filters"""
     
     _instance = None
+    _initialized = False
     
     def __new__(cls):
         """Create singleton instance"""
         if cls._instance is None:
             cls._instance = super(TokenHistoryTracker, cls).__new__(cls)
-            cls._instance._initialized = False
         return cls._instance
-    
+        
     def __init__(self):
         """Initialize tracker with Railway's persistent storage"""
         # Only initialize once
-        if self._initialized:
+        if TokenHistoryTracker._initialized:
             return
             
-        self._initialized = True
+        TokenHistoryTracker._initialized = True
         
         # Use Railway's persistent storage directory
         self.data_dir = '/data'
@@ -222,6 +222,7 @@ class TokenHistoryTracker:
             # Extract token data using correct keys from CryptoRank API
             symbol = token.get('symbol', '').upper()
             if not symbol:
+                logger.warning("No symbol found in token data")
                 return
                 
             # Try different key formats (CryptoRank API vs Strategy format)
@@ -240,14 +241,18 @@ class TokenHistoryTracker:
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
             current_time = datetime.now()
             
-            # Add debug logging
-            logger.debug(f"Updating token {symbol}:")
-            logger.debug(f"Price: {price}")
-            logger.debug(f"Volume: {volume}")
-            logger.debug(f"Market Cap: {mcap}")
+            # Add detailed debug logging
+            logger.info(f"Updating token {symbol}:")
+            logger.info(f"Raw token data: {token}")
+            logger.info(f"Extracted values:")
+            logger.info(f"  Price: {price}")
+            logger.info(f"  Volume: {volume}")
+            logger.info(f"  Market Cap: {mcap}")
+            logger.info(f"  V/MC Ratio: {volume_mcap_ratio}")
             
             if symbol not in self.token_history:
                 # First mention of token
+                logger.info(f"First mention of token {symbol}")
                 self.token_history[symbol] = TokenHistoricalData(
                     symbol=symbol,
                     first_mention_date=current_time,
@@ -260,53 +265,60 @@ class TokenHistoryTracker:
                     current_mcap=mcap,
                     last_updated=current_time
                 )
-                logger.info(f"Added new token {symbol} to history")
             else:
                 # Update existing token data
+                logger.info(f"Updating existing token {symbol}")
                 token_data = self.token_history[symbol]
-                time_since_mention = current_time - token_data.first_mention_date
                 
-                # Update performance metrics within first 7 days
-                if time_since_mention <= timedelta(days=7):
-                    # Always update current metrics
-                    token_data.current_price = price
-                    token_data.current_volume = volume
-                    token_data.current_mcap = mcap
-                    token_data.last_updated = current_time
-                    
-                    # Update 24h metrics if enough time has passed
-                    if time_since_mention >= timedelta(hours=24):
-                        token_data.price_24h_after = price
-                        token_data.volume_24h_after = volume
-                    
-                    # Update 48h metrics if enough time has passed
-                    if time_since_mention >= timedelta(hours=48):
-                        token_data.price_48h_after = price
-                        token_data.volume_48h_after = volume
-                    
-                    # Update 7d metrics if enough time has passed
-                    if time_since_mention >= timedelta(days=7):
-                        token_data.price_7d_after = price
-                        token_data.volume_7d_after = volume
-                    
-                    # Update max price and volume within 7d
+                # Update current values
+                token_data.current_price = price
+                token_data.current_volume = volume
+                token_data.current_mcap = mcap
+                token_data.last_updated = current_time
+                
+                # Calculate time since first mention
+                time_diff = current_time - token_data.first_mention_date
+                logger.info(f"Time since first mention: {time_diff}")
+                
+                # Update 24h metrics
+                if time_diff >= timedelta(hours=24) and token_data.price_24h_after == 0:
+                    logger.info(f"Updating 24h metrics for {symbol}")
+                    token_data.price_24h_after = price
+                    token_data.volume_24h_after = volume
+                
+                # Update 48h metrics
+                if time_diff >= timedelta(hours=48) and token_data.price_48h_after == 0:
+                    logger.info(f"Updating 48h metrics for {symbol}")
+                    token_data.price_48h_after = price
+                    token_data.volume_48h_after = volume
+                
+                # Update 7d metrics
+                if time_diff >= timedelta(days=7) and token_data.price_7d_after == 0:
+                    logger.info(f"Updating 7d metrics for {symbol}")
+                    token_data.price_7d_after = price
+                    token_data.volume_7d_after = volume
+                
+                # Update max values within 7 days
+                if time_diff <= timedelta(days=7):
                     if price > token_data.max_price_7d:
+                        logger.info(f"New 7d max price for {symbol}: {price}")
                         token_data.max_price_7d = price
                         token_data.max_price_7d_date = current_time
                         token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
-                        
+                    
                     if volume > token_data.max_volume_7d:
+                        logger.info(f"New 7d max volume for {symbol}: {volume}")
                         token_data.max_volume_7d = volume
                         token_data.max_volume_7d_date = current_time
-                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100 if token_data.first_mention_volume_24h > 0 else 0
-                        
-                    logger.debug(f"Updated existing token {symbol}")
-                    
+                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
+            
             # Save after each update
+            logger.info(f"Saving updated data for {symbol}")
             self.save_history()
             
         except Exception as e:
-            logger.error(f"Error updating token {symbol}: {str(e)}")
+            logger.error(f"Error updating token {symbol}: {e}")
+            logger.exception("Full traceback:")
     
     def get_token_history(self, symbol: str) -> Optional[TokenHistoricalData]:
         """Get historical data for a specific token"""

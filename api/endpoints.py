@@ -6,6 +6,9 @@ from fastapi import FastAPI, Query
 from strategies.token_history_tracker import TokenHistoryTracker
 from strategies.token_monitor import TokenMonitor
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ELAI Bot API")
 
@@ -36,28 +39,58 @@ def setup_routes(app: FastAPI):
         max_tokens: Optional[int] = Query(100, description="Maximum number of tokens to return")
     ) -> Dict:
         """Get token history with optional filters"""
-        tracker = TokenHistoryTracker()
-        history = tracker.get_all_token_history()
-        
-        # Apply filters
-        filtered_tokens = []
-        for token_data in history.values():  
-            if days and (datetime.now() - token_data.first_mention_date).days > days:
-                continue
-                
-            gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
-            if min_gain and gain < min_gain:
-                continue
-                
-            filtered_tokens.append(token_data.to_dict())
+        try:
+            tracker = TokenHistoryTracker()
+            history = tracker.get_all_token_history()
             
-            if len(filtered_tokens) >= max_tokens:
-                break
-                
-        return {
-            "total": len(filtered_tokens),
-            "tokens": filtered_tokens
-        }
+            logger.info(f"Retrieved {len(history)} tokens from history")
+            logger.info(f"Filters: days={days}, min_gain={min_gain}, max_tokens={max_tokens}")
+            
+            # Apply filters
+            filtered_tokens = []
+            for token_data in history.values():
+                try:
+                    if days and (datetime.now() - token_data.first_mention_date).days > days:
+                        continue
+                        
+                    gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
+                    if min_gain and gain < min_gain:
+                        continue
+                        
+                    filtered_tokens.append({
+                        'symbol': token_data.symbol,
+                        'first_mention_date': token_data.first_mention_date.isoformat(),
+                        'first_mention_price': token_data.first_mention_price,
+                        'current_price': token_data.current_price,
+                        'gain_percentage': gain,
+                        'volume_24h': token_data.current_volume,
+                        'max_gain_7d': token_data.max_gain_percentage_7d
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing token {token_data.symbol}: {e}")
+                    continue
+            
+            # Sort by gain percentage and limit results
+            filtered_tokens.sort(key=lambda x: x['gain_percentage'], reverse=True)
+            filtered_tokens = filtered_tokens[:max_tokens]
+            
+            logger.info(f"Returning {len(filtered_tokens)} filtered tokens")
+            return {
+                'total': len(filtered_tokens),
+                'tokens': filtered_tokens,
+                'success': True,
+                'message': f"Found {len(filtered_tokens)} tokens"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in get_token_history: {e}")
+            logger.exception("Full traceback:")
+            return {
+                'total': 0,
+                'tokens': [],
+                'success': False,
+                'message': str(e)
+            }
         
     @app.get("/token-history/{symbol}")
     async def get_token_details(symbol: str) -> Dict:

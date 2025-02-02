@@ -263,40 +263,37 @@ class TweetFormatters:
         )
 
     def format_performance_compare(self, data: Dict, variant: str = 'A') -> str:
-        """Format performance comparison tweet
-        
-        Args:
-            data: Performance data dictionary
-            variant: Tweet variant (A=token, B=portfolio)
-            
-        Returns:
-            Formatted tweet string
-        """
-        templates = self.templates['performance_compare']
-        template = templates[0] if variant == 'A' else templates[1]  # Use first template for A, second for B
-        
+        """Format performance comparison tweet"""
         try:
+            template = self.get_template('performance_compare', variant)
+            
             if variant == 'A':
+                # Token performance variant
+                if not data.get('symbol'):
+                    logger.error("Missing required field 'symbol' in data")
+                    return ""
+                    
                 return template.format(
-                    symbol=data['symbol'],
-                    price_before=data['price_before'],
-                    price_now=data['price_now'],
-                    price_change=data['price_change'],
-                    vol_before=self.format_volume(data['vol_before']),
-                    vol_now=self.format_volume(data['vol_now']),
-                    vol_change=data['vol_change']
+                    symbol=data.get('symbol', 'UNKNOWN'),
+                    price_before=data.get('price_before', 0),
+                    price_now=data.get('price_now', 0),
+                    price_change=((data.get('price_now', 0) - data.get('price_before', 0)) / data.get('price_before', 1)) * 100 if data.get('price_before', 0) > 0 else 0,
+                    vol_before=self.format_volume(data.get('vol_before', 0)),
+                    vol_now=self.format_volume(data.get('vol_now', 0)),
+                    vol_change=((data.get('vol_now', 0) - data.get('vol_before', 0)) / data.get('vol_before', 1)) * 100 if data.get('vol_before', 0) > 0 else 0
                 )
-            else:  # variant B
+            else:
+                # Portfolio performance variant
                 return template.format(
-                    current_capital=data['current_capital'],
-                    daily_pnl=data['daily_pnl'],
-                    win_rate=data['win_rate'],
-                    total_trades=data['total_trades'],
-                    last_symbol=data['last_symbol'],
-                    last_gain=data['last_gain'],
-                    entry_price=data['entry_price'],
-                    exit_price=data['exit_price'],
-                    num_signals=data['num_signals']
+                    daily_pnl=data.get('daily_pnl', 0),
+                    current_capital=data.get('current_capital', '$0'),
+                    win_rate=data.get('win_rate', 0),
+                    total_trades=data.get('total_trades', 0),
+                    last_symbol=data.get('last_symbol', 'N/A'),
+                    last_gain=data.get('last_gain', 0),
+                    entry_price=data.get('entry_price', 0),
+                    exit_price=data.get('exit_price', 0),
+                    num_signals=data.get('num_signals', 0)
                 )
         except Exception as e:
             logger.error(f"Error formatting performance compare tweet: {str(e)}")
@@ -382,43 +379,64 @@ class TweetFormatters:
 
     def format_winners_recap(self, history: Dict, variant: str = 'A') -> str:
         """Format winners recap tweet with A/B variants"""
-        template = self.get_template('winners_recap', variant)
-        
-        # Get top 3 performing tokens from history
-        winners = sorted(
-            [t for t in history.values() if t['first_mention_price'] > 0],
-            key=lambda x: ((x['current_price'] - x['first_mention_price']) / x['first_mention_price']) * 100,
-            reverse=True
-        )[:3]
-        
-        if len(winners) < 3:
-            logger.warning("Not enough winners for recap")
-            return ""
+        try:
+            template = self.get_template('winners_recap', variant)
             
-        if variant == 'A':
-            return template.format(
-                symbol1=winners[0]['symbol'],
-                gain1=((winners[0]['current_price'] - winners[0]['first_mention_price']) / winners[0]['first_mention_price']) * 100,
-                entry1=self.format_price(winners[0]['first_mention_price']),
-                symbol2=winners[1]['symbol'],
-                gain2=((winners[1]['current_price'] - winners[1]['first_mention_price']) / winners[1]['first_mention_price']) * 100,
-                entry2=self.format_price(winners[1]['first_mention_price']),
-                symbol3=winners[2]['symbol'],
-                gain3=((winners[2]['current_price'] - winners[2]['first_mention_price']) / winners[2]['first_mention_price']) * 100,
-                entry3=self.format_price(winners[2]['first_mention_price'])
-            )
-        else:
-            return template.format(
-                symbol1=winners[0]['symbol'],
-                gain1=((winners[0]['current_price'] - winners[0]['first_mention_price']) / winners[0]['first_mention_price']) * 100,
-                vmc1=winners[0]['first_mention_volume_mcap_ratio'],
-                symbol2=winners[1]['symbol'],
-                gain2=((winners[1]['current_price'] - winners[1]['first_mention_price']) / winners[1]['first_mention_price']) * 100,
-                vmc2=winners[1]['first_mention_volume_mcap_ratio'],
-                symbol3=winners[2]['symbol'],
-                gain3=((winners[2]['current_price'] - winners[2]['first_mention_price']) / winners[2]['first_mention_price']) * 100,
-                vmc3=winners[2]['first_mention_volume_mcap_ratio']
-            )
+            # Get top 3 gainers
+            gainers = []
+            for token_data in history.values():
+                try:
+                    gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
+                    gainers.append({
+                        'symbol': token_data.symbol,
+                        'gain': gain,
+                        'entry': token_data.first_mention_price,
+                        'vmc': token_data.volume_mcap_ratio
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing token {token_data.symbol}: {e}")
+                    continue
+                    
+            # Sort by gain and get top 3
+            gainers.sort(key=lambda x: x['gain'], reverse=True)
+            top_gainers = gainers[:3]
+            
+            # Ensure we have at least 3 gainers
+            while len(top_gainers) < 3:
+                top_gainers.append({
+                    'symbol': 'N/A',
+                    'gain': 0,
+                    'entry': 0,
+                    'vmc': 0
+                })
+                
+            if variant == 'A':
+                return template.format(
+                    symbol1=top_gainers[0]['symbol'],
+                    gain1=top_gainers[0]['gain'],
+                    entry1=top_gainers[0]['entry'],
+                    symbol2=top_gainers[1]['symbol'],
+                    gain2=top_gainers[1]['gain'],
+                    entry2=top_gainers[1]['entry'],
+                    symbol3=top_gainers[2]['symbol'],
+                    gain3=top_gainers[2]['gain'],
+                    entry3=top_gainers[2]['entry']
+                )
+            else:
+                return template.format(
+                    symbol1=top_gainers[0]['symbol'],
+                    gain1=top_gainers[0]['gain'],
+                    vmc1=top_gainers[0]['vmc'],
+                    symbol2=top_gainers[1]['symbol'],
+                    gain2=top_gainers[1]['gain'],
+                    vmc2=top_gainers[1]['vmc'],
+                    symbol3=top_gainers[2]['symbol'],
+                    gain3=top_gainers[2]['gain'],
+                    vmc3=top_gainers[2]['vmc']
+                )
+        except Exception as e:
+            logger.error(f"Error formatting winners recap tweet: {e}")
+            return ""
 
     def format_vmc_alert(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
         """Format V/MC alert tweet with A/B variants"""
