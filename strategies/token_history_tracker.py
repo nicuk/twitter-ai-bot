@@ -6,6 +6,7 @@ from typing import Dict, Optional, List
 import json
 import os
 import logging
+import redis
 
 logger = logging.getLogger(__name__)
 
@@ -116,132 +117,55 @@ class TokenHistoryTracker:
         return cls._instance
         
     def __init__(self):
-        """Initialize tracker with Railway's persistent storage"""
+        """Initialize tracker with Redis storage"""
         # Only initialize once
         if TokenHistoryTracker._initialized:
             return
             
         TokenHistoryTracker._initialized = True
         
-        # Determine data directory based on environment
-        if os.environ.get('RAILWAY_ENVIRONMENT'):
-            # We're in Railway - use the mounted volume
-            self.data_dir = '/data'
-        else:
-            # Local development - use a local directory
-            self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-            
-        logger.info(f"Initializing TokenHistoryTracker with data directory: {self.data_dir}")
-        
-        # If directory doesn't exist, try creating it
+        # Connect to Redis
         try:
-            os.makedirs(self.data_dir, exist_ok=True)
-            logger.info(f"Data directory exists: {os.path.exists(self.data_dir)}")
-            logger.info(f"Data directory writable: {os.access(self.data_dir, os.W_OK)}")
-            logger.info(f"Data directory absolute path: {os.path.abspath(self.data_dir)}")
-            
-            # List contents to verify
-            if os.path.exists(self.data_dir):
-                logger.info(f"Contents of {self.data_dir}:")
-                for item in os.listdir(self.data_dir):
-                    logger.info(f"  - {item}")
-                    
+            self.redis = redis.from_url(os.getenv('REDIS_URL'))
+            logger.info("Connected to Redis successfully")
         except Exception as e:
-            logger.error(f"Error with data directory: {e}")
-            logger.error(f"Current working directory: {os.getcwd()}")
-            logger.error(f"Directory listing of current directory:")
-            try:
-                for item in os.listdir('.'):
-                    logger.error(f"  - {item}")
-            except Exception as list_err:
-                logger.error(f"Could not list directory: {list_err}")
+            logger.error(f"Failed to connect to Redis: {e}")
             raise
             
-        self.history_file = os.path.join(self.data_dir, 'token_history.json')
-        logger.info(f"Using token history file: {self.history_file}")
-        
-        # Initialize empty history if file doesn't exist
-        if not os.path.exists(self.history_file):
-            logger.info("Creating new token history file")
-            try:
-                with open(self.history_file, 'w') as f:
-                    json.dump({}, f)
-            except Exception as e:
-                logger.error(f"Failed to create token history file: {e}")
-                logger.error(f"File path: {self.history_file}")
-                logger.error(f"Parent directory exists: {os.path.exists(os.path.dirname(self.history_file))}")
-                raise
-                
         self.token_history: Dict[str, TokenHistoricalData] = {}
         self.load_history()
-    
+        
     def load_history(self):
-        """Load token history from file"""
+        """Load token history from Redis"""
         try:
-            if os.path.exists(self.history_file):
-                logger.info(f"Loading token history from {self.history_file}")
-                with open(self.history_file, 'r') as f:
-                    data = json.load(f)
-                    # Only update if we got valid data
-                    if data:
-                        self.token_history = {
-                            symbol: TokenHistoricalData.from_dict(token_data)
-                            for symbol, token_data in data.items()
-                        }
-                        logger.info(f"Loaded {len(self.token_history)} tokens from history")
-                    else:
-                        logger.warning("History file exists but is empty")
+            data = self.redis.get('token_history')
+            if data:
+                json_data = json.loads(data)
+                self.token_history = {
+                    symbol: TokenHistoricalData.from_dict(token_data)
+                    for symbol, token_data in json_data.items()
+                }
+                logger.info(f"Loaded {len(self.token_history)} tokens from Redis")
             else:
-                logger.warning(f"No history file found at {self.history_file}")
-                # Don't create empty file here - let save_history do it
-        except json.JSONDecodeError as e:
-            logger.error(f"Error decoding token history JSON: {e}")
-        except Exception as e:
-            logger.error(f"Error loading token history: {e}")
-            logger.exception("Full traceback:")
-    
-    def save_history(self):
-        """Save token history to file"""
-        try:
-            # Don't save if we have no tokens and file exists (prevent accidental clearing)
-            if len(self.token_history) == 0 and os.path.exists(self.history_file):
-                logger.warning("Preventing save of empty history when file exists")
-                return
+                logger.info("No existing token history in Redis")
                 
-            logger.info(f"Saving {len(self.token_history)} tokens to {self.history_file}")
+        except Exception as e:
+            logger.error(f"Error loading from Redis: {e}")
+            raise
             
-            # Ensure data directory exists
-            os.makedirs(self.data_dir, exist_ok=True)
-            
-            # Write to temporary file first
-            temp_file = f"{self.history_file}.tmp"
-            with open(temp_file, 'w') as f:
-                json.dump(
-                    {symbol: data.to_dict() for symbol, data in self.token_history.items()},
-                    f,
-                    indent=2
-                )
-            
-            # Quick validation before replacing
-            with open(temp_file, 'r') as f:
-                check_data = json.load(f)
-                if len(check_data) != len(self.token_history):
-                    raise ValueError("Data validation failed")
-            
-            # Atomically rename temp file to actual file
-            os.replace(temp_file, self.history_file)
-            
-            logger.info(f"Successfully saved token history")
-            logger.info(f"Current tokens: {', '.join(self.token_history.keys())}")
+    def save_history(self):
+        """Save token history to Redis"""
+        try:
+            data = {
+                symbol: token.to_dict() 
+                for symbol, token in self.token_history.items()
+            }
+            self.redis.set('token_history', json.dumps(data))
+            logger.info(f"Saved {len(self.token_history)} tokens to Redis")
             
         except Exception as e:
-            logger.error(f"Error saving token history: {e}")
-            logger.exception("Full traceback:")
-            if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except:
-                    pass
+            logger.error(f"Error saving to Redis: {e}")
+            raise
     
     def update_token(self, token: Dict):
         """Update token data in history"""
@@ -339,7 +263,7 @@ class TokenHistoryTracker:
                         token_data.max_volume_7d_date = current_time
                         token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
             
-            # Save changes to disk
+            # Save changes to Redis
             self.save_history()
             
         except Exception as e:
