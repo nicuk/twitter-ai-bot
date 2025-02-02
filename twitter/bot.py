@@ -41,18 +41,40 @@ def is_bot_running():
             logger.warning("Redis not available, skipping lock check")
             return False
             
-        redis_url = os.getenv('REDIS_URL')
+        redis_url = os.getenv('Redis.REDIS_URL')  # Updated to use Railway variable
         if not redis_url:
-            logger.warning("REDIS_URL not set, skipping lock check")
+            logger.warning("Redis.REDIS_URL not set, skipping lock check")
             return False
             
+        logger.info("Checking Redis lock...")
         redis_client = redis.from_url(redis_url)
+        
+        # First try to get the lock
         lock = redis_client.setnx('twitter_bot_lock', 'locked')
         if lock:
-            # Set expiry to avoid deadlock if process crashes
+            # We got the lock
+            logger.info("Got Redis lock")
             redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
             return False
+            
+        # If we didn't get the lock, check if it's stale
+        ttl = redis_client.ttl('twitter_bot_lock')
+        logger.info(f"Lock exists with TTL: {ttl}")
+        
+        if ttl == -2:  # Key doesn't exist
+            logger.info("Lock doesn't exist, clearing")
+            redis_client.delete('twitter_bot_lock')
+            return False
+            
+        if ttl == -1:  # No expiry set
+            logger.info("Lock has no expiry, clearing stale lock")
+            redis_client.delete('twitter_bot_lock')
+            return False
+            
+        # Lock exists and has valid TTL
+        logger.warning("Another instance appears to be running")
         return True
+            
     except Exception as e:
         logger.error(f"Error checking Redis lock: {e}")
         return False
