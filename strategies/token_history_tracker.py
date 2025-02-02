@@ -125,29 +125,39 @@ class TokenHistoryTracker:
         
         # Use Railway's persistent storage directory
         self.data_dir = '/data'
+        logger.info(f"Initializing TokenHistoryTracker with data directory: {self.data_dir}")
         
         # If /data doesn't exist, try creating it
         try:
             os.makedirs(self.data_dir, exist_ok=True)
-        except Exception as e:
-            logger.error(f"Error creating /data directory: {e}")
-            # If we can't create /data, use current directory
-            self.data_dir = os.path.dirname(os.path.abspath(__file__))
+            logger.info(f"Data directory exists: {os.path.exists(self.data_dir)}")
+            logger.info(f"Data directory writable: {os.access(self.data_dir, os.W_OK)}")
+            logger.info(f"Data directory absolute path: {os.path.abspath(self.data_dir)}")
             
-        # Try writing a test file to check permissions
-        test_file = os.path.join(self.data_dir, '.test')
-        try:
-            with open(test_file, 'w') as f:
-                f.write('test')
-            os.remove(test_file)
-            logger.info(f"Successfully verified write access to {self.data_dir}")
+            # List contents of /data to verify
+            if os.path.exists(self.data_dir):
+                logger.info(f"Contents of {self.data_dir}:")
+                for item in os.listdir(self.data_dir):
+                    logger.info(f"  - {item}")
+                    
         except Exception as e:
-            logger.error(f"No write access to {self.data_dir}: {e}")
-            # If we can't write to /data, use current directory
-            self.data_dir = os.path.dirname(os.path.abspath(__file__))
+            logger.error(f"Error with /data directory: {e}")
+            raise  # Let it fail in Railway if we can't access persistent storage
             
         self.history_file = os.path.join(self.data_dir, 'token_history.json')
         logger.info(f"Using token history file: {self.history_file}")
+        logger.info(f"History file absolute path: {os.path.abspath(self.history_file)}")
+        
+        # Initialize empty history if file doesn't exist
+        if not os.path.exists(self.history_file):
+            logger.info("Creating new token history file")
+            try:
+                with open(self.history_file, 'w') as f:
+                    json.dump({}, f)
+            except Exception as e:
+                logger.error(f"Failed to create token history file: {e}")
+                raise
+                
         self.token_history: Dict[str, TokenHistoricalData] = {}
         self.load_history()
     
@@ -155,30 +165,56 @@ class TokenHistoryTracker:
         """Load token history from file"""
         try:
             if os.path.exists(self.history_file):
+                logger.info(f"Loading token history from {self.history_file}")
                 with open(self.history_file, 'r') as f:
                     data = json.load(f)
                     self.token_history = {
                         symbol: TokenHistoricalData.from_dict(token_data)
                         for symbol, token_data in data.items()
                     }
+                logger.info(f"Loaded {len(self.token_history)} tokens from history")
+                for symbol in self.token_history:
+                    logger.debug(f"Loaded token: {symbol}")
+            else:
+                logger.warning(f"No history file found at {self.history_file}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding token history JSON: {e}")
+            self.token_history = {}
         except Exception as e:
             logger.error(f"Error loading token history: {e}")
+            logger.exception("Full traceback:")
             self.token_history = {}
     
     def save_history(self):
         """Save token history to file"""
         try:
+            logger.info(f"Saving {len(self.token_history)} tokens to {self.history_file}")
+            
             # Ensure data directory exists
             os.makedirs(self.data_dir, exist_ok=True)
             
-            with open(self.history_file, 'w') as f:
+            # Write to temporary file first
+            temp_file = f"{self.history_file}.tmp"
+            with open(temp_file, 'w') as f:
                 json.dump(
                     {symbol: data.to_dict() for symbol, data in self.token_history.items()},
                     f,
                     indent=2
                 )
+            
+            # Atomically rename temp file to actual file
+            os.replace(temp_file, self.history_file)
+            
+            logger.info(f"Successfully saved token history")
+            logger.info(f"Current tokens: {', '.join(self.token_history.keys())}")
+            
         except Exception as e:
             logger.error(f"Error saving token history: {e}")
+            logger.exception("Full traceback:")
+            # Try to recover the file if it exists
+            if os.path.exists(self.history_file):
+                logger.info("Attempting to reload from existing file")
+                self.load_history()
     
     def update_token(self, token: Dict):
         """Update token data in history"""
