@@ -408,35 +408,31 @@ class AIGamingBot:
 
     def run(self):
         """Run the bot"""
-        logger.info("=== Starting Bot with Schedule ===")
-        logger.info("Trend Posts: 01:00, 05:00, 09:00, 13:00, 17:00, 21:00 UTC")
-        logger.info("Volume Posts: 03:00, 11:00, 15:00, 19:00 UTC")
-        logger.info("A/B Format Posts: 02:00, 06:00, 10:00, 14:00, 18:00, 22:00 UTC")
-        logger.info("Extra Type Post: 12:00 UTC")
-        
-        while True:
-            try:
+        try:
+            # Check if another instance is running
+            if is_bot_running():
+                logger.error("Another bot instance is already running")
+                return
+                
+            logger.info("Starting bot...")
+            
+            # Run pending tasks immediately
+            schedule.run_pending()
+            
+            # Main loop
+            while True:
                 schedule.run_pending()
-                next_job = schedule.next_run()
-                if next_job:
-                    minutes_until = int((next_job - datetime.now()).total_seconds() / 60)
-                    next_job_time = next_job.strftime("%H:%M UTC")
-                    logger.info(f"Next tweet scheduled for {next_job_time} ({minutes_until} minutes from now)")
-                time.sleep(60)
-            except KeyboardInterrupt:
-                logger.info("Bot stopped by user")
-                break
-            except Exception as e:
-                logger.error(f"Error: {e}")
-                time.sleep(60)
+                time.sleep(60)  # Check every minute
+                
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user")
+        except Exception as e:
+            logger.error(f"Bot crashed: {e}")
+            raise
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
-    
-    if is_bot_running():
-        logger.error("Another instance of the bot is already running!")
-        sys.exit(1)
     
     logger.info("Starting Twitter bot...")
     bot = AIGamingBot()

@@ -24,8 +24,7 @@ class RateLimiter:
         self.rate_limits = self.default_limits.copy()
         self.cache_file = 'rate_limits.json'
         self._load_cache()
-        self.rate_limits = self.default_limits.copy()  # Always reset to default limits
-        
+    
     def can_post(self) -> bool:
         """Check if we can post based on rate limits"""
         self._check_resets()
