@@ -117,55 +117,84 @@ class TokenHistoryTracker:
         return cls._instance
         
     def __init__(self):
-        """Initialize tracker with Redis storage"""
-        # Only initialize once
+        """Initialize tracker with Redis storage if available, fallback to file"""
         if TokenHistoryTracker._initialized:
             return
             
         TokenHistoryTracker._initialized = True
         
-        # Connect to Redis
-        try:
-            self.redis = redis.from_url(os.getenv('REDIS_URL'))
-            logger.info("Connected to Redis successfully")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            raise
-            
+        # Initialize storage
         self.token_history: Dict[str, TokenHistoricalData] = {}
+        self.using_redis = False
+        
+        # Try Redis first
+        redis_url = os.getenv('REDIS_URL')
+        if redis_url:
+            try:
+                self.redis = redis.from_url(redis_url)
+                self.using_redis = True
+                logger.info("Connected to Redis successfully")
+            except Exception as e:
+                logger.error(f"Failed to connect to Redis: {e}")
+                logger.info("Falling back to file storage")
+                self.setup_file_storage()
+        else:
+            logger.info("No REDIS_URL found, using file storage")
+            self.setup_file_storage()
+            
         self.load_history()
         
+    def setup_file_storage(self):
+        """Set up file-based storage"""
+        self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.history_file = os.path.join(self.data_dir, 'token_history.json')
+        logger.info(f"Using file storage at: {self.history_file}")
+        
     def load_history(self):
-        """Load token history from Redis"""
+        """Load token history from storage"""
         try:
-            data = self.redis.get('token_history')
-            if data:
-                json_data = json.loads(data)
-                self.token_history = {
-                    symbol: TokenHistoricalData.from_dict(token_data)
-                    for symbol, token_data in json_data.items()
-                }
-                logger.info(f"Loaded {len(self.token_history)} tokens from Redis")
+            if self.using_redis:
+                data = self.redis.get('token_history')
+                if data:
+                    json_data = json.loads(data)
+                    self.token_history = {
+                        symbol: TokenHistoricalData.from_dict(token_data)
+                        for symbol, token_data in json_data.items()
+                    }
+                    logger.info(f"Loaded {len(self.token_history)} tokens from Redis")
             else:
-                logger.info("No existing token history in Redis")
-                
+                if os.path.exists(self.history_file):
+                    with open(self.history_file, 'r') as f:
+                        data = json.load(f)
+                        if data:
+                            self.token_history = {
+                                symbol: TokenHistoricalData.from_dict(token_data)
+                                for symbol, token_data in data.items()
+                            }
+                            logger.info(f"Loaded {len(self.token_history)} tokens from file")
+                        
         except Exception as e:
-            logger.error(f"Error loading from Redis: {e}")
-            raise
+            logger.error(f"Error loading token history: {e}")
             
     def save_history(self):
-        """Save token history to Redis"""
+        """Save token history to storage"""
         try:
             data = {
                 symbol: token.to_dict() 
                 for symbol, token in self.token_history.items()
             }
-            self.redis.set('token_history', json.dumps(data))
-            logger.info(f"Saved {len(self.token_history)} tokens to Redis")
             
+            if self.using_redis:
+                self.redis.set('token_history', json.dumps(data))
+                logger.info(f"Saved {len(self.token_history)} tokens to Redis")
+            else:
+                with open(self.history_file, 'w') as f:
+                    json.dump(data, f, indent=2)
+                logger.info(f"Saved {len(self.token_history)} tokens to file")
+                
         except Exception as e:
-            logger.error(f"Error saving to Redis: {e}")
-            raise
+            logger.error(f"Error saving token history: {e}")
     
     def update_token(self, token: Dict):
         """Update token data in history"""
@@ -263,7 +292,7 @@ class TokenHistoryTracker:
                         token_data.max_volume_7d_date = current_time
                         token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
             
-            # Save changes to Redis
+            # Save changes to storage
             self.save_history()
             
         except Exception as e:
