@@ -127,11 +127,15 @@ class TokenHistoryTracker:
         self.token_history: Dict[str, TokenHistoricalData] = {}
         self.using_redis = False
         
-        # Try Redis first
-        redis_url = os.getenv('REDIS_URL')
+        # Try Redis first - use Railway's variable reference
+        redis_url = os.getenv('Redis.REDIS_URL')  # Railway format
+        logger.info(f"Redis URL found: {redis_url is not None}")
         if redis_url:
             try:
+                logger.info("Attempting to connect to Redis...")
                 self.redis = redis.from_url(redis_url)
+                # Test connection
+                self.redis.ping()
                 self.using_redis = True
                 logger.info("Connected to Redis successfully")
             except Exception as e:
