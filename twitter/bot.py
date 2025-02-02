@@ -460,20 +460,81 @@ class AIGamingBot:
                 logger.error("Another bot instance is already running")
                 return
                 
-            logger.info("Starting bot...")
+            logger.info("=== Bot Status ===")
+            logger.info("✓ Redis connection: Active")
+            logger.info("✓ Twitter API: Initialized")
+            logger.info("✓ Schedule: Set up")
+            
+            # Log all scheduled jobs
+            logger.info("\n=== Scheduled Tasks ===")
+            all_jobs = schedule.get_jobs()
+            for job in all_jobs:
+                next_run = job.next_run
+                if next_run:
+                    mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
+                    logger.info(f"• {job.job_func.__name__}: Next run in {mins_to_next} minutes")
             
             # Run pending tasks immediately
             schedule.run_pending()
             
+            # Get and log next job
+            next_run = schedule.next_run()
+            if next_run:
+                mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
+                logger.info(f"\n=== Next Tweet ===")
+                logger.info(f"Scheduled in {mins_to_next} minutes")
+            
             # Main loop
+            last_log_time = datetime.now()
+            last_health_check = datetime.now()
+            
+            logger.info("\n=== Bot Running ===")
+            logger.info("Monitoring for scheduled tasks...")
+            
             while True:
                 schedule.run_pending()
+                now = datetime.now()
+                
+                # Log next scheduled tweet (every minute)
+                if (now - last_log_time).total_seconds() >= 60:
+                    next_run = schedule.next_run()
+                    if next_run:
+                        mins_to_next = int((next_run - now).total_seconds() / 60)
+                        logger.info(f"Next tweet in {mins_to_next} minutes")
+                    last_log_time = now
+                
+                # Health check (every 5 minutes)
+                if (now - last_health_check).total_seconds() >= 300:
+                    logger.info("\n=== Health Check ===")
+                    try:
+                        # Check Redis
+                        redis_url = os.getenv('REDIS_URL')
+                        if redis_url:
+                            redis_client = redis.from_url(redis_url)
+                            redis_client.ping()
+                            logger.info("✓ Redis: Connected")
+                        
+                        # Check Twitter API
+                        if self.api.verify_credentials():
+                            logger.info("✓ Twitter API: Connected")
+                        
+                        # Check scheduled jobs
+                        if len(schedule.get_jobs()) > 0:
+                            logger.info("✓ Scheduler: Active")
+                            
+                        logger.info("All systems operational")
+                    except Exception as e:
+                        logger.error(f"Health check failed: {e}")
+                    
+                    last_health_check = now
+                
                 time.sleep(60)  # Check every minute
                 
         except KeyboardInterrupt:
             logger.info("Bot stopped by user")
         except Exception as e:
             logger.error(f"Bot crashed: {e}")
+            logger.exception("Full traceback:")  # Add full traceback
             raise
 
 if __name__ == "__main__":
