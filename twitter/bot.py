@@ -41,9 +41,9 @@ def is_bot_running():
             logger.warning("Redis not available, skipping lock check")
             return False
             
-        redis_url = os.getenv('Redis.REDIS_URL')  # Updated to use Railway variable
+        redis_url = os.getenv('REDIS_URL')  # Railway format
         if not redis_url:
-            logger.warning("Redis.REDIS_URL not set, skipping lock check")
+            logger.warning("REDIS_URL not set, skipping lock check")
             return False
             
         logger.info("Checking Redis lock...")
@@ -338,7 +338,7 @@ class AIGamingBot:
             trend_data = self.elion.trend_strategy.analyze()
             if not trend_data:
                 logger.warning("No trend data available")
-                return
+                return self._post_fallback_tweet()
             
             # Filter out excluded tokens
             trend_tokens = [
@@ -348,13 +348,13 @@ class AIGamingBot:
             
             if not trend_tokens:
                 logger.warning("No valid tokens after filtering")
-                return
+                return self._post_fallback_tweet()
             
             # Format trend tweet using strategy's own formatter
             tweet = self.elion.trend_strategy.format_twitter_output(trend_tokens)
             if not tweet:
                 logger.warning("Failed to format trend tweet")
-                return
+                return self._post_fallback_tweet()
                 
             # Post tweet and track tokens
             self._post_tweet(tweet)
@@ -363,6 +363,8 @@ class AIGamingBot:
                 
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
+            logger.exception("Full traceback:")
+            return self._post_fallback_tweet()
 
     def post_volume(self):
         """Post volume analysis tweet"""
@@ -372,7 +374,7 @@ class AIGamingBot:
             volume_data = self.elion.volume_strategy.analyze()
             if not volume_data:
                 logger.warning("No volume data available")
-                return
+                return self._post_fallback_tweet()
             
             # Filter out excluded tokens
             if 'spikes' in volume_data:
@@ -390,7 +392,7 @@ class AIGamingBot:
             # Skip if no valid tokens after filtering
             if not (volume_data.get('spikes') or volume_data.get('anomalies')):
                 logger.warning("No valid tokens after filtering")
-                return
+                return self._post_fallback_tweet()
             
             # Format volume tweet using filtered data
             history = self.elion.token_monitor.history_tracker.get_all_token_history()
@@ -404,7 +406,7 @@ class AIGamingBot:
                 
             if not all_tokens:
                 logger.warning("No tokens to process")
-                return
+                return self._post_fallback_tweet()
                 
             # Get token with highest score
             score, token = max(all_tokens, key=lambda x: x[0])
@@ -417,7 +419,7 @@ class AIGamingBot:
             
             if not tweet:
                 logger.warning("Failed to format volume tweet")
-                return
+                return self._post_fallback_tweet()
                 
             # Post tweet and track tokens
             self._post_tweet(tweet)
@@ -427,6 +429,28 @@ class AIGamingBot:
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
             logger.exception("Full traceback:")  # Add full traceback for debugging
+            return self._post_fallback_tweet()
+
+    def _post_fallback_tweet(self):
+        """Post a fallback tweet when main tweet generation fails"""
+        try:
+            logger.info("Attempting to post fallback tweet...")
+            
+            # Try to get history for winners recap
+            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            if history:
+                tweet = self.elion.tweet_formatters.format_winners_recap(history)
+                if tweet:
+                    logger.info("Posting winners recap as fallback")
+                    return self._post_tweet(tweet)
+            
+            # If no history or winners recap fails, post AI mystique
+            logger.info("Posting AI mystique as final fallback")
+            return self.post_ai_mystique()
+            
+        except Exception as e:
+            logger.error(f"Error posting fallback tweet: {e}")
+            return False
 
     def run(self):
         """Run the bot"""

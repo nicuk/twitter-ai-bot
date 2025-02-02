@@ -128,7 +128,7 @@ class TokenHistoryTracker:
         self.using_redis = False
         
         # Try Redis first - use Railway's variable reference
-        redis_url = os.getenv('Redis.REDIS_URL')  # Railway format
+        redis_url = os.getenv('REDIS_URL')  # Railway format
         logger.info(f"Redis URL found: {redis_url is not None}")
         if redis_url:
             try:
