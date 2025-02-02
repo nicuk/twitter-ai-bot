@@ -41,15 +41,15 @@ def setup_routes(app: FastAPI):
         
         # Apply filters
         filtered_tokens = []
-        for token in history:
-            if days and (datetime.now() - token.first_mention_date).days > days:
+        for token_data in history.values():  
+            if days and (datetime.now() - token_data.first_mention_date).days > days:
                 continue
                 
-            gain = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
+            gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
             if min_gain and gain < min_gain:
                 continue
                 
-            filtered_tokens.append(token.to_dict())
+            filtered_tokens.append(token_data.to_dict())
             
             if len(filtered_tokens) >= max_tokens:
                 break
