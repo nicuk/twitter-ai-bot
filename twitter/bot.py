@@ -468,21 +468,58 @@ class AIGamingBot:
             # Log all scheduled jobs
             logger.info("\n=== Scheduled Tasks ===")
             all_jobs = schedule.get_jobs()
+            
+            # Group jobs by function name and find earliest run time for each
+            job_groups = {}
             for job in all_jobs:
+                func_name = job.job_func.__name__
                 next_run = job.next_run
                 if next_run:
                     mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
-                    logger.info(f"• {job.job_func.__name__}: Next run in {mins_to_next} minutes")
+                    if func_name not in job_groups or mins_to_next < job_groups[func_name]:
+                        job_groups[func_name] = mins_to_next
             
-            # Run pending tasks immediately
-            schedule.run_pending()
+            # Display next occurrence of each task type
+            for func_name, mins in sorted(job_groups.items(), key=lambda x: x[1]):
+                hours = mins // 60
+                remaining_mins = mins % 60
+                if hours > 0:
+                    logger.info(f"• {func_name}: Next run in {hours}h {remaining_mins}m")
+                else:
+                    logger.info(f"• {func_name}: Next run in {mins}m")
             
             # Get and log next job
             next_run = schedule.next_run()
             if next_run:
+                # Find the next job(s)
+                next_jobs = [
+                    job for job in schedule.get_jobs()
+                    if job.next_run == next_run
+                ]
+                
                 mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
+                hours = mins_to_next // 60
+                remaining_mins = mins_to_next % 60
+                
                 logger.info(f"\n=== Next Tweet ===")
-                logger.info(f"Scheduled in {mins_to_next} minutes")
+                # Map function names to friendly names
+                tweet_types = {
+                    'post_trend': 'Trend Analysis',
+                    'post_volume': 'Volume Alert',
+                    'post_format_tweet': 'ELAI Update',
+                    'post_extra_tweet': 'Market Insight',
+                    '_post_fallback_tweet': 'Fallback Tweet'
+                }
+                
+                for job in next_jobs:
+                    tweet_type = tweet_types.get(job.job_func.__name__, 'Fallback Tweet')
+                    if hours > 0:
+                        logger.info(f"{tweet_type}: {hours}h {remaining_mins}m")
+                    else:
+                        logger.info(f"{tweet_type}: {mins_to_next}m")
+            
+            # Run pending tasks immediately
+            schedule.run_pending()
             
             # Main loop
             last_log_time = datetime.now()
@@ -499,8 +536,31 @@ class AIGamingBot:
                 if (now - last_log_time).total_seconds() >= 60:
                     next_run = schedule.next_run()
                     if next_run:
+                        # Find the next job(s)
+                        next_jobs = [
+                            job for job in schedule.get_jobs()
+                            if job.next_run == next_run
+                        ]
+                        
                         mins_to_next = int((next_run - now).total_seconds() / 60)
-                        logger.info(f"Next tweet in {mins_to_next} minutes")
+                        hours = mins_to_next // 60
+                        remaining_mins = mins_to_next % 60
+                        
+                        # Map function names to friendly names
+                        tweet_types = {
+                            'post_trend': 'Trend Analysis',
+                            'post_volume': 'Volume Alert',
+                            'post_format_tweet': 'ELAI Update',
+                            'post_extra_tweet': 'Market Insight',
+                            '_post_fallback_tweet': 'Fallback Tweet'
+                        }
+                        
+                        for job in next_jobs:
+                            tweet_type = tweet_types.get(job.job_func.__name__, 'Fallback Tweet')
+                            if hours > 0:
+                                logger.info(f"Next tweet: {tweet_type} in {hours}h {remaining_mins}m")
+                            else:
+                                logger.info(f"Next tweet: {tweet_type} in {mins_to_next}m")
                     last_log_time = now
                 
                 # Health check (every 5 minutes)
