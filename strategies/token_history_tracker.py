@@ -123,30 +123,42 @@ class TokenHistoryTracker:
             
         TokenHistoryTracker._initialized = True
         
-        # Use Railway's persistent storage directory
-        self.data_dir = '/data'
+        # Determine data directory based on environment
+        if os.environ.get('RAILWAY_ENVIRONMENT'):
+            # We're in Railway - use the mounted volume
+            self.data_dir = '/data'
+        else:
+            # Local development - use a local directory
+            self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+            
         logger.info(f"Initializing TokenHistoryTracker with data directory: {self.data_dir}")
         
-        # If /data doesn't exist, try creating it
+        # If directory doesn't exist, try creating it
         try:
             os.makedirs(self.data_dir, exist_ok=True)
             logger.info(f"Data directory exists: {os.path.exists(self.data_dir)}")
             logger.info(f"Data directory writable: {os.access(self.data_dir, os.W_OK)}")
             logger.info(f"Data directory absolute path: {os.path.abspath(self.data_dir)}")
             
-            # List contents of /data to verify
+            # List contents to verify
             if os.path.exists(self.data_dir):
                 logger.info(f"Contents of {self.data_dir}:")
                 for item in os.listdir(self.data_dir):
                     logger.info(f"  - {item}")
                     
         except Exception as e:
-            logger.error(f"Error with /data directory: {e}")
-            raise  # Let it fail in Railway if we can't access persistent storage
+            logger.error(f"Error with data directory: {e}")
+            logger.error(f"Current working directory: {os.getcwd()}")
+            logger.error(f"Directory listing of current directory:")
+            try:
+                for item in os.listdir('.'):
+                    logger.error(f"  - {item}")
+            except Exception as list_err:
+                logger.error(f"Could not list directory: {list_err}")
+            raise
             
         self.history_file = os.path.join(self.data_dir, 'token_history.json')
         logger.info(f"Using token history file: {self.history_file}")
-        logger.info(f"History file absolute path: {os.path.abspath(self.history_file)}")
         
         # Initialize empty history if file doesn't exist
         if not os.path.exists(self.history_file):
@@ -156,6 +168,8 @@ class TokenHistoryTracker:
                     json.dump({}, f)
             except Exception as e:
                 logger.error(f"Failed to create token history file: {e}")
+                logger.error(f"File path: {self.history_file}")
+                logger.error(f"Parent directory exists: {os.path.exists(os.path.dirname(self.history_file))}")
                 raise
                 
         self.token_history: Dict[str, TokenHistoricalData] = {}
@@ -312,8 +326,7 @@ class TokenHistoryTracker:
                         token_data.max_volume_7d_date = current_time
                         token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
             
-            # Save after each update
-            logger.info(f"Saving updated data for {symbol}")
+            # Save changes to disk
             self.save_history()
             
         except Exception as e:

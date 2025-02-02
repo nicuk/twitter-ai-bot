@@ -18,7 +18,7 @@ class TweetFormatters:
     def __init__(self):
         self.templates = {
             'performance_compare': [
-                "🤖 Neural Analysis Complete\n\n📊 24h Results for $${symbol}:\n💰 Price: ${price_before} → ${price_now} (${price_change:+.1f}%)\n📈 Volume: ${vol_before} → ${vol_now} (${vol_change:+.1f}%)\n\n🎯 Success Rate: 85% on volume spikes\n🔮 AI Prediction: High momentum continuation likely\n\nNext alpha dropping soon... 👀\n@AIGxBT",
+                "🤖 Neural Analysis Complete\n\n📊 24h Results for $${symbol}:\n💰 Price: ${entry} → ${current} (${gain:+.1f}%)\n📈 Volume: ${volume_change:+.1f}%\n\n🎯 Success Rate: 85% on volume spikes\n🔮 AI Prediction: High momentum continuation likely\n\nNext alpha dropping soon... 👀\n@AIGxBT",
                 "🤖 Portfolio AI Update\n\n💼 Stats:\n💰 P&L: ${daily_pnl:+.1f}% (${current_capital})\n🎯 Win Rate: ${win_rate}% (${total_trades} trades)\n\n📈 Last Trade:\n• ${last_symbol} +${last_gain:.1f}%\n• Entry: ${entry_price}\n• Exit: ${exit_price}\n\n🔮 Next: ${num_signals} setups forming\n@AIGxBT"
             ],
             'volume_breakout': [
@@ -263,40 +263,67 @@ class TweetFormatters:
         )
 
     def format_performance_compare(self, data: Dict, variant: str = 'A') -> str:
-        """Format performance comparison tweet"""
+        """Format performance comparison tweet with A/B variants"""
         try:
             template = self.get_template('performance_compare', variant)
             
+            # Variant A: Token performance
             if variant == 'A':
-                # Token performance variant
-                if not data.get('symbol'):
-                    logger.error("Missing required field 'symbol' in data")
+                if not data or 'symbol' not in data:
+                    logger.warning("Missing required field 'symbol' in data")
                     return ""
-                    
+                
+                # Handle both TokenHistoricalData objects and dictionaries
+                if hasattr(data, 'current_price'):
+                    # TokenHistoricalData object
+                    symbol = data.symbol
+                    gain = ((data.current_price - data.first_mention_price) / data.first_mention_price * 100) if data.first_mention_price > 0 else 0
+                    entry = data.first_mention_price
+                    current = data.current_price
+                    volume_change = ((data.current_volume - data.first_mention_volume_24h) / data.first_mention_volume_24h * 100) if data.first_mention_volume_24h > 0 else 0
+                else:
+                    # Dictionary
+                    symbol = data.get('symbol', '')
+                    gain = data.get('gain_24h', 0)
+                    entry = data.get('entry_price', 0)
+                    current = data.get('current_price', 0)
+                    volume_change = data.get('volume_change_24h', 0)
+                
                 return template.format(
-                    symbol=data.get('symbol', 'UNKNOWN'),
-                    price_before=data.get('price_before', 0),
-                    price_now=data.get('price_now', 0),
-                    price_change=((data.get('price_now', 0) - data.get('price_before', 0)) / data.get('price_before', 1)) * 100 if data.get('price_before', 0) > 0 else 0,
-                    vol_before=self.format_volume(data.get('vol_before', 0)),
-                    vol_now=self.format_volume(data.get('vol_now', 0)),
-                    vol_change=((data.get('vol_now', 0) - data.get('vol_before', 0)) / data.get('vol_before', 1)) * 100 if data.get('vol_before', 0) > 0 else 0
+                    symbol=symbol,
+                    gain=gain,
+                    entry=self.format_price(entry),
+                    current=self.format_price(current),
+                    volume_change=volume_change
                 )
+            
+            # Variant B: Portfolio performance
             else:
-                # Portfolio performance variant
+                # Get required fields with defaults
+                pnl = data.get('daily_pnl', 0)
+                capital = data.get('current_capital', '$0')
+                win_rate = data.get('win_rate', 0)
+                trades = data.get('total_trades', 0)
+                last_symbol = data.get('last_symbol', 'N/A')
+                last_gain = data.get('last_gain', 0)
+                entry = data.get('entry_price', 0)
+                exit = data.get('exit_price', 0)
+                signals = data.get('num_signals', 0)
+                
                 return template.format(
-                    daily_pnl=data.get('daily_pnl', 0),
-                    current_capital=data.get('current_capital', '$0'),
-                    win_rate=data.get('win_rate', 0),
-                    total_trades=data.get('total_trades', 0),
-                    last_symbol=data.get('last_symbol', 'N/A'),
-                    last_gain=data.get('last_gain', 0),
-                    entry_price=data.get('entry_price', 0),
-                    exit_price=data.get('exit_price', 0),
-                    num_signals=data.get('num_signals', 0)
+                    daily_pnl=pnl,
+                    current_capital=capital,
+                    win_rate=win_rate,
+                    total_trades=trades,
+                    last_symbol=last_symbol,
+                    last_gain=last_gain,
+                    entry_price=self.format_price(entry),
+                    exit_price=self.format_price(exit),
+                    num_signals=signals
                 )
+                
         except Exception as e:
-            logger.error(f"Error formatting performance compare tweet: {str(e)}")
+            logger.error(f"Error formatting performance compare tweet: {e}")
             return ""
 
     def format_volume_breakout(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
@@ -384,24 +411,38 @@ class TweetFormatters:
             
             # Get top 3 gainers
             gainers = []
-            for token_data in history.values():
+            for symbol, token_data in history.items():
                 try:
-                    gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
+                    # Handle both TokenHistoricalData objects and dictionaries
+                    if hasattr(token_data, 'current_price'):
+                        # TokenHistoricalData object
+                        current_price = token_data.current_price
+                        first_price = token_data.first_mention_price
+                        vmc = token_data.first_mention_volume_mcap_ratio
+                    else:
+                        # Dictionary
+                        current_price = token_data.get('current_price', 0)
+                        first_price = token_data.get('first_mention_price', 0)
+                        vmc = token_data.get('volume_mcap_ratio', 0)
+                    
+                    # Calculate gain safely
+                    gain = ((current_price - first_price) / first_price * 100) if first_price > 0 else 0
+                    
                     gainers.append({
-                        'symbol': token_data.symbol,
+                        'symbol': symbol,
                         'gain': gain,
-                        'entry': token_data.first_mention_price,
-                        'vmc': token_data.volume_mcap_ratio
+                        'entry': first_price,
+                        'vmc': vmc
                     })
                 except Exception as e:
-                    logger.error(f"Error processing token {token_data.symbol}: {e}")
+                    logger.error(f"Error processing token {symbol}: {e}")
                     continue
                     
             # Sort by gain and get top 3
             gainers.sort(key=lambda x: x['gain'], reverse=True)
             top_gainers = gainers[:3]
             
-            # Ensure we have at least 3 gainers
+            # Ensure we have exactly 3 gainers
             while len(top_gainers) < 3:
                 top_gainers.append({
                     'symbol': 'N/A',
@@ -414,13 +455,13 @@ class TweetFormatters:
                 return template.format(
                     symbol1=top_gainers[0]['symbol'],
                     gain1=top_gainers[0]['gain'],
-                    entry1=top_gainers[0]['entry'],
+                    entry1=self.format_price(top_gainers[0]['entry']),
                     symbol2=top_gainers[1]['symbol'],
                     gain2=top_gainers[1]['gain'],
-                    entry2=top_gainers[1]['entry'],
+                    entry2=self.format_price(top_gainers[1]['entry']),
                     symbol3=top_gainers[2]['symbol'],
                     gain3=top_gainers[2]['gain'],
-                    entry3=top_gainers[2]['entry']
+                    entry3=self.format_price(top_gainers[2]['entry'])
                 )
             else:
                 return template.format(
@@ -434,6 +475,7 @@ class TweetFormatters:
                     gain3=top_gainers[2]['gain'],
                     vmc3=top_gainers[2]['vmc']
                 )
+                
         except Exception as e:
             logger.error(f"Error formatting winners recap tweet: {e}")
             return ""
@@ -562,20 +604,39 @@ class TweetFormatters:
         else:
             return f"${volume:.1f}"
 
+    def format_price(self, price: float) -> str:
+        """Format price with appropriate precision"""
+        try:
+            if not price:
+                return "$0"
+            
+            # Format with appropriate precision based on price range
+            if price >= 1000:
+                return f"${price:,.2f}"
+            elif price >= 1:
+                return f"${price:.3f}"
+            elif price >= 0.01:
+                return f"${price:.4f}"
+            elif price >= 0.0001:
+                return f"${price:.6f}"
+            else:
+                return f"${price:.8f}"
+        except Exception as e:
+            logger.error(f"Error formatting price {price}: {e}")
+            return "$0"
+
 def format_price(price: float) -> str:
     """Format price with appropriate precision"""
-    if price < 0.001:
-        return f"${price:.8f}"
-    elif price < 0.01:
-        return f"${price:.6f}"
-    elif price < 0.1:
-        return f"${price:.4f}"
-    elif price < 1:
-        return f"${price:.3f}"
-    elif price < 10:
-        return f"${price:.2f}"
-    else:
-        return f"${price:.2f}"
+    try:
+        price = float(price)
+        if price >= 1:
+            return f"${price:.2f}"
+        elif price >= 0.01:
+            return f"${price:.3f}"
+        else:
+            return f"${price:.8f}"
+    except (ValueError, TypeError):
+        return "$0.00"
 
 def format_volume(volume: float) -> str:
     """Format volume in K/M/B"""

@@ -272,6 +272,58 @@ class Elion:
             # Core A/B formats
             if tweet_type in ['performance_compare', 'volume_breakout', 'trend_momentum',
                             'winners_recap', 'vmc_alert', 'pattern_alert']:
+                
+                # For performance_compare and winners_recap, we need token history data
+                if tweet_type in ['performance_compare', 'winners_recap']:
+                    # Get token history data from the tracker
+                    token_history = self.token_monitor.history_tracker.get_all_token_history()
+                    if not token_history:
+                        logger.warning("No token history available")
+                        return None
+                        
+                    if tweet_type == 'performance_compare':
+                        # For variant A (token performance), use the most recent token
+                        if variant == 'A':
+                            recent_token = None
+                            latest_time = datetime.min
+                            for symbol, data in token_history.items():
+                                if data.last_updated > latest_time:
+                                    latest_time = data.last_updated
+                                    recent_token = {
+                                        'symbol': symbol,
+                                        'gain_24h': ((data.current_price - data.first_mention_price) / data.first_mention_price * 100) if data.first_mention_price > 0 else 0,
+                                        'entry_price': data.first_mention_price,
+                                        'current_price': data.current_price,
+                                        'volume_change_24h': ((data.current_volume - data.first_mention_volume_24h) / data.first_mention_volume_24h * 100) if data.first_mention_volume_24h > 0 else 0
+                                    }
+                            market_data = recent_token
+                        # For variant B (portfolio performance), use portfolio data
+                        else:
+                            portfolio_data = market_data.get('portfolio', {})
+                            market_data = {
+                                'daily_pnl': portfolio_data.get('daily_pnl', 0),
+                                'current_capital': portfolio_data.get('current_balance', '$0'),
+                                'win_rate': portfolio_data.get('win_rate', 0),
+                                'total_trades': portfolio_data.get('total_trades', 0),
+                                'last_symbol': portfolio_data.get('last_symbol', 'N/A'),
+                                'last_gain': portfolio_data.get('last_gain', 0),
+                                'entry_price': portfolio_data.get('last_entry', 0),
+                                'exit_price': portfolio_data.get('last_exit', 0),
+                                'num_signals': len(market_data.get('trend', {}).get('trend_tokens', [])) + len(market_data.get('volume', {}).get('spikes', []))
+                            }
+                    elif tweet_type == 'winners_recap':
+                        # Convert TokenHistoricalData objects to dictionaries
+                        market_data = {
+                            symbol: {
+                                'symbol': symbol,
+                                'current_price': data.current_price,
+                                'first_mention_price': data.first_mention_price,
+                                'volume_mcap_ratio': data.first_mention_volume_mcap_ratio,
+                                'gain_24h': ((data.current_price - data.first_mention_price) / data.first_mention_price * 100) if data.first_mention_price > 0 else 0
+                            }
+                            for symbol, data in token_history.items()
+                        }
+                
                 # Get method from tweet_formatters
                 method_name = f'format_{tweet_type}'
                 if hasattr(self.tweet_formatters, method_name):
