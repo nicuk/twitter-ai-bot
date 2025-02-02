@@ -160,6 +160,32 @@ class AIGamingBot:
         # === Additional Type Post (1 per day) ===
         schedule.every().day.at("12:00").do(self.post_extra_tweet)   # Mid-day personality
 
+    def _post_tweet(self, tweet):
+        """Post a tweet with error handling and backup content"""
+        try:
+            # Try to post main tweet
+            response = self.api.create_tweet(tweet)
+            if response:
+                logger.info(f"Posted tweet: {tweet}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error posting main tweet: {e}")
+            
+        # If main tweet fails, try backup tweet
+        try:
+            logger.info("Attempting to post backup tweet...")
+            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+            if backup_tweet:
+                self.api.post_tweet(backup_tweet)
+                logger.info(f"Posted backup tweet: {backup_tweet}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error posting backup tweet: {e}")
+            
+        return False
+
     def post_format_tweet(self):
         """Post tweet using next A/B format in rotation"""
         try:
@@ -192,11 +218,7 @@ class AIGamingBot:
                 logger.info(f"Using fallback format: {fallback_format}")
                 
             # Post tweet
-            response = self.api.create_tweet(tweet)
-            if response:
-                logger.info(f"Posted {format_type} tweet (variant {variant})")
-            else:
-                logger.error(f"Failed to post {format_type} tweet")
+            self._post_tweet(tweet)
                 
         except Exception as e:
             logger.error(f"Error posting format tweet: {e}")
@@ -217,11 +239,7 @@ class AIGamingBot:
                 return
                 
             # Post tweet
-            response = self.api.create_tweet(tweet)
-            if response:
-                logger.info(f"Posted {extra_type} tweet")
-            else:
-                logger.error(f"Failed to post {extra_type} tweet")
+            self._post_tweet(tweet)
                 
         except Exception as e:
             logger.error(f"Error posting extra tweet: {e}")
@@ -245,11 +263,7 @@ class AIGamingBot:
                 content = "🤖 *Processing market data... neural nets recalibrating* Meanwhile, stay sharp and watch those charts! 👀"
                 
             # Post tweet using correct method name
-            response = self.api.create_tweet(content)
-            if response:
-                logger.info("Posted AI mystique tweet")
-            else:
-                logger.error("Failed to post AI mystique tweet")
+            self._post_tweet(content)
             
         except Exception as e:
             logger.error(f"Error posting AI mystique tweet: {e}")
@@ -270,7 +284,7 @@ class AIGamingBot:
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()
-            self.api.post_tweet(tweet)
+            self._post_tweet(tweet)
             
             logger.info(f"Posted performance update: {tweet[:100]}...")
             return True
@@ -289,11 +303,7 @@ class AIGamingBot:
                 return
                 
             # Post tweet
-            response = self.api.create_tweet(content)
-            if response:
-                logger.info("Posted summary tweet")
-            else:
-                logger.error("Failed to post summary tweet")
+            self._post_tweet(content)
             
         except Exception as e:
             logger.error(f"Error posting summary tweet: {e}")
@@ -325,13 +335,9 @@ class AIGamingBot:
                 return
                 
             # Post tweet and track tokens
-            response = self.api.create_tweet(tweet)
-            if response:
-                logger.info("Posted trend analysis tweet")
-                # Track tokens using TokenMonitor
-                self.elion.token_monitor.run_analysis()
-            else:
-                logger.error("Failed to post trend tweet")
+            self._post_tweet(tweet)
+            # Track tokens using TokenMonitor
+            self.elion.token_monitor.run_analysis()
                 
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
@@ -366,7 +372,25 @@ class AIGamingBot:
             
             # Format volume tweet using filtered data
             history = self.elion.token_monitor.history_tracker.get_all_token_history()
-            tweet = self.elion.tweet_formatters.format_volume_breakout(volume_data, history)
+            
+            # Get the highest V/MC ratio token (volume_data contains tuples of (ratio, token_data))
+            token = max(volume_data, key=lambda x: x[0])[1]  # Get token_data from the tuple
+            
+            token_data = {
+                'symbol': token['symbol'],
+                'first_mention_volume_24h': token['volume_24h'],
+                'current_volume': token['volume'],
+                'current_price': token['price'],
+                'first_mention_price': token['price'],  # Will be updated if in history
+            }
+            
+            if token['symbol'] in history:
+                token_data.update({
+                    'first_mention_price': history[token['symbol']]['first_mention_price'],
+                    'first_mention_volume_24h': history[token['symbol']]['first_mention_volume_24h']
+                })
+            
+            tweet = self.elion.tweet_formatters.format_volume_breakout(token_data, history)
             if not tweet:
                 # Try fallback to winners recap
                 tweet = self.elion.tweet_formatters.format_winners_recap(history)
@@ -375,13 +399,9 @@ class AIGamingBot:
                 return
                 
             # Post tweet and track tokens
-            response = self.api.create_tweet(tweet)
-            if response:
-                logger.info("Posted volume analysis tweet")
-                # Track tokens using TokenMonitor
-                self.elion.token_monitor.run_analysis()
-            else:
-                logger.error("Failed to post volume tweet")
+            self._post_tweet(tweet)
+            # Track tokens using TokenMonitor
+            self.elion.token_monitor.run_analysis()
                 
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")

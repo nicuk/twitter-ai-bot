@@ -149,10 +149,21 @@ class Elion:
             # Get volume data
             volume_data = self.volume_strategy.analyze()
             
-            # Get portfolio data
-            portfolio_data = self.portfolio_tracker.get_portfolio_summary()
+            # Get portfolio data (safely handle missing data)
+            try:
+                portfolio_data = self.portfolio_tracker.get_portfolio_summary()
+            except (AttributeError, Exception) as e:
+                logger.warning(f"Could not get portfolio data: {e}")
+                portfolio_data = {
+                    'current_balance': 100,  # Initial balance
+                    'total_gain': 0,
+                    'daily_pnl': 0,
+                    'total_trades': 0,
+                    'win_rate': 0,
+                    'best_trade': None
+                }
             
-            # Track tokens while getting market data
+            # Track tokens from trend strategy
             for token in trend_data.get('trend_tokens', []):
                 if 'symbol' in token:
                     self.token_monitor.track_token(
@@ -160,6 +171,25 @@ class Elion:
                         price=token.get('price'),
                         volume=token.get('volume24h')
                     )
+            
+            # Track tokens from volume strategy
+            if 'spikes' in volume_data:
+                for score, token in volume_data['spikes']:
+                    if 'symbol' in token:
+                        self.token_monitor.track_token(
+                            token['symbol'],
+                            price=token.get('price'),
+                            volume=token.get('volume')
+                        )
+                        
+            if 'anomalies' in volume_data:
+                for score, token in volume_data['anomalies']:
+                    if 'symbol' in token:
+                        self.token_monitor.track_token(
+                            token['symbol'],
+                            price=token.get('price'),
+                            volume=token.get('volume')
+                        )
             
             # Combine all data
             market_data = {

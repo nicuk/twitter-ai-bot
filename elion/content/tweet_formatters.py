@@ -503,6 +503,17 @@ class TweetFormatters:
                 accuracy=round(accuracy, 1)
             )
 
+    def get_backup_tweet(self) -> str:
+        """Get a backup tweet when main tweet generation fails"""
+        backup_tweets = [
+            "🤖 *Neural nets recalibrating...* Stay tuned for our next market analysis! 📊",
+            "🔄 Processing market data... Meanwhile, keep those charts in focus! 📈",
+            "⚡ Quick break to optimize our algorithms. Back soon with fresh insights! 🧠",
+            "🎯 Fine-tuning our market scanners. Get ready for the next analysis! 🚀",
+            "💫 Upgrading our neural networks. Next market scan incoming! 🔍"
+        ]
+        return random.choice(backup_tweets)
+
     def get_template(self, template_type: str, variant: str = 'A') -> str:
         """Get a template of the given type and variant, avoiding repetition"""
         templates = self.templates[template_type]
