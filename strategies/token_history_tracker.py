@@ -182,26 +182,32 @@ class TokenHistoryTracker:
                 logger.info(f"Loading token history from {self.history_file}")
                 with open(self.history_file, 'r') as f:
                     data = json.load(f)
-                    self.token_history = {
-                        symbol: TokenHistoricalData.from_dict(token_data)
-                        for symbol, token_data in data.items()
-                    }
-                logger.info(f"Loaded {len(self.token_history)} tokens from history")
-                for symbol in self.token_history:
-                    logger.debug(f"Loaded token: {symbol}")
+                    # Only update if we got valid data
+                    if data:
+                        self.token_history = {
+                            symbol: TokenHistoricalData.from_dict(token_data)
+                            for symbol, token_data in data.items()
+                        }
+                        logger.info(f"Loaded {len(self.token_history)} tokens from history")
+                    else:
+                        logger.warning("History file exists but is empty")
             else:
                 logger.warning(f"No history file found at {self.history_file}")
+                # Don't create empty file here - let save_history do it
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding token history JSON: {e}")
-            self.token_history = {}
         except Exception as e:
             logger.error(f"Error loading token history: {e}")
             logger.exception("Full traceback:")
-            self.token_history = {}
     
     def save_history(self):
         """Save token history to file"""
         try:
+            # Don't save if we have no tokens and file exists (prevent accidental clearing)
+            if len(self.token_history) == 0 and os.path.exists(self.history_file):
+                logger.warning("Preventing save of empty history when file exists")
+                return
+                
             logger.info(f"Saving {len(self.token_history)} tokens to {self.history_file}")
             
             # Ensure data directory exists
@@ -216,6 +222,12 @@ class TokenHistoryTracker:
                     indent=2
                 )
             
+            # Quick validation before replacing
+            with open(temp_file, 'r') as f:
+                check_data = json.load(f)
+                if len(check_data) != len(self.token_history):
+                    raise ValueError("Data validation failed")
+            
             # Atomically rename temp file to actual file
             os.replace(temp_file, self.history_file)
             
@@ -225,10 +237,11 @@ class TokenHistoryTracker:
         except Exception as e:
             logger.error(f"Error saving token history: {e}")
             logger.exception("Full traceback:")
-            # Try to recover the file if it exists
-            if os.path.exists(self.history_file):
-                logger.info("Attempting to reload from existing file")
-                self.load_history()
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
     
     def update_token(self, token: Dict):
         """Update token data in history"""

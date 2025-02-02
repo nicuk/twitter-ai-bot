@@ -8,12 +8,5 @@
     "startCommand": "python main.py",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  },
-  "volumes": [
-    {
-      "name": "token-history",
-      "mountPath": "/data",
-      "persistent": true
-    }
-  ]
+  }
 }
