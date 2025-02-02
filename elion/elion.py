@@ -17,7 +17,7 @@ from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
-from elion.token_monitor import TokenMonitor
+from strategies.token_monitor import TokenMonitor  # Fixed import path
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""

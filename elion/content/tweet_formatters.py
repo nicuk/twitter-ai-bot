@@ -384,45 +384,40 @@ class TweetFormatters:
         """Format winners recap tweet with A/B variants"""
         template = self.get_template('winners_recap', variant)
         
-        # Get today's top 3 performers
-        today_winners = sorted(
-            [t for t in history.values() 
-             if datetime.fromisoformat(t['first_mention_date']).date() == datetime.now().date()],
+        # Get top 3 performing tokens from history
+        winners = sorted(
+            [t for t in history.values() if t['first_mention_price'] > 0],
             key=lambda x: ((x['current_price'] - x['first_mention_price']) / x['first_mention_price']) * 100,
             reverse=True
         )[:3]
         
-        if not today_winners:
-            # If no winners today, use all-time best performers
-            today_winners = sorted(
-                history.values(),
-                key=lambda x: ((x['current_price'] - x['first_mention_price']) / x['first_mention_price']) * 100,
-                reverse=True
-            )[:3]
-        
+        if len(winners) < 3:
+            logger.warning("Not enough winners for recap")
+            return ""
+            
         if variant == 'A':
             return template.format(
-                symbol1=today_winners[0]['symbol'],
-                gain1=((today_winners[0]['current_price'] - today_winners[0]['first_mention_price']) / today_winners[0]['first_mention_price']) * 100,
-                entry1=today_winners[0]['first_mention_price'],
-                symbol2=today_winners[1]['symbol'] if len(today_winners) > 1 else 'N/A',
-                gain2=((today_winners[1]['current_price'] - today_winners[1]['first_mention_price']) / today_winners[1]['first_mention_price']) * 100 if len(today_winners) > 1 else 0,
-                entry2=today_winners[1]['first_mention_price'] if len(today_winners) > 1 else '$0',
-                symbol3=today_winners[2]['symbol'] if len(today_winners) > 2 else 'N/A',
-                gain3=((today_winners[2]['current_price'] - today_winners[2]['first_mention_price']) / today_winners[2]['first_mention_price']) * 100 if len(today_winners) > 2 else 0,
-                entry3=today_winners[2]['first_mention_price'] if len(today_winners) > 2 else '$0'
+                symbol1=winners[0]['symbol'],
+                gain1=((winners[0]['current_price'] - winners[0]['first_mention_price']) / winners[0]['first_mention_price']) * 100,
+                entry1=self.format_price(winners[0]['first_mention_price']),
+                symbol2=winners[1]['symbol'],
+                gain2=((winners[1]['current_price'] - winners[1]['first_mention_price']) / winners[1]['first_mention_price']) * 100,
+                entry2=self.format_price(winners[1]['first_mention_price']),
+                symbol3=winners[2]['symbol'],
+                gain3=((winners[2]['current_price'] - winners[2]['first_mention_price']) / winners[2]['first_mention_price']) * 100,
+                entry3=self.format_price(winners[2]['first_mention_price'])
             )
         else:
             return template.format(
-                symbol1=today_winners[0]['symbol'],
-                gain1=((today_winners[0]['current_price'] - today_winners[0]['first_mention_price']) / today_winners[0]['first_mention_price']) * 100,
-                vmc1=today_winners[0]['volume_mcap_ratio'],
-                symbol2=today_winners[1]['symbol'] if len(today_winners) > 1 else 'N/A',
-                gain2=((today_winners[1]['current_price'] - today_winners[1]['first_mention_price']) / today_winners[1]['first_mention_price']) * 100 if len(today_winners) > 1 else 0,
-                vmc2=today_winners[1]['volume_mcap_ratio'] if len(today_winners) > 1 else 0,
-                symbol3=today_winners[2]['symbol'] if len(today_winners) > 2 else 'N/A',
-                gain3=((today_winners[2]['current_price'] - today_winners[2]['first_mention_price']) / today_winners[2]['first_mention_price']) * 100 if len(today_winners) > 2 else 0,
-                vmc3=today_winners[2]['volume_mcap_ratio'] if len(today_winners) > 2 else 0
+                symbol1=winners[0]['symbol'],
+                gain1=((winners[0]['current_price'] - winners[0]['first_mention_price']) / winners[0]['first_mention_price']) * 100,
+                vmc1=winners[0]['first_mention_volume_mcap_ratio'],
+                symbol2=winners[1]['symbol'],
+                gain2=((winners[1]['current_price'] - winners[1]['first_mention_price']) / winners[1]['first_mention_price']) * 100,
+                vmc2=winners[1]['first_mention_volume_mcap_ratio'],
+                symbol3=winners[2]['symbol'],
+                gain3=((winners[2]['current_price'] - winners[2]['first_mention_price']) / winners[2]['first_mention_price']) * 100,
+                vmc3=winners[2]['first_mention_volume_mcap_ratio']
             )
 
     def format_vmc_alert(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:

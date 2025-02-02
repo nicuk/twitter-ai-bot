@@ -106,8 +106,23 @@ class TokenHistoricalData:
 class TokenHistoryTracker:
     """Tracks historical data for tokens that pass filters"""
     
+    _instance = None
+    
+    def __new__(cls):
+        """Create singleton instance"""
+        if cls._instance is None:
+            cls._instance = super(TokenHistoryTracker, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self):
         """Initialize tracker with Railway's persistent storage"""
+        # Only initialize once
+        if self._initialized:
+            return
+            
+        self._initialized = True
+        
         # Use Railway's persistent storage directory
         self.data_dir = '/data'
         

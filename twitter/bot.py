@@ -365,7 +365,11 @@ class AIGamingBot:
                 return
             
             # Format volume tweet using filtered data
-            tweet = self.elion.tweet_formatters.format_volume_insight(volume_data, self.elion.personality.get_trait())
+            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            tweet = self.elion.tweet_formatters.format_volume_breakout(volume_data, history)
+            if not tweet:
+                # Try fallback to winners recap
+                tweet = self.elion.tweet_formatters.format_winners_recap(history)
             if not tweet:
                 logger.warning("Failed to format volume tweet")
                 return
