@@ -395,27 +395,26 @@ class AIGamingBot:
             # Format volume tweet using filtered data
             history = self.elion.token_monitor.history_tracker.get_all_token_history()
             
-            # Get the highest V/MC ratio token (volume_data contains tuples of (ratio, token_data))
-            token = max(volume_data, key=lambda x: x[0])[1]  # Get token_data from the tuple
+            # Get the highest V/MC ratio token from spikes and anomalies
+            all_tokens = []
+            if volume_data.get('spikes'):
+                all_tokens.extend(volume_data['spikes'])
+            if volume_data.get('anomalies'):
+                all_tokens.extend(volume_data['anomalies'])
+                
+            if not all_tokens:
+                logger.warning("No tokens to process")
+                return
+                
+            # Get token with highest score
+            score, token = max(all_tokens, key=lambda x: x[0])
             
-            token_data = {
-                'symbol': token['symbol'],
-                'first_mention_volume_24h': token['volume_24h'],
-                'current_volume': token['volume'],
-                'current_price': token['price'],
-                'first_mention_price': token['price'],  # Will be updated if in history
-            }
+            # Format tweet
+            tweet = self.elion.volume_strategy.format_twitter_output(
+                volume_data.get('spikes', []),
+                volume_data.get('anomalies', [])
+            )
             
-            if token['symbol'] in history:
-                token_data.update({
-                    'first_mention_price': history[token['symbol']]['first_mention_price'],
-                    'first_mention_volume_24h': history[token['symbol']]['first_mention_volume_24h']
-                })
-            
-            tweet = self.elion.tweet_formatters.format_volume_breakout(token_data, history)
-            if not tweet:
-                # Try fallback to winners recap
-                tweet = self.elion.tweet_formatters.format_winners_recap(history)
             if not tweet:
                 logger.warning("Failed to format volume tweet")
                 return
@@ -427,6 +426,7 @@ class AIGamingBot:
                 
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
+            logger.exception("Full traceback:")  # Add full traceback for debugging
 
     def run(self):
         """Run the bot"""
