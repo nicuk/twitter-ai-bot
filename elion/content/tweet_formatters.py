@@ -18,7 +18,7 @@ class TweetFormatters:
     def __init__(self):
         self.templates = {
             'performance_compare': [
-                "🤖 Neural Analysis Complete\n\n📊 24h Results for $${symbol}:\n💰 Price: ${entry} → ${current} (${gain:+.1f}%)\n📈 Volume: ${volume_change:+.1f}%\n\n🎯 Success Rate: 85% on volume spikes\n🔮 AI Prediction: High momentum continuation likely\n\nNext alpha dropping soon... 👀\n@AIGxBT",
+                "🤖 Neural Analysis Complete\n\n📊 24h Results for $${symbol}:\n💰 Price: ${entry} → ${current} (${gain:+.1f}%)\n📈 Volume: ${volume_change:+.1f}%\n\n🎯 Success Rate: ${success_rate:.0f}% on volume spikes\n🔮 AI Prediction: ${prediction}\n\nNext alpha dropping soon... 👀\n@AIGxBT",
                 "🤖 Portfolio AI Update\n\n💼 Stats:\n💰 P&L: ${daily_pnl:+.1f}% (${current_capital})\n🎯 Win Rate: ${win_rate}% (${total_trades} trades)\n\n📈 Last Trade:\n• ${last_symbol} +${last_gain:.1f}%\n• Entry: ${entry_price}\n• Exit: ${exit_price}\n\n🔮 Next: ${num_signals} setups forming\n@AIGxBT"
             ],
             'volume_breakout': [
@@ -171,11 +171,33 @@ class TweetFormatters:
 
     def format_performance_update(self, market_data: Dict, trait: str) -> str:
         """Format performance update tweet with personality"""
-        template = self.get_template('performance_update')
-        weekly_rate = market_data.get('weekly_rate', 'N/A')
-        best_gain = market_data.get('best_gain', 'N/A')
-        avg_return = market_data.get('avg_return', 'N/A')
-        return template.format(weekly_rate=weekly_rate, best_gain=best_gain, avg_return=avg_return)
+        try:
+            template = self.get_template('performance_update', trait)
+            
+            # Get metrics
+            weekly_rate = market_data.get('weekly_rate', 0)
+            best_gain = market_data.get('best_gain', 0)
+            avg_return = market_data.get('avg_return', 0)
+            
+            # Skip if we don't have positive performance to show
+            if weekly_rate <= 0 and best_gain <= 0 and avg_return <= 0:
+                logger.info("Skipping performance update - no positive metrics to show")
+                return ""
+            
+            # Only show positive metrics
+            weekly_rate = max(0, weekly_rate)  # Show 0 instead of negative
+            best_gain = max(0, best_gain)      # Best gain should always be positive anyway
+            avg_return = max(0, avg_return)    # Show 0 instead of negative
+            
+            return template.format(
+                weekly_rate=weekly_rate,
+                best_gain=best_gain,
+                avg_return=avg_return
+            )
+            
+        except Exception as e:
+            logger.error(f"Error formatting performance update tweet: {e}")
+            return ""
 
     def format_trending_update(self, history_data: Dict) -> str:
         """Format trending update with yesterday's performance"""
@@ -289,12 +311,45 @@ class TweetFormatters:
                     current = data.get('current_price', 0)
                     volume_change = data.get('volume_change_24h', 0)
                 
+                # Only format tweet if we have a positive gain
+                if gain <= 0:
+                    logger.info(f"Skipping performance tweet for {symbol} - no gain ({gain:.1f}%)")
+                    return ""
+                
+                # Calculate success rate from our actual calls
+                history = data.get('history', {})
+                if history:
+                    # Look at the last 10 volume-triggered calls
+                    volume_calls = [t for t in history.values() 
+                                  if t.get('trigger_type') == 'volume' and 
+                                  t.get('gain_24h') is not None][-10:]
+                    
+                    if volume_calls:
+                        success_rate = len([t for t in volume_calls 
+                                          if t['gain_24h'] > 0]) / len(volume_calls) * 100
+                    else:
+                        success_rate = 0
+                else:
+                    success_rate = 0
+                
+                # Generate prediction based on volume pattern
+                if volume_change > 100:  # Massive volume spike
+                    prediction = "Strong breakout potential detected"
+                elif volume_change > 50 and gain > 0:
+                    prediction = "High momentum continuation likely"
+                elif volume_change > 20:
+                    prediction = "Watching for breakout signals"
+                else:
+                    prediction = "Monitoring volume patterns"
+                
                 return template.format(
                     symbol=symbol,
                     gain=gain,
                     entry=self.format_price(entry),
                     current=self.format_price(current),
-                    volume_change=volume_change
+                    volume_change=volume_change,
+                    success_rate=success_rate,
+                    prediction=prediction
                 )
             
             # Variant B: Portfolio performance

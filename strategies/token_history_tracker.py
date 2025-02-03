@@ -264,20 +264,18 @@ class TokenHistoryTracker:
                 time_diff = current_time - token_data.first_mention_date
                 logger.info(f"Time since first mention: {time_diff}")
                 
-                # Update 24h metrics
-                if time_diff >= timedelta(hours=24) and token_data.price_24h_after == 0:
+                # Always update time-based metrics if enough time has passed
+                if time_diff >= timedelta(hours=24):
                     logger.info(f"Updating 24h metrics for {symbol}")
                     token_data.price_24h_after = price
                     token_data.volume_24h_after = volume
                 
-                # Update 48h metrics
-                if time_diff >= timedelta(hours=48) and token_data.price_48h_after == 0:
+                if time_diff >= timedelta(hours=48):
                     logger.info(f"Updating 48h metrics for {symbol}")
                     token_data.price_48h_after = price
                     token_data.volume_48h_after = volume
                 
-                # Update 7d metrics
-                if time_diff >= timedelta(days=7) and token_data.price_7d_after == 0:
+                if time_diff >= timedelta(days=7):
                     logger.info(f"Updating 7d metrics for {symbol}")
                     token_data.price_7d_after = price
                     token_data.volume_7d_after = volume
@@ -305,8 +303,26 @@ class TokenHistoryTracker:
     
     def get_token_history(self, symbol: str) -> Optional[TokenHistoricalData]:
         """Get historical data for a specific token"""
-        return self.token_history.get(symbol)
-    
+        return self.token_history.get(symbol.upper())
+
+    def calculate_price_change(self, symbol: str) -> float:
+        """Calculate price change percentage since first mention"""
+        token = self.get_token_history(symbol)
+        if not token:
+            return 0.0
+        if token.first_mention_price == 0:
+            return 0.0
+        return ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
+
+    def calculate_volume_change(self, symbol: str) -> float:
+        """Calculate volume change percentage since first mention"""
+        token = self.get_token_history(symbol)
+        if not token:
+            return 0.0
+        if token.first_mention_volume_24h == 0:
+            return 0.0
+        return ((token.current_volume - token.first_mention_volume_24h) / token.first_mention_volume_24h) * 100
+
     def get_all_token_history(self) -> Dict[str, TokenHistoricalData]:
         """Get historical data for all tracked tokens"""
         return self.token_history
