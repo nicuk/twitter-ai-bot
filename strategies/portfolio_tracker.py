@@ -513,3 +513,22 @@ class PortfolioTracker:
         except Exception as e:
             print(f"Error getting portfolio stats: {e}")
             return {}
+
+    def get_portfolio_summary(self) -> Dict:
+        """Get a summary of portfolio performance
+        
+        Returns:
+            Dict containing portfolio metrics
+        """
+        stats = self.get_portfolio_stats()
+        status = self.get_portfolio_status()
+        
+        return {
+            'total_capital': round(stats['current_capital'], 2),
+            'total_trades': stats['total_trades'],
+            'daily_trades': stats['daily_trades'],
+            'best_trade': stats['best_trade'],
+            'total_gain': round(status['gain'], 2),
+            'best_gain': status['best_gain'],
+            'days_active': status['days_active']
+        }

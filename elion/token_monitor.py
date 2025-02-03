@@ -14,39 +14,49 @@ class TokenMonitor:
         self.tracking_window = timedelta(days=7)  # Track tokens for 7 days
         
     def track_token(self, symbol: str, price: Optional[float] = None, volume: Optional[float] = None) -> None:
-        """Track a new token or update existing token data"""
+        """Track a new token or update existing token data
+        
+        Args:
+            symbol: Token symbol
+            price: Current price (optional)
+            volume: Current volume (optional)
+        """
         now = datetime.now()
         
+        # Initialize token data if not exists
         if symbol not in self.tracked_tokens:
             self.tracked_tokens[symbol] = {
                 'first_seen': now,
                 'last_seen': now,
                 'first_price': price,
                 'last_price': price,
-                'highest_price': price,
-                'lowest_price': price,
-                'highest_volume': volume,
+                'highest_price': price if price else 0,
+                'lowest_price': price if price else float('inf'),
+                'highest_volume': volume if volume else 0,
                 'volume_history': [],
                 'price_history': []
             }
-        else:
-            token_data = self.tracked_tokens[symbol]
-            token_data['last_seen'] = now
             
-            if price is not None:
-                token_data['last_price'] = price
-                token_data['price_history'].append((now, price))
+        # Update existing token data
+        token_data = self.tracked_tokens[symbol]
+        token_data['last_seen'] = now
+        
+        if price is not None:
+            token_data['last_price'] = price
+            token_data['price_history'].append((now, price))
+            
+            # Update price extremes
+            if price > token_data['highest_price']:
+                token_data['highest_price'] = price
+            if price < token_data['lowest_price']:
+                token_data['lowest_price'] = price
                 
-                if price > token_data.get('highest_price', 0):
-                    token_data['highest_price'] = price
-                if price < token_data.get('lowest_price', float('inf')):
-                    token_data['lowest_price'] = price
-                    
-            if volume is not None:
-                token_data['volume_history'].append((now, volume))
-                if volume > token_data.get('highest_volume', 0):
-                    token_data['highest_volume'] = volume
-                    
+        if volume is not None:
+            token_data['volume_history'].append((now, volume))
+            if volume > token_data['highest_volume']:
+                token_data['highest_volume'] = volume
+                
+        # Cleanup old data
         self._cleanup_old_tokens()
         
     def _cleanup_old_tokens(self) -> None:

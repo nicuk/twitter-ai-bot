@@ -160,14 +160,56 @@ class TweetFormatters:
         trend_strategy = TrendStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
         return trend_strategy.format_twitter_output(trend_tokens)
 
-    def format_volume_alert(self, market_data: Dict, trait: str) -> str:
-        """Format volume alert tweet with personality"""
-        template = self.get_template('volume_alert')
-        symbol = market_data.get('symbol', 'N/A')
-        volume = market_data.get('volume24h', 0)
-        price_change = market_data.get('price_change_24h', 0)
-        vol_mcap_ratio = market_data.get('volume24h', 0) / market_data.get('marketCap', 1)
-        return template.format(symbol=symbol, volume=self.format_volume(volume), price_change=price_change, vol_mcap_ratio=vol_mcap_ratio)
+    def format_volume_alert(self, market_data: Dict, trait: str = 'analytical') -> str:
+        """Format volume alert tweet with personality
+        
+        Args:
+            market_data: Market data dictionary
+            trait: Personality trait to use
+            
+        Returns:
+            Formatted tweet string
+        """
+        if not market_data or not isinstance(market_data, dict):
+            raise ValueError("Invalid market data provided")
+            
+        symbol = market_data.get('symbol')
+        if not symbol:
+            raise ValueError("Market data missing symbol")
+            
+        volume = market_data.get('volume', 0)
+        prev_volume = market_data.get('prev_volume', 0)
+        volume_change = ((volume - prev_volume) / prev_volume * 100) if prev_volume else 0
+        
+        mcap = market_data.get('market_cap', 0) 
+        vmc_ratio = (volume / mcap * 100) if mcap else 0
+        prev_vmc = market_data.get('prev_vmc', 0)
+        
+        # Format numbers
+        volume_str = self.format_volume(volume)
+        prev_volume_str = self.format_volume(prev_volume)
+        
+        # Get template variant
+        variant = 'A' if random.random() < 0.5 else 'B'
+        template = self.templates['volume_breakout'][0 if variant == 'A' else 1]
+        
+        # Format with available data
+        tweet_data = {
+            'symbol': symbol,
+            'vol_before': prev_volume_str,
+            'vol_now': volume_str,
+            'vol_change': volume_change,
+            'prev_vmc': prev_vmc,
+            'curr_vmc': vmc_ratio,
+            'last_vol_token': market_data.get('last_volume_token', ''),
+            'last_vol_gain': market_data.get('last_volume_gain', 0)
+        }
+        
+        try:
+            return template.format(**tweet_data)
+        except KeyError as e:
+            print(f"Missing data for tweet template: {e}")
+            return ""
 
     def format_performance_update(self, market_data: Dict, trait: str) -> str:
         """Format performance update tweet with personality"""
