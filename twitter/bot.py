@@ -34,6 +34,62 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+def cleanup_redis_lock():
+    """Clean up Redis lock on exit"""
+    try:
+        if REDIS_AVAILABLE:
+            redis_url = os.getenv('REDIS_URL')
+            if redis_url:
+                redis_client = redis.from_url(redis_url)
+                instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+                # Only remove lock if it belongs to this instance
+                current_holder = redis_client.get('twitter_bot_lock')
+                if current_holder and current_holder.decode() == instance_id:
+                    redis_client.delete('twitter_bot_lock')
+                    logger.info(f"Redis lock released by instance {instance_id}")
+    except Exception as e:
+        logger.error(f"Error cleaning up Redis lock: {e}")
+
+def check_single_instance():
+    """Ensure only one instance is running"""
+    try:
+        if not REDIS_AVAILABLE:
+            logger.warning("Redis not available for instance locking")
+            return True
+            
+        redis_url = os.getenv('REDIS_URL')
+        if not redis_url:
+            logger.warning("REDIS_URL not set for instance locking")
+            return True
+            
+        redis_client = redis.from_url(redis_url)
+        instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+        
+        # Try to get the lock
+        lock = redis_client.setnx('twitter_bot_lock', instance_id)
+        if lock:
+            # We got the lock, set expiry and register cleanup
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
+            atexit.register(cleanup_redis_lock)
+            logger.info(f"Instance {instance_id} acquired lock and will start")
+            return True
+            
+        # Check if lock is stale
+        ttl = redis_client.ttl('twitter_bot_lock')
+        current_holder = redis_client.get('twitter_bot_lock')
+        
+        if ttl in (-2, -1):  # Key doesn't exist or no expiry
+            redis_client.delete('twitter_bot_lock')
+            return check_single_instance()  # Try again
+            
+        # Another instance is running
+        logger.error(f"Another bot instance ({current_holder.decode()}) is already running (TTL: {ttl}s). This instance ({instance_id}) will exit.")
+        return False
+            
+    except Exception as e:
+        logger.error(f"Error checking instance lock: {e}")
+        return True  # Allow running if Redis check fails
+
 def is_bot_running():
     """Check if another instance is running using Redis lock"""
     try:
@@ -49,17 +105,21 @@ def is_bot_running():
         logger.info("Checking Redis lock...")
         redis_client = redis.from_url(redis_url)
         
+        # Generate unique instance ID if not exists
+        instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+        
         # First try to get the lock
-        lock = redis_client.setnx('twitter_bot_lock', 'locked')
+        lock = redis_client.setnx('twitter_bot_lock', instance_id)
         if lock:
             # We got the lock
-            logger.info("Got Redis lock")
+            logger.info(f"Got Redis lock (Instance: {instance_id})")
             redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
             return False
             
         # If we didn't get the lock, check if it's stale
         ttl = redis_client.ttl('twitter_bot_lock')
-        logger.info(f"Lock exists with TTL: {ttl}")
+        current_holder = redis_client.get('twitter_bot_lock')
+        logger.info(f"Lock exists with TTL: {ttl}s, held by Instance: {current_holder}")
         
         if ttl == -2:  # Key doesn't exist
             logger.info("Lock doesn't exist, clearing")
@@ -72,7 +132,9 @@ def is_bot_running():
             return False
             
         # Lock exists and has valid TTL
-        logger.warning("Another instance appears to be running")
+        sleep_time = 60  # 1 minute
+        logger.warning(f"Redis Lock: Another bot instance ({current_holder}) is running (TTL: {ttl}s). This instance ({instance_id}) will sleep for {sleep_time} seconds to avoid conflicts.")
+        time.sleep(sleep_time)
         return True
             
     except Exception as e:
@@ -601,6 +663,10 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
     
-    logger.info("Starting Twitter bot...")
-    bot = AIGamingBot()
-    bot.run()
+    # Only start if we're the single instance
+    if check_single_instance():
+        bot = AIGamingBot()
+        bot.run()
+    else:
+        logger.error("Exiting: Another instance is already running")
+        sys.exit(1)
