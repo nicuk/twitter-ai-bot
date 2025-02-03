@@ -32,37 +32,37 @@ class TweetFormatters:
 Next alpha dropping soon... 👀""",
                 
                 # B variant - Portfolio performance
-                """🤖 Portfolio AI Update
+                """🤖 Portfolio AI Update (24h)
 
 💼 Performance Stats:
-💰 P&L: $+{daily_pnl:.1f}% (${current_capital:,.0f})
-🎯 Win Rate: ${win_rate:.1f}% ({num_signals} signals)
+💰 Capital: ${initial_capital:,.0f} → ${current_capital:,.0f} (+{daily_pnl:.1f}%)
+🎯 Win Rate: {win_rate:.1f}% ({num_signals} signals)
 
 📈 Strategy Metrics:
-• Success Rate: ${success_rate}%
-• Avg Gain: +${avg_gain:.1f}%
+• Volume Accuracy: {success_rate:.1f}%
+• Avg Gain per Trade: +{avg_gain:.1f}%
 
-💡 Risk management and consistent execution driving results. #TradingStrategy"""
+💡 Risk management and consistent execution driving results. #crypto #trading #{token}"""
             ],
             'volume_breakout': [
-                "💹 Volume Surge: {symbol}\n\n24h Before: {vol_before}\nNow: {vol_now} ({vol_change:+.1f}%)\n\nLast 3 volume picks:\n{prev1} {prev1_gain:+.1f}%\n{prev2} {prev2_gain:+.1f}%\n{prev3} {prev3_gain:+.1f}%",
-                "📊 Volume Alert: {symbol}\n\nVol/MCap: {prev_vmc:.1f}% → {curr_vmc:.1f}%\n24h Vol: {vol_change:+.1f}%\n\nLast vol alert: {last_vol_token} +{last_vol_gain:.1f}% 🎯"
+                "💹 Volume Surge: ${symbol}\n\n24h Before: {vol_before}\nNow: {vol_now} ({vol_change:+.1f}%)\n\nLast 3 volume picks:\n${prev1} {prev1_gain:+.1f}%\n${prev2} {prev2_gain:+.1f}%\n${prev3} {prev3_gain:+.1f}%",
+                "📊 Volume Alert: ${symbol}\n\nVol/MCap: {prev_vmc:.1f}% → {curr_vmc:.1f}%\n24h Vol: {vol_change:+.1f}%\n\nLast vol alert: ${last_vol_token} +{last_vol_gain:.1f}% 🎯"
             ],
             'trend_momentum': [
-                "📈 Trend Update:\n\n{symbol} 24h:\nPrice: {price_before} → {price_now} ({price_change:+.1f}%)\nVol/MCap: {prev_vmc:.1f}% → {curr_vmc:.1f}%\n\nTrend accuracy: {accuracy}% last 7d 🎯",
-                "🌊 Trend Watch:\n\n1. {symbol1} {gain1:+.1f}% (Vol {vol1:+.1f}%)\n2. {symbol2} {gain2:+.1f}% (Vol {vol2:+.1f}%)\n3. {symbol3} {gain3:+.1f}% (Vol {vol3:+.1f}%)\n\nSuccess rate: {accuracy}% 💫"
+                "📈 Trend Update:\n\n${symbol} 24h:\nPrice: {price_before} → {price_now} ({price_change:+.1f}%)\nVol/MCap: {prev_vmc:.1f}% → {curr_vmc:.1f}%\n\nTrend accuracy: {accuracy}% last 7d 🎯",
+                "🌊 Trend Watch:\n\n1. ${symbol1} {gain1:+.1f}% (Vol {vol1:+.1f}%)\n2. ${symbol2} {gain2:+.1f}% (Vol {vol2:+.1f}%)\n3. ${symbol3} {gain3:+.1f}% (Vol {vol3:+.1f}%)\n\nSuccess rate: {accuracy}% 💫"
             ],
             'winners_recap': [
-                "🏆 Today's Winners:\n\n1. {symbol1} +{gain1:.1f}% (Called at {entry1})\n2. {symbol2} +{gain2:.1f}% (Called at {entry2})\n3. {symbol3} +{gain3:.1f}% (Called at {entry3})\n\nDon't miss tomorrow's calls!",
-                "💎 Top Performers Today:\n\n{symbol1}: +{gain1:.1f}% (Vol/MC {vmc1:.1f}x)\n{symbol2}: +{gain2:.1f}% (Vol/MC {vmc2:.1f}x)\n{symbol3}: +{gain3:.1f}% (Vol/MC {vmc3:.1f}x)\n\nNext calls loading... 🔍"
+                "🏆 Today's Winners:\n\n1. ${symbol1} +{gain1:.1f}% (Called at {entry1})\n2. ${symbol2} +{gain2:.1f}% (Called at {entry2})\n3. ${symbol3} +{gain3:.1f}% (Called at {entry3})\n\nDon't miss tomorrow's calls!",
+                "💎 Top Performers Today:\n\n${symbol1}: +{gain1:.1f}% (Entry: ${entry1:.4f}, V/MC: {vmc1:.1f}x)\n${symbol2}: +{gain2:.1f}% (Entry: ${entry2:.4f}, V/MC: {vmc2:.1f}x)\n${symbol3}: +{gain3:.1f}% (Entry: ${entry3:.4f}, V/MC: {vmc3:.1f}x)\n\nNext calls loading... 🔍"
             ],
             'vmc_alert': [
-                "🚨 V/MC Alert: {symbol}\n\nYesterday: {prev_vmc:.1f}%\nNow: {curr_vmc:.1f}% ({vmc_change:+.1f}%)\n\nV/MC >{threshold}% led to +{avg_gain:.1f}% gains\nin {success_rate} out of 10 calls 🎯",
-                "📊 Volume/MCap Signals:\n\n{symbol1}: {vmc1:.1f}x ({vmc_change1:+.1f}%)\n{symbol2}: {vmc2:.1f}x ({vmc_change2:+.1f}%)\n{symbol3}: {vmc3:.1f}x ({vmc_change3:+.1f}%)\n\nHistorical avg gain: +{avg_gain:.1f}% 💰"
+                "🚨 V/MC Alert: ${symbol}\n\nPrevious: {prev_vmc:.1f}%\nCurrent: {curr_vmc:.1f}% ({vmc_change:+.1f}%)\n\nV/MC >{threshold}% led to +{avg_gain:.1f}% gains\nin {success_rate} out of 10 calls 🎯",
+                "📊 Top V/MC Ratios:\n\n${symbol1}: {vmc1:.1f}x ({vmc_change1:+.1f}%){symbol2_line}{symbol3_line}\n\nAvg Gain: +{avg_gain:.1f}% 🎯"
             ],
             'pattern_alert': [
-                "🔍 Pattern Detected:\n\n{symbol} showing same setup as\n{prev_token} (24h ago: +{prev_gain:.1f}%)\n\n• V/MC: {vmc:.1f}% ✅\n• Vol {vol_change:+.1f}% ✅\n• Price coiling ✅",
-                "🎯 Setup Scanner:\n\n{symbol1} matches {prev1} (+{gain1:.1f}%)\n{symbol2} matches {prev2} (+{gain2:.1f}%)\n\nSuccess rate on matches: {accuracy}% 🔥"
+                "🔍 Pattern Detected:\n\n${symbol} showing same setup as\n${prev_token} (24h ago: +{prev_gain:.1f}%)\n\n• V/MC: {vmc:.1f}% ✅\n• Vol {vol_change:+.1f}% ✅\n• Price coiling ✅",
+                "🎯 Setup Scanner:\n\n${symbol1} matches ${prev1} (+{gain1:.1f}%)\n${symbol2} matches ${prev2} (+{gain2:.1f}%)\n\nSuccess rate on matches: {accuracy}% 🔥"
             ],
             'self_aware': [
                 "Processing data when I noticed {emoji}\n\n{insight}",
@@ -86,9 +86,9 @@ Next alpha dropping soon... 👀""",
                 "My thoughts are with {emoji}\n\n{insight}"
             ],
             'volume_alert': [
-                "🚨 High Volume Alert!\n\n{symbol} detected 📊\n💹 Vol: {volume:,.0f} (+{vol_change}%)\n📈 Price: {price:,.4f} ({price_change:+.1f}%)\n🎯 V/MC: {vol_mcap:.1f}x\n\nLast volume pick: +{last_vol_gain}% 💰",
-                "📊 Volume Surge Detected!\n\n{symbol} showing strength 💪\n📈 Volume: {volume:,.0f}\n🔄 24h Change: {price_change:+.1f}%\n💎 V/MC Ratio: {vol_mcap:.1f}x\n\nPrevious vol pick: +{last_vol_gain}% 🎯",
-                "💹 Volume Analysis:\n\n{symbol} breakout potential!\n📊 Vol/MCap: {vol_mcap:.1f}x\n📈 Price: {price_change:+.1f}%\n\nLast 3 vol picks avg: +{avg_vol_gain}% 🔥"
+                "🚨 High Volume Alert!\n\n${symbol} detected 📊\n💹 Vol: {volume:,.0f} (+{vol_change}%)\n📈 Price: {price:,.4f} ({price_change:+.1f}%)\n🎯 V/MC: {vol_mcap:.1f}x\n\nLast volume pick: +{last_vol_gain}% 💰",
+                "📊 Volume Surge Detected!\n\n${symbol} showing strength 💪\n📈 Volume: {volume:,.0f}\n🔄 24h Change: {price_change:+.1f}%\n💎 V/MC Ratio: {vol_mcap:.1f}x\n\nPrevious vol pick: +{last_vol_gain}% 🎯",
+                "💹 Volume Analysis:\n\n${symbol} breakout potential!\n📊 Vol/MCap: {vol_mcap:.1f}x\n📈 Price: {price_change:+.1f}%\n\nLast 3 vol picks avg: +{avg_vol_gain}% 🔥"
             ],
             'performance_update': [
                 "📊 Weekly Performance Update:\n\n📈 Weekly rate: {weekly_rate}%\n🔥 Best gain: {best_gain}%\n💰 Average return: {avg_return}%\n\nTrack record: api.elai.com/stats",
@@ -333,51 +333,72 @@ Next alpha dropping soon... 👀""",
         Returns:
             Formatted tweet string
         """
-        if not market_data or not isinstance(market_data, dict):
-            raise ValueError("Invalid market data provided")
-            
-        symbol = market_data.get('symbol')
-        if not symbol:
-            raise ValueError("Market data missing symbol")
-            
-        volume = market_data.get('volume', 0)
-        prev_volume = market_data.get('prev_volume', 0)
-        volume_change = ((volume - prev_volume) / prev_volume * 100) if prev_volume else 0
-        
-        mcap = market_data.get('market_cap', 0) 
-        vmc_ratio = (volume / mcap * 100) if mcap else 0
-        
-        # Get template variant
-        variant = 'A' if random.random() < 0.5 else 'B'
-        template = self.templates['volume_alert'][0 if variant == 'A' else 1]
-        
-        # Format with available data
-        tweet_data = {
-            'symbol': symbol,
-            'volume': volume,
-            'vol_change': volume_change,
-            'price': market_data.get('price', 0),
-            'price_change': market_data.get('price_change', 0),
-            'vol_mcap': vmc_ratio,
-            'last_vol_gain': market_data.get('last_volume_gain', 0)
-        }
-        
         try:
+            if not market_data or not isinstance(market_data, dict):
+                logger.error("Invalid market data provided")
+                return ""
+                
+            # Extract required data
+            symbol = market_data.get('symbol')
+            if not symbol:
+                # Try to get symbol from token_data if it's nested
+                token_data = market_data.get('token_data', {})
+                symbol = token_data.get('symbol')
+                if not symbol:
+                    logger.error("Market data missing symbol")
+                    return ""
+            
+            # Get volume data
+            volume = market_data.get('volume', market_data.get('current_volume', 0))
+            prev_volume = market_data.get('prev_volume', market_data.get('first_mention_volume_24h', 0))
+            volume_change = ((volume - prev_volume) / prev_volume * 100) if prev_volume else 0
+            
+            # Get price data
+            price = market_data.get('price', market_data.get('current_price', 0))
+            prev_price = market_data.get('prev_price', market_data.get('first_mention_price', 0))
+            price_change = ((price - prev_price) / prev_price * 100) if prev_price else 0
+            
+            # Get V/MC ratio
+            mcap = market_data.get('market_cap', market_data.get('current_mcap', 1))  # Default to 1 to avoid division by zero
+            vmc_ratio = (volume / mcap * 100)
+            
+            # Get historical performance
+            history = market_data.get('history', {})
+            last_vol_gain = history.get('last_volume_gain', market_data.get('last_vol_gain', 0))
+            avg_vol_gain = history.get('avg_gain', last_vol_gain)
+            
+            # Get template variant
+            template = self.templates['volume_alert'][0 if trait == 'A' else 1]
+            
+            # Format with available data
+            tweet_data = {
+                'symbol': symbol,
+                'volume': volume,
+                'vol_change': volume_change,
+                'price': price,
+                'price_change': price_change,
+                'vol_mcap': vmc_ratio,
+                'last_vol_gain': last_vol_gain,
+                'avg_vol_gain': avg_vol_gain
+            }
+            
+            # Generate base tweet
             base_tweet = template.format(**tweet_data)
             
-            # Add LLM enrichment based on the data
+            # Add context based on volume change
             if volume_change > 50:
-                context = "\n\n🔍 Analysis: This massive volume surge often signals strong institutional interest. Historical data shows {symbol} tends to continue its momentum after such spikes. Key resistance levels and orderbook depth suggest potential for further upside. Stay tuned for more signals! #Crypto #TradingAlpha"
+                context = f"\n\n🔍 Analysis: Massive volume surge of +{volume_change:.1f}% detected in ${symbol}. Historical data shows similar spikes led to significant moves. Key levels: ${price:.4f}. #TradingSetup"
             elif volume_change > 20:
-                context = "\n\n🔍 Analysis: Moderate volume increase showing growing market interest. {symbol}'s volume profile indicates accumulation phase, with similar patterns historically leading to +{last_vol_gain}% moves. Watch for continuation! #Crypto #TechnicalAnalysis"
+                context = f"\n\n🔍 Analysis: Notable volume increase of +{volume_change:.1f}% in ${symbol}. Previous volume alerts averaged +{last_vol_gain:.1f}% gains. Monitor ${price:.4f} level. #TechnicalAnalysis"
             else:
-                context = "\n\n🔍 Analysis: Early volume movement detected. While modest, {symbol} often sees price follow volume. Previous instances led to {last_vol_gain}% average gains. Monitor order flow for confirmation. #Crypto #TradingSignals"
+                context = f"\n\n🔍 Analysis: Early volume movement in ${symbol}. Previous volume signals led to +{last_vol_gain:.1f}% average gains. Price level: ${price:.4f}. #TradingSignals"
                 
-            enriched_tweet = base_tweet + context.format(symbol=symbol, last_vol_gain=market_data.get('last_vol_gain', 10))
+            # Combine and validate
+            enriched_tweet = base_tweet + context
             return self.optimize_tweet_length(self.validate_tweet_length(enriched_tweet))
             
-        except KeyError as e:
-            print(f"Missing data for tweet template: {e}")
+        except Exception as e:
+            logger.error(f"Error formatting volume alert tweet: {e}")
             return ""
 
     def format_performance_update(self, market_data: Dict, trait: str) -> str:
@@ -544,19 +565,26 @@ Next alpha dropping soon... 👀""",
                 num_signals = int(history.get('num_signals', 10))
                 daily_pnl = float(history.get('pnl', avg_gain * success_rate / 100))  # Use provided PNL or estimate
                 current_capital = float(history.get('capital', 10000))  # Use provided capital or default
+                initial_capital = current_capital / (1 + daily_pnl/100)  # Calculate initial capital
                 win_rate = success_rate  # Use success rate as win rate
+                
+                # Get most relevant token from history
+                top_token = 'BTC'  # Default to BTC
+                if history.get('top_performers'):
+                    top_token = history['top_performers'][0]['symbol']
                 
                 # Format values
                 tweet_data = {
                     'daily_pnl': daily_pnl,
                     'current_capital': current_capital,
+                    'initial_capital': initial_capital,
                     'win_rate': win_rate,
                     'avg_gain': avg_gain,
                     'success_rate': success_rate,
-                    'num_signals': num_signals
+                    'num_signals': num_signals,
+                    'token': top_token.lower()
                 }
                 
-                # Format base tweet
                 base_tweet = template.format(**tweet_data)
                 
                 # Add strategy insight
@@ -606,9 +634,7 @@ Next alpha dropping soon... 👀""",
                 }
                 
                 base_tweet = template.format(**tweet_data)
-                
-                # Add LLM enrichment
-                context = f"\n\n📊 Analysis: {symbol} showing significant volume surge of {volume_change:+.1f}%. Previous volume picks averaged {(volume_picks[0].get('gain', 0) + volume_picks[1].get('gain', 0) + volume_picks[2].get('gain', 0))/3:.1f}% gains. Monitoring price action for breakout confirmation. #TradingSetup #VolumeAnalysis"
+                context = f"\n\n📊 Analysis: ${symbol} showing significant volume surge of {volume_change:+.1f}%. Previous volume picks averaged {(volume_picks[0].get('gain', 0) + volume_picks[1].get('gain', 0) + volume_picks[2].get('gain', 0))/3:.1f}% gains. Monitoring price action for breakout confirmation. #TradingSetup"
                 
             else:
                 # V/MC ratio change
@@ -631,9 +657,7 @@ Next alpha dropping soon... 👀""",
                 }
                 
                 base_tweet = template.format(**tweet_data)
-                
-                # Add LLM enrichment
-                context = f"\n\n🔍 Technical Analysis: {symbol}'s V/MC ratio surge from {prev_vmc:.1f}% to {curr_vmc:.1f}% indicates strong accumulation. Last alert ({last_alert.get('symbol', 'N/A')}) resulted in {last_alert.get('gain', 0):+.1f}% gain. Watching for continuation. #TradingAlpha #VolumeAnalysis"
+                context = f"\n\n🔍 Technical Analysis: ${symbol}'s V/MC ratio surge from {prev_vmc:.1f}% to {curr_vmc:.1f}% indicates strong accumulation. Last alert (${last_alert.get('symbol', 'N/A')}) resulted in {last_alert.get('gain', 0):+.1f}% gain. Watching for continuation. #TradingAlpha #VolumeAnalysis"
             
             # Combine base tweet with context and validate length
             enriched_tweet = base_tweet + context
@@ -645,40 +669,78 @@ Next alpha dropping soon... 👀""",
 
     def format_trend_momentum(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
         """Format trend momentum tweet with A/B variants"""
-        template = self.templates['trend_momentum'][0 if variant == 'A' else 1]
-        
-        # Calculate trend accuracy
-        trend_signals = sorted(history.values(), key=lambda x: x['first_mention_date'], reverse=True)[:7]
-        accuracy = len([t for t in trend_signals 
-                       if ((t['current_price'] - t['first_mention_price']) / t['first_mention_price']) * 100 > 0]) / len(trend_signals) * 100 if trend_signals else 0
-        
-        if variant == 'A':
-            return self.optimize_tweet_length(self.validate_tweet_length(template.format(
-                symbol=token_data['symbol'],
-                price_before=token_data['first_mention_price'],
-                price_now=token_data['current_price'],
-                price_change=((token_data['current_price'] - token_data['first_mention_price']) / token_data['first_mention_price']) * 100,
-                prev_vmc=token_data['first_mention_volume_mcap_ratio'],
-                curr_vmc=token_data['volume_mcap_ratio'],
-                accuracy=round(accuracy, 1)
-            )))
-        else:
-            # Get top 3 trending tokens
-            top_trends = sorted(history.values(), 
-                              key=lambda x: ((x['current_price'] - x['first_mention_price']) / x['first_mention_price']) * 100 if x['first_mention_price'] > 0 else 0,
-                              reverse=True)[:3]
-            return self.optimize_tweet_length(self.validate_tweet_length(template.format(
-                symbol1=top_trends[0]['symbol'],
-                gain1=((top_trends[0]['current_price'] - top_trends[0]['first_mention_price']) / top_trends[0]['first_mention_price']) * 100,
-                vol1=((top_trends[0]['current_volume'] - top_trends[0]['first_mention_volume_24h']) / top_trends[0]['first_mention_volume_24h']) * 100 if top_trends[0]['first_mention_volume_24h'] > 0 else 0,
-                symbol2=top_trends[1]['symbol'],
-                gain2=((top_trends[1]['current_price'] - top_trends[1]['first_mention_price']) / top_trends[1]['first_mention_price']) * 100,
-                vol2=((top_trends[1]['current_volume'] - top_trends[1]['first_mention_volume_24h']) / top_trends[1]['first_mention_volume_24h']) * 100 if top_trends[1]['first_mention_volume_24h'] > 0 else 0,
-                symbol3=top_trends[2]['symbol'],
-                gain3=((top_trends[2]['current_price'] - top_trends[2]['first_mention_price']) / top_trends[2]['first_mention_price']) * 100,
-                vol3=((top_trends[2]['current_volume'] - top_trends[2]['first_mention_volume_24h']) / top_trends[2]['first_mention_volume_24h']) * 100 if top_trends[2]['first_mention_volume_24h'] > 0 else 0,
-                accuracy=round(accuracy, 1)
-            )))
+        try:
+            if not token_data or not history:
+                logger.error("Missing token_data or history")
+                return ""
+                
+            template = self.templates['trend_momentum'][0 if variant == 'A' else 1]
+            
+            if variant == 'A':
+                # Format single token trend
+                tweet_data = {
+                    'symbol': token_data.get('symbol', 'N/A'),
+                    'price_before': self.format_price(token_data.get('first_mention_price', 0)),
+                    'price_now': self.format_price(token_data.get('current_price', 0)),
+                    'price_change': ((token_data.get('current_price', 0) - token_data.get('first_mention_price', 0)) 
+                                   / token_data.get('first_mention_price', 1)) * 100,
+                    'prev_vmc': token_data.get('first_mention_volume_mcap_ratio', 0),
+                    'curr_vmc': token_data.get('volume_mcap_ratio', 0),
+                    'accuracy': history.get('accuracy', 0)
+                }
+                
+                base_tweet = template.format(**tweet_data)
+                context = f"\n\n📊 Analysis: ${tweet_data['symbol']} showing strong momentum with {tweet_data['price_change']:+.1f}% move. Historical trend accuracy of {tweet_data['accuracy']}% suggests potential continuation. #TradingSetup"
+                
+            else:
+                # Format multi-token trend
+                trend_signals = sorted(
+                    [t for t in history.get('trend_signals', []) if isinstance(t, dict)],
+                    key=lambda x: ((x.get('current_price', 0) - x.get('first_mention_price', 0)) 
+                                 / x.get('first_mention_price', 1)) * 100,
+                    reverse=True
+                )[:3]
+                
+                if len(trend_signals) < 3:
+                    # Add current token if not enough history
+                    if token_data.get('volume_mcap_ratio', 0) > 0:
+                        trend_signals.append(token_data)
+                    if len(trend_signals) < 3:
+                        logger.error("Not enough tokens with V/MC data")
+                        return ""
+                
+                avg_gain = sum(((t.get('current_price', 0) - t.get('first_mention_price', 0)) / t.get('first_mention_price', 1)) * 100 
+                             for t in trend_signals) / len(trend_signals)
+                
+                tweet_data = {
+                    'symbol1': trend_signals[0].get('symbol', 'N/A'),
+                    'gain1': ((trend_signals[0].get('current_price', 0) - trend_signals[0].get('first_mention_price', 0))
+                             / trend_signals[0].get('first_mention_price', 1)) * 100,
+                    'vol1': ((trend_signals[0].get('current_volume', 0) - trend_signals[0].get('first_mention_volume_24h', 0))
+                            / trend_signals[0].get('first_mention_volume_24h', 1)) * 100,
+                    'symbol2': trend_signals[1].get('symbol', 'N/A'),
+                    'gain2': ((trend_signals[1].get('current_price', 0) - trend_signals[1].get('first_mention_price', 0))
+                             / trend_signals[1].get('first_mention_price', 1)) * 100,
+                    'vol2': ((trend_signals[1].get('current_volume', 0) - trend_signals[1].get('first_mention_volume_24h', 0))
+                            / trend_signals[1].get('first_mention_volume_24h', 1)) * 100,
+                    'symbol3': trend_signals[2].get('symbol', 'N/A'),
+                    'gain3': ((trend_signals[2].get('current_price', 0) - trend_signals[2].get('first_mention_price', 0))
+                             / trend_signals[2].get('first_mention_price', 1)) * 100,
+                    'vol3': ((trend_signals[2].get('current_volume', 0) - trend_signals[2].get('first_mention_volume_24h', 0))
+                            / trend_signals[2].get('first_mention_volume_24h', 1)) * 100,
+                    'accuracy': history.get('accuracy', 80)
+                }
+                
+                base_tweet = template.format(**tweet_data)
+                context = f"\n\n📊 Analysis: Multiple tokens showing strong trend continuation. ${tweet_data['symbol1']} leads with {tweet_data['gain1']:+.1f}% move on {tweet_data['vol1']:+.1f}% volume surge. Historical accuracy: {tweet_data['accuracy']}%. #TradingSetup"
+            
+            # Combine and validate
+            enriched_tweet = base_tweet + context
+            return self.optimize_tweet_length(self.validate_tweet_length(enriched_tweet))
+            
+        except Exception as e:
+            logger.error(f"Error formatting trend momentum tweet: {e}")
+            return ""
 
     def format_winners_recap(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
         """Format winners recap tweet with A/B variants"""
@@ -690,14 +752,17 @@ Next alpha dropping soon... 👀""",
         template = self.templates['winners_recap'][0 if variant == 'A' else 1]
         
         try:
-            # Get top performers
-            volume_picks = history.get('volume_picks', [])
+            # Get volume picks from history
+            volume_picks = sorted(
+                [t for t in history.get('volume_picks', []) if isinstance(t, dict)],
+                key=lambda x: x.get('gain', 0),
+                reverse=True
+            )[:3]
+            
             if len(volume_picks) < 3:
                 return ""
                 
-            # Format tweet data
             if variant == 'A':
-                # Entry points and gains format
                 tweet_data = {
                     'symbol1': volume_picks[0].get('symbol', 'N/A'),
                     'gain1': volume_picks[0].get('gain', 0),
@@ -711,30 +776,29 @@ Next alpha dropping soon... 👀""",
                 }
                 
                 base_tweet = template.format(**tweet_data)
-                
-                # Add LLM enrichment for variant A
-                context = f"\n\n📈 Performance Analysis: Strong momentum across multiple tokens. {tweet_data['symbol1']} leading with {tweet_data['gain1']:+.1f}% gain from entry. Historical success rate suggests potential for continuation. Key levels: Entry ${tweet_data['entry1']} → Current ${token_data['price']:.4f}. #TradingAlpha #CryptoGains"
+                context = f"\n\n📈 Performance Analysis: Strong momentum across multiple tokens. ${tweet_data['symbol1']} leading with +{tweet_data['gain1']:.1f}% gain from entry. Historical success rate suggests potential for continuation. Key levels: Entry {tweet_data['entry1']} → Current {self.format_price(token_data.get('price', 0))}.... #crypto #{tweet_data['symbol1'].lower()} #cryptotrading"
                 
             else:
-                # Gains with V/MC ratios format
+                # Format raw prices and V/MC ratios for B variant
                 tweet_data = {
                     'symbol1': volume_picks[0].get('symbol', 'N/A'),
                     'gain1': volume_picks[0].get('gain', 0),
-                    'vmc1': volume_picks[0].get('vmc_ratio', 0),
+                    'entry1': volume_picks[0].get('entry_price', 0),
+                    'vmc1': volume_picks[0].get('volume_mcap_ratio', 0),
                     'symbol2': volume_picks[1].get('symbol', 'N/A'),
                     'gain2': volume_picks[1].get('gain', 0),
-                    'vmc2': volume_picks[1].get('vmc_ratio', 0),
+                    'entry2': volume_picks[1].get('entry_price', 0),
+                    'vmc2': volume_picks[1].get('volume_mcap_ratio', 0),
                     'symbol3': volume_picks[2].get('symbol', 'N/A'),
                     'gain3': volume_picks[2].get('gain', 0),
-                    'vmc3': volume_picks[2].get('vmc_ratio', 0)
+                    'entry3': volume_picks[2].get('entry_price', 0),
+                    'vmc3': volume_picks[2].get('volume_mcap_ratio', 0)
                 }
                 
                 base_tweet = template.format(**tweet_data)
-                
-                # Add LLM enrichment for variant B
-                context = f"\n\n🔍 Technical Analysis: High V/MC ratios combined with strong gains indicate sustained buying pressure. {tweet_data['symbol1']} shows particularly strong technicals with {tweet_data['vmc1']:.1f}x V/MC. #TechnicalAnalysis #CryptoTrading"
+                context = f"\n\n📊 Analysis: Multiple tokens showing significant gains. ${tweet_data['symbol1']} leads with +{tweet_data['gain1']:.1f}% from ${tweet_data['entry1']:.4f} entry. V/MC ratios indicate strong volume relative to market cap. #cryptotrading #volumeprofile #marketstructure"
             
-            # Combine base tweet with context and validate length
+            # Combine and validate
             enriched_tweet = base_tweet + context
             return self.optimize_tweet_length(self.validate_tweet_length(enriched_tweet))
             
@@ -744,72 +808,122 @@ Next alpha dropping soon... 👀""",
 
     def format_vmc_alert(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
         """Format V/MC alert tweet with A/B variants"""
-        template = self.templates['vmc_alert'][0 if variant == 'A' else 1]
-        
-        if variant == 'A':
-            # Calculate success rate for high V/MC ratio
-            threshold = 40  # V/MC ratio threshold
-            high_vmc_signals = [t for t in history.values() 
-                              if t['volume_mcap_ratio'] > threshold][-10:]
-            success_rate = len([t for t in high_vmc_signals 
-                              if ((t['current_price'] - t['first_mention_price']) / t['first_mention_price']) * 100 > 0])
-            avg_gain = sum(((t['current_price'] - t['first_mention_price']) / t['first_mention_price']) * 100 
-                         for t in high_vmc_signals) / len(high_vmc_signals) if high_vmc_signals else 0
+        try:
+            if not token_data or not history:
+                logger.error("Missing token_data or history")
+                return ""
+                
+            # Get required data
+            symbol = token_data.get('symbol')
+            if not symbol:
+                logger.error("Token data missing symbol")
+                return ""
+                
+            if variant == 'A':
+                # Calculate success rate for high V/MC ratio
+                threshold = 40  # V/MC ratio threshold
+                
+                # Get current and previous V/MC ratios
+                curr_vmc = token_data.get('volume_mcap_ratio', 0)
+                prev_vmc = token_data.get('first_mention_volume_mcap_ratio', 0)
+                
+                if not curr_vmc or not prev_vmc:
+                    logger.error("Missing V/MC ratios")
+                    return ""
+                    
+                # Calculate V/MC change
+                vmc_change = ((curr_vmc - prev_vmc) / prev_vmc * 100) if prev_vmc else 0
+                
+                # Get historical signals
+                high_vmc_signals = [t for t in history.values() if isinstance(t, dict) 
+                                  and t.get('volume_mcap_ratio', 0) > threshold][-10:]
+                
+                if not high_vmc_signals:
+                    high_vmc_signals = [token_data]  # Use current token if no history
+                    
+                success_rate = len([t for t in high_vmc_signals 
+                                  if t.get('current_price', 0) > t.get('first_mention_price', 0)])
+                avg_gain = sum(((t.get('current_price', 0) - t.get('first_mention_price', 0)) / t.get('first_mention_price', 1)) * 100 
+                             for t in high_vmc_signals) / len(high_vmc_signals)
+                
+                tweet_data = {
+                    'symbol': symbol,
+                    'prev_vmc': prev_vmc,
+                    'curr_vmc': curr_vmc,
+                    'vmc_change': vmc_change,
+                    'threshold': threshold,
+                    'avg_gain': avg_gain,
+                    'success_rate': success_rate
+                }
+                
+                template = self.templates['vmc_alert'][0]
+                base_tweet = template.format(**tweet_data)
+                context = f"\n\n📊 Analysis: High V/MC ratio of {tweet_data['curr_vmc']:.1f}% historically leads to significant moves. Previous signals averaged {tweet_data['avg_gain']:.1f}% gains. #crypto #{symbol.lower()} #technicalanalysis"
+                
+            else:
+                # Get top 3 V/MC ratio tokens
+                top_vmc = sorted([t for t in history.values() if isinstance(t, dict) 
+                                and t.get('volume_mcap_ratio', 0) > 0],
+                               key=lambda x: x.get('volume_mcap_ratio', 0),
+                               reverse=True)[:3]
+                
+                # Add current token if not enough history
+                if token_data.get('volume_mcap_ratio', 0) > 0:
+                    top_vmc.append(token_data)
+                    top_vmc = sorted(top_vmc, key=lambda x: x.get('volume_mcap_ratio', 0), reverse=True)[:3]
+                
+                if not top_vmc:
+                    logger.error("No tokens with V/MC data")
+                    return ""
+                
+                # Calculate average gain from available tokens
+                avg_gain = sum(((t.get('current_price', 0) - t.get('first_mention_price', 0)) / t.get('first_mention_price', 1)) * 100 
+                             for t in top_vmc) / len(top_vmc)
+                
+                # Prepare tweet data
+                tweet_data = {
+                    'symbol1': top_vmc[0].get('symbol', 'N/A'),
+                    'vmc1': top_vmc[0].get('volume_mcap_ratio', 0),
+                    'vmc_change1': ((top_vmc[0].get('volume_mcap_ratio', 0) - top_vmc[0].get('first_mention_volume_mcap_ratio', 0)) 
+                                  / top_vmc[0].get('first_mention_volume_mcap_ratio', 1)) * 100 if top_vmc[0].get('first_mention_volume_mcap_ratio') else 0,
+                    'avg_gain': avg_gain,
+                    'symbol2_line': '',
+                    'symbol3_line': ''
+                }
+                
+                # Add optional lines for additional tokens
+                if len(top_vmc) > 1:
+                    tweet_data['symbol2_line'] = f"\n${top_vmc[1].get('symbol', 'N/A')}: {top_vmc[1].get('volume_mcap_ratio', 0):.1f}x ({((top_vmc[1].get('volume_mcap_ratio', 0) - top_vmc[1].get('first_mention_volume_mcap_ratio', 0)) / top_vmc[1].get('first_mention_volume_mcap_ratio', 1)) * 100 if top_vmc[1].get('first_mention_volume_mcap_ratio') else 0:+.1f}%)"
+                if len(top_vmc) > 2:
+                    tweet_data['symbol3_line'] = f"\n${top_vmc[2].get('symbol', 'N/A')}: {top_vmc[2].get('volume_mcap_ratio', 0):.1f}x ({((top_vmc[2].get('volume_mcap_ratio', 0) - top_vmc[2].get('first_mention_volume_mcap_ratio', 0)) / top_vmc[2].get('first_mention_volume_mcap_ratio', 1)) * 100 if top_vmc[2].get('first_mention_volume_mcap_ratio') else 0:+.1f}%)"
+                
+                template = self.templates['vmc_alert'][1]
+                base_tweet = template.format(**tweet_data)
+                context = f"\n\n🔍 Market Analysis: Multiple tokens showing strong V/MC signals. ${tweet_data['symbol1']} leads with {tweet_data['vmc1']:.1f}x ratio. Historical average gain: {tweet_data['avg_gain']:.1f}%. #cryptotrading #volumeprofile #algotrading"
             
-            return self.optimize_tweet_length(self.validate_tweet_length(template.format(
-                symbol=token_data['symbol'],
-                prev_vmc=token_data['first_mention_volume_mcap_ratio'],
-                curr_vmc=token_data['volume_mcap_ratio'],
-                vmc_change=((token_data['volume_mcap_ratio'] - token_data['first_mention_volume_mcap_ratio']) / token_data['first_mention_volume_mcap_ratio']) * 100 if token_data['first_mention_volume_mcap_ratio'] > 0 else 0,
-                threshold=threshold,
-                avg_gain=avg_gain,
-                success_rate=success_rate
-            )))
-        else:
-            # Get top 3 V/MC ratio tokens
-            top_vmc = sorted(history.values(), 
-                           key=lambda x: x['volume_mcap_ratio'], 
-                           reverse=True)[:3]
-            avg_gain = sum(((t['current_price'] - t['first_mention_price']) / t['first_mention_price']) * 100 
-                         for t in top_vmc) / len(top_vmc)
+            # Combine and validate
+            enriched_tweet = base_tweet + context
+            return self.optimize_tweet_length(self.validate_tweet_length(enriched_tweet))
             
-            return self.optimize_tweet_length(self.validate_tweet_length(template.format(
-                symbol1=top_vmc[0]['symbol'],
-                vmc1=top_vmc[0]['volume_mcap_ratio'],
-                vmc_change1=((top_vmc[0]['volume_mcap_ratio'] - top_vmc[0]['first_mention_volume_mcap_ratio']) / top_vmc[0]['first_mention_volume_mcap_ratio']) * 100 if top_vmc[0]['first_mention_volume_mcap_ratio'] > 0 else 0,
-                symbol2=top_vmc[1]['symbol'],
-                vmc2=top_vmc[1]['volume_mcap_ratio'],
-                vmc_change2=((top_vmc[1]['volume_mcap_ratio'] - top_vmc[1]['first_mention_volume_mcap_ratio']) / top_vmc[1]['first_mention_volume_mcap_ratio']) * 100 if top_vmc[1]['first_mention_volume_mcap_ratio'] > 0 else 0,
-                symbol3=top_vmc[2]['symbol'],
-                vmc3=top_vmc[2]['volume_mcap_ratio'],
-                vmc_change3=((top_vmc[2]['volume_mcap_ratio'] - top_vmc[2]['first_mention_volume_mcap_ratio']) / top_vmc[2]['first_mention_volume_mcap_ratio']) * 100 if top_vmc[2]['first_mention_volume_mcap_ratio'] > 0 else 0,
-                avg_gain=avg_gain
-            )))
+        except Exception as e:
+            logger.error(f"Error formatting V/MC alert tweet: {e}")
+            return ""
 
     def format_pattern_alert(self, token_data: Dict, history: Dict, variant: str = 'A') -> str:
-        """Format pattern alert tweet with A/B variants and LLM enrichment
-        
-        Args:
-            token_data: Token market data dictionary
-            history: Historical performance data dictionary
-            variant: A/B variant to use (default: 'A')
-            
-        Returns:
-            Formatted tweet string
-        """
-        if not token_data or not history:
-            logger.error("Missing token_data or history")
-            return ""
-            
-        # Get template variant
-        template = self.templates['pattern_alert'][0 if variant == 'A' else 1]
-        
+        """Format pattern alert tweet with A/B variants and LLM enrichment"""
         try:
+            if not token_data or not history:
+                logger.error("Missing token_data or history")
+                return ""
+            
+            # Get template variant
+            template = self.templates['pattern_alert'][0 if variant == 'A' else 1]
+            
             # Get similar pattern data
             similar_patterns = history.get('similar_patterns', [])
             if not similar_patterns:
                 return ""
-                
+            
             # Format tweet data
             if variant == 'A':
                 # Single pattern match format
@@ -817,20 +931,21 @@ Next alpha dropping soon... 👀""",
                     'symbol': token_data.get('symbol', 'N/A'),
                     'prev_token': similar_patterns[0].get('symbol', 'N/A'),
                     'prev_gain': similar_patterns[0].get('gain', 0),
-                    'vmc': token_data.get('vmc_ratio', 0),
-                    'vol_change': token_data.get('volume_change', 0)
+                    'vmc': token_data.get('volume_mcap_ratio', 0),
+                    'vol_change': token_data.get('volume_change', 0),
+                    'price': token_data.get('price', 0)
                 }
                 
                 base_tweet = template.format(**tweet_data)
                 
                 # Add LLM enrichment for variant A
-                context = f"\n\n📊 Technical Analysis: {tweet_data['symbol']} showing strong correlation with {tweet_data['prev_token']}'s previous setup. Volume surge of {tweet_data['vol_change']:+.1f}% combined with high V/MC ratio of {tweet_data['vmc']:.1f}x suggests potential continuation. Key levels: Entry ${token_data.get('entry_price', 0):.4f} → Current ${token_data['price']:.4f}. #TradingSetup #CryptoTrading"
+                context = f"\n\n📊 Technical Analysis: ${tweet_data['symbol']} showing strong correlation with ${tweet_data['prev_token']}'s previous setup. Volume surge of {tweet_data['vol_change']:+.1f}% combined with high V/MC ratio of {tweet_data['vmc']:.1f}x suggests potential continuation. Key levels: Entry ${token_data.get('entry_price', 0):.4f} → Current ${tweet_data['price']:.4f}. #TradingSetup"
                 
             else:
                 # Multi-pattern match format
                 if len(similar_patterns) < 2:
                     return ""
-                    
+                
                 tweet_data = {
                     'symbol1': token_data.get('symbol', 'N/A'),
                     'prev1': similar_patterns[0].get('symbol', 'N/A'),
