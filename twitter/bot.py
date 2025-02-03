@@ -625,8 +625,8 @@ class AIGamingBot:
                                 logger.info(f"Next tweet: {tweet_type} in {mins_to_next}m")
                     last_log_time = now
                 
-                # Health check (every 5 minutes)
-                if (now - last_health_check).total_seconds() >= 300:
+                # Health check (every hour)
+                if (now - last_health_check).total_seconds() >= 3600:
                     logger.info("\n=== Health Check ===")
                     try:
                         # Check Redis
@@ -635,10 +635,6 @@ class AIGamingBot:
                             redis_client = redis.from_url(redis_url)
                             redis_client.ping()
                             logger.info("✓ Redis: Connected")
-                        
-                        # Check Twitter API
-                        if self.api.verify_credentials():
-                            logger.info("✓ Twitter API: Connected")
                         
                         # Check scheduled jobs
                         if len(schedule.get_jobs()) > 0:
