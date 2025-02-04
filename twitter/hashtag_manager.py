@@ -9,9 +9,9 @@ class HashtagManager:
     
     def __init__(self):
         self.AI_HASHTAGS = [
-            "#AI",
+            "#AIcoin",
             "#AGI", 
-            "#AITrading",
+            "#LLM",
             "#ML",
             "#AIBot",
             "#AIMeme",
@@ -34,12 +34,12 @@ class HashtagManager:
         ]
         
         self.TRADING_HASHTAGS = [
-            "#Trading",
-            "#Signals",
-            "#Analysis",
+            "#AiTrading",
+            "#AISignals",
+            "#AIAnalysis",
             "#Markets",
-            "#TA",
-            "#Finance"
+            "#AIToken",
+            "#AIAgent"
         ]
         
         self.MEME_HASHTAGS = [
