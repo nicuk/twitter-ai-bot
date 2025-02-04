@@ -61,7 +61,9 @@ def setup_routes(app: FastAPI):
                         'symbol': token_data.symbol,
                         'first_mention_date': token_data.first_mention_date.isoformat(),
                         'first_mention_price': token_data.first_mention_price,
+                        'first_mention_mcap': token_data.first_mention_mcap,
                         'current_price': token_data.current_price,
+                        'current_mcap': token_data.current_mcap,
                         'gain_percentage': gain,
                         'volume_24h': token_data.current_volume,
                         'max_gain_7d': token_data.max_gain_percentage_7d
