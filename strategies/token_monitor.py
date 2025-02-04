@@ -25,22 +25,35 @@ class TokenMonitor:
         # Track tokens from volume strategy
         if volume_data and 'spikes' in volume_data:
             for score, token in volume_data['spikes']:
-                self.history_tracker.update_token(token)
+                formatted_token = {
+                    'symbol': token['symbol'],
+                    'current_price': token['price'],
+                    'current_volume': token['volume24h'],
+                    'current_mcap': token['marketCap'],
+                    'price_change_24h': token['price_change']
+                }
+                self.history_tracker.update_token(formatted_token)
                 
         if volume_data and 'anomalies' in volume_data:
             for score, token in volume_data['anomalies']:
-                self.history_tracker.update_token(token)
+                formatted_token = {
+                    'symbol': token['symbol'],
+                    'current_price': token['price'],
+                    'current_volume': token['volume24h'],
+                    'current_mcap': token['marketCap'],
+                    'price_change_24h': token['price_change']
+                }
+                self.history_tracker.update_token(formatted_token)
         
         # Track tokens from trend strategy
         if trend_data and 'trend_tokens' in trend_data:
             for token in trend_data['trend_tokens']:
-                # Convert trend token format to match volume format
                 formatted_token = {
                     'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume24h': token['volume'],
-                    'marketCap': token['mcap'],
-                    'priceChange24h': token['price_change']
+                    'current_price': token['price'],
+                    'current_volume': token['volume'],
+                    'current_mcap': token['mcap'],
+                    'price_change_24h': token['price_change']
                 }
                 self.history_tracker.update_token(formatted_token)
         
