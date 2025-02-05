@@ -167,10 +167,6 @@ class AIGamingBot:
         self.rate_limiter = RateLimiter()
         self.history = TweetHistory()
         
-        # Track which format to use next
-        self.current_format_index = 0  # 0-11 for A/B formats
-        self.current_extra_index = 0   # 0-4 for additional types
-        
         # Initialize Elion
         logger.info("Initializing Elion...")
         self.elion = Elion(GeminiComponent(
@@ -182,36 +178,34 @@ class AIGamingBot:
         logger.info("Setting up tweet schedule...")
         self._schedule_tweets()
 
-    def _get_next_format(self) -> tuple:
-        """Get next format to use and increment counter"""
-        formats = [
-            ('performance_compare', 'A'), ('performance_compare', 'B'),
-            ('volume_breakout', 'A'), ('volume_breakout', 'B'),
-            ('trend_momentum', 'A'), ('trend_momentum', 'B'),
-            ('winners_recap', 'A'), ('winners_recap', 'B'),
-            ('vmc_alert', 'A'), ('vmc_alert', 'B'),
-            ('pattern_alert', 'A'), ('pattern_alert', 'B')
-        ]
+    def _get_next_format(self) -> str:
+        """Get next format to use based on current hour"""
+        current_hour = datetime.now().hour
         
-        format_type, variant = formats[self.current_format_index]
-        self.current_format_index = (self.current_format_index + 1) % len(formats)
-        logger.info(f"Using A/B format: {format_type} (variant {variant}), next index: {self.current_format_index}")
-        return format_type, variant
+        # Map hours to specific formats
+        hour_to_format = {
+            2: 'first_hour',            # Early Asian
+            6: 'breakout',              # Mid Asian
+            10: 'prediction_accuracy',   # Early EU
+            14: 'success_rate',         # Mid EU
+            18: 'performance_compare',   # Early US
+            22: 'winners_recap'         # Late US
+        }
+        
+        # Get format for current hour
+        format_type = hour_to_format.get(current_hour, 'winners_recap')
+        
+        # Check if format is available, fallback to winners_recap
+        if not self.elion.content.tweet_formatters.FORMATTERS.get(format_type):
+            logger.info(f"Format {format_type} not available, falling back to winners_recap")
+            format_type = 'winners_recap'
+            
+        logger.info(f"Using format: {format_type} at hour {current_hour}")
+        return format_type
 
     def _get_next_extra_type(self) -> str:
-        """Get next additional type to use and increment counter"""
-        extra_types = [
-            'volume_alert',        # High volume signals
-            'performance_update',  # Weekly stats
-            'alpha',              # Trading opportunities
-            'winners_recap',      # Recent successful calls
-            'vmc_alert'          # Volume/MCap analysis
-        ]
-        
-        extra_type = extra_types[self.current_extra_index]
-        self.current_extra_index = (self.current_extra_index + 1) % len(extra_types)
-        logger.info(f"Using extra type: {extra_type}, next index: {self.current_extra_index}")
-        return extra_type
+        """Get next additional type - now just returns AI mystique"""
+        return 'ai_mystique'
 
     def _schedule_tweets(self):
         """Schedule Elion's structured daily tweets"""
@@ -219,7 +213,8 @@ class AIGamingBot:
         schedule.clear()
         logger.info("Cleared existing schedule")
         
-        # === Trend Posts (6 per day) ===
+        # === Trend Posts (7 per day) ===
+        schedule.every().day.at("00:00").do(self.post_trend)     # Midnight
         schedule.every().day.at("01:00").do(self.post_trend)     # Early Asian
         schedule.every().day.at("05:00").do(self.post_trend)     # Mid Asian
         schedule.every().day.at("09:00").do(self.post_trend)     # Early EU
@@ -271,68 +266,56 @@ class AIGamingBot:
         return False
 
     def post_format_tweet(self):
-        """Post tweet using next A/B format in rotation"""
+        """Post tweet using format based on current hour"""
         try:
-            logger.info("=== Starting A/B Format Post ===")
-            format_type, variant = self._get_next_format()
+            logger.info("=== Starting Format Post ===")
+            format_type = self._get_next_format()
             
-            # Try to get market data from volume strategy first
-            market_data = self.elion.volume_strategy.analyze()
-            if not market_data or ('spikes' not in market_data and 'anomalies' not in market_data):
-                # Fallback to trend strategy
-                logger.info("No volume data, trying trend strategy")
-                market_data = self.elion.trend_strategy.analyze()
-                if not market_data or 'trend_tokens' not in market_data:
-                    logger.warning("No market data available from either strategy")
-                    return
-                logger.info("Using trend strategy data")
-            else:
-                logger.info("Using volume strategy data")
-                
+            # Get market data
+            market_data = self.elion.get_market_data()
+            if not market_data:
+                logger.warning("No market data available")
+                return self._post_fallback_tweet()
+            
             # Generate tweet using format
-            tweet = self.elion.format_tweet(format_type, market_data, variant=variant)
+            tweet = self.elion.format_tweet(format_type, market_data)
             if not tweet:
                 logger.warning(f"Failed to format {format_type} tweet")
-                # Try a different format as fallback
-                fallback_format = 'winners_recap' if format_type != 'winners_recap' else 'volume_alert'
-                tweet = self.elion.format_tweet(fallback_format, market_data, variant='A')
-                if not tweet:
-                    logger.warning("Failed to format fallback tweet")
-                    return
-                logger.info(f"Using fallback format: {fallback_format}")
-                
+                return self._post_fallback_tweet()
+            
             # Post tweet
             self._post_tweet(tweet)
                 
         except Exception as e:
             logger.error(f"Error posting format tweet: {e}")
+            return self._post_fallback_tweet()
 
     def post_extra_tweet(self):
-        """Post tweet using next additional type in rotation"""
+        """Post tweet using current hour's format at mid-day"""
         try:
-            logger.info("=== Starting Extra Type Post ===")
-            extra_type = self._get_next_extra_type()
+            logger.info("=== Starting Extra Format Post ===")
             
-            # Get market data if needed
-            market_data = self.elion.get_market_data() if extra_type in ['alpha', 'volume_alert', 'performance_update'] else None
+            # Get market data
+            market_data = self.elion.get_market_data()
+            if not market_data:
+                logger.warning("No market data available")
+                return self._post_fallback_tweet()
+            
+            # Get format for current hour
+            format_type = self._get_next_format()
             
             # Generate tweet using format
-            tweet = self.elion.format_tweet(extra_type, market_data)
+            tweet = self.elion.format_tweet(format_type, market_data)
             if not tweet:
-                logger.warning(f"Failed to format {extra_type} tweet")
-                return
-                
+                logger.warning(f"Failed to format {format_type} tweet")
+                return self._post_fallback_tweet()
+            
             # Post tweet
             self._post_tweet(tweet)
                 
         except Exception as e:
-            logger.error(f"Error posting extra tweet: {e}")
-
-    def is_valid_token(self, symbol: str) -> bool:
-        """Check if token should be included in analysis"""
-        if not symbol:
-            return False
-        return symbol.upper() not in self.EXCLUDED_TOKENS
+            logger.error(f"Error posting extra format tweet: {e}")
+            return self._post_fallback_tweet()
 
     def post_ai_mystique(self):
         """Post AI mystique tweet"""
@@ -476,7 +459,8 @@ class AIGamingBot:
             # Format tweet
             tweet = self.elion.volume_strategy.format_twitter_output(
                 volume_data.get('spikes', []),
-                volume_data.get('anomalies', [])
+                volume_data.get('anomalies', []),
+                history=history  # Pass history data to the formatter
             )
             
             if not tweet:
@@ -498,7 +482,16 @@ class AIGamingBot:
         try:
             logger.info("Attempting to post fallback tweet...")
             
-            # Try to get history for winners recap
+            # Try to get market data and use current hour's format
+            market_data = self.elion.get_market_data()
+            if market_data:
+                format_type = self._get_next_format()
+                tweet = self.elion.format_tweet(format_type, market_data)
+                if tweet:
+                    logger.info(f"Posting {format_type} as fallback")
+                    return self._post_tweet(tweet)
+            
+            # If that fails, try winners recap with history
             history = self.elion.token_monitor.history_tracker.get_all_token_history()
             if history:
                 tweet = self.elion.tweet_formatters.format_winners_recap(history)
@@ -506,13 +499,19 @@ class AIGamingBot:
                     logger.info("Posting winners recap as fallback")
                     return self._post_tweet(tweet)
             
-            # If no history or winners recap fails, post AI mystique
-            logger.info("Posting AI mystique as final fallback")
-            return self.post_ai_mystique()
+            # If all else fails, use a simple market update
+            logger.info("Posting simple market update as final fallback")
+            return self._post_tweet("🔄 Market Update: Analyzing latest crypto movements. Stay tuned for insights! 📊 #crypto #trading")
             
         except Exception as e:
             logger.error(f"Error posting fallback tweet: {e}")
             return False
+
+    def is_valid_token(self, symbol: str) -> bool:
+        """Check if token should be included in analysis"""
+        if not symbol:
+            return False
+        return symbol.upper() not in self.EXCLUDED_TOKENS
 
     def run(self):
         """Run the bot"""

@@ -7,7 +7,7 @@ from typing import Dict, Optional, List, Any
 import os
 from strategies.volume_strategy import VolumeStrategy
 from strategies.trend_strategy import TrendStrategy
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -239,7 +239,16 @@ class TweetFormatters:
         
         self.MAX_TWEET_LENGTH = 280
         self.MIN_TWEET_LENGTH = 220
-
+        
+        self.formatters = {
+            'first_hour': FirstHourGainsFormatter(),
+            'breakout': BreakoutValidationFormatter(),
+            'prediction': PredictionAccuracyFormatter(),
+            'success_rate': SuccessRateFormatter(),
+            'performance': PerformanceCompareFormatter(),
+            'winners': WinnersRecapFormatter()
+        }
+        
     def get_field(self, data: Dict, field: str, fallbacks: List[str], default: Any = 0) -> Any:
         """Get field value with logging for which name was used
         
@@ -1167,3 +1176,201 @@ def format_volume(volume: float) -> str:
         return f"${volume/1e3:.1f}K"
     else:
         return f"${volume:.0f}"
+
+class FirstHourGainsFormatter:
+    """Shows token performance in first hour with peak metrics"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet showing first hour performance"""
+        symbol = token_data['symbol']
+        current_price = token_data['current_price']
+        first_price = token_data['first_mention_price']
+        first_volume = token_data['first_mention_volume_24h']
+        current_volume = token_data['current_volume']
+        
+        # Calculate gains
+        price_gain = ((current_price - first_price) / first_price * 100) 
+        volume_change = ((current_volume - first_volume) / first_volume * 100)
+        
+        tweet = f"🔄 First Hour Update $${symbol}\n\n"
+        tweet += f"📈 Price: ${first_price:.4f} ➡️ ${current_price:.4f}\n"
+        tweet += f"💰 Gain: {price_gain:+.1f}%\n"
+        tweet += f"📊 Volume: {volume_change:+.1f}%\n\n"
+        
+        if price_gain > 0:
+            tweet += "✅ Successful Call!"
+        else:
+            tweet += "⚠️ Monitoring..."
+            
+        return tweet
+
+class BreakoutValidationFormatter:
+    """Validates breakouts with multiple metrics"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet validating breakout signals"""
+        symbol = token_data['symbol']
+        current_price = token_data['current_price']
+        current_mcap = token_data['current_mcap']
+        current_volume = token_data['current_volume']
+        
+        # Calculate key metrics
+        volume_mcap_ratio = (current_volume / current_mcap * 100) if current_mcap > 0 else 0
+        
+        tweet = f"🚨 Breakout Validation $${symbol}\n\n"
+        tweet += f"💰 Price: ${current_price:.4f}\n"
+        tweet += f"📊 24h Vol: ${current_volume/1e6:.1f}M\n"
+        tweet += f"📈 V/MC: {volume_mcap_ratio:.1f}%\n\n"
+        
+        # Add validation metrics
+        validations = []
+        if volume_mcap_ratio > 50:
+            validations.append("High V/MC Ratio ✅")
+        if current_volume > 1e6:  # >$1M volume
+            validations.append("Volume >$1M ✅")
+            
+        tweet += "\n".join(validations)
+        return tweet
+
+class PredictionAccuracyFormatter:
+    """Shows overall prediction success rate"""
+    
+    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
+        """Format tweet showing prediction accuracy"""
+        successful = 0
+        total = 0
+        recent_wins = []
+        
+        for symbol, data in history_data.items():
+            if data.get('max_gain_percentage_7d'):
+                total += 1
+                if data['max_gain_percentage_7d'] > 20:  # 20% gain threshold
+                    successful += 1
+                    recent_wins.append((symbol, data['max_gain_percentage_7d']))
+                    
+        accuracy = (successful / total * 100) if total > 0 else 0
+        recent_wins.sort(key=lambda x: x[1], reverse=True)
+        
+        tweet = f"📊 ELAI Performance Update\n\n"
+        tweet += f"✅ Success Rate: {accuracy:.1f}%\n"
+        tweet += f"📈 Total Calls: {total}\n\n"
+        
+        if recent_wins:
+            tweet += "🏆 Recent Winners:\n"
+            for symbol, gain in recent_wins[:3]:
+                tweet += f"${symbol}: +{gain:.1f}%\n"
+                
+        return tweet
+
+class SuccessRateFormatter:
+    """Tracks weekly and all-time stats"""
+    
+    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
+        """Format tweet showing success rates"""
+        week_successful = 0
+        week_total = 0
+        all_successful = 0
+        all_total = 0
+        
+        week_ago = datetime.now() - timedelta(days=7)
+        
+        for symbol, data in history_data.items():
+            first_mention = datetime.fromisoformat(data['first_mention_date'])
+            gain = data.get('max_gain_percentage_7d', 0)
+            
+            # Weekly stats
+            if first_mention > week_ago:
+                week_total += 1
+                if gain > 20:
+                    week_successful += 1
+                    
+            # All-time stats
+            all_total += 1
+            if gain > 20:
+                all_successful += 1
+                
+        week_rate = (week_successful / week_total * 100) if week_total > 0 else 0
+        all_rate = (all_successful / all_total * 100) if all_total > 0 else 0
+        
+        tweet = f"📈 ELAI Success Metrics\n\n"
+        tweet += f"This Week:\n"
+        tweet += f"✅ {week_rate:.1f}% Success Rate\n"
+        tweet += f"📊 {week_successful}/{week_total} Calls\n\n"
+        tweet += f"All Time:\n"
+        tweet += f"✅ {all_rate:.1f}% Success Rate\n"
+        tweet += f"📊 {all_successful}/{all_total} Calls"
+        
+        return tweet
+
+class PerformanceCompareFormatter:
+    """Shows individual token performance"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet comparing entry vs current performance"""
+        symbol = token_data['symbol']
+        current_price = token_data['current_price']
+        first_price = token_data['first_mention_price']
+        current_volume = token_data['current_volume']
+        first_volume = token_data['first_mention_volume_24h']
+        
+        price_change = ((current_price - first_price) / first_price * 100)
+        volume_change = ((current_volume - first_volume) / first_volume * 100)
+        
+        tweet = f"📊 Performance Update $${symbol}\n\n"
+        tweet += f"Entry: ${first_price:.4f}\n"
+        tweet += f"Current: ${current_price:.4f}\n"
+        tweet += f"Change: {price_change:+.1f}%\n\n"
+        tweet += f"Volume: {volume_change:+.1f}%\n"
+        
+        if price_change > 0:
+            tweet += "✅ In Profit"
+        else:
+            tweet += "⚠️ In Loss"
+            
+        return tweet
+
+class WinnersRecapFormatter:
+    """Lists top performing tokens"""
+    
+    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
+        """Format tweet showing top performers"""
+        # Sort tokens by max gain
+        performers = []
+        for symbol, data in history_data.items():
+            if data.get('max_gain_percentage_7d'):
+                performers.append((
+                    symbol,
+                    data['first_mention_price'],
+                    data['current_price'],
+                    data['max_gain_percentage_7d']
+                ))
+                
+        performers.sort(key=lambda x: x[3], reverse=True)
+        
+        tweet = f"🏆 Top Performers This Week\n\n"
+        
+        for symbol, entry, current, max_gain in performers[:3]:
+            current_gain = ((current - entry) / entry * 100)
+            tweet += f"$${symbol}\n"
+            tweet += f"📈 Entry: ${entry:.4f}\n"
+            tweet += f"💰 Current: ${current:.4f} ({current_gain:+.1f}%)\n"
+            tweet += f"🔥 Max Gain: +{max_gain:.1f}%\n\n"
+            
+        return tweet
+
+# List of available formatters
+FORMATTERS = {
+    # Performance formatters
+    'performance_compare': PerformanceCompareFormatter(),
+    'success_rate': SuccessRateFormatter(),
+    'prediction_accuracy': PredictionAccuracyFormatter(),
+    'winners_recap': WinnersRecapFormatter(),
+    
+    # Future formatters (disabled)
+    'breakout': None,  # Coming soon
+    'first_hour': None  # Coming soon
+}
+
+def get_available_formatters():
+    """Get list of currently available formatters"""
+    return [k for k, v in FORMATTERS.items() if v is not None]

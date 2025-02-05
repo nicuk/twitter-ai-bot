@@ -29,7 +29,7 @@ class HashtagManager:
             "#DeFi",
             "#NFTs",
             "#Web3",
-            "#Alts",
+            "#Altcoin",
             
         ]
         

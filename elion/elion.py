@@ -263,90 +263,94 @@ class Elion:
             
         return f"🔍 Volume Alert! ${symbol} showing {data['volume']}x average volume with {data['success_rate']}% historical success rate on similar patterns. Price currently at ${data['price']}. This could be the start of a significant move... 👀"
 
-    def format_tweet(self, tweet_type: str, market_data: Dict, variant: str = 'A') -> str:
+    def get_next_tweet(self) -> Optional[str]:
+        """Get next tweet based on current state and data"""
+        try:
+            # Get current analysis data
+            analysis = self.token_monitor.run_analysis()
+            volume_data = analysis.get('volume_data', {})
+            trend_data = analysis.get('trend_data', {})
+            
+            # Get token history
+            history = self.token_monitor.history_tracker.get_all_token_history()
+            
+            # Get current time
+            now = datetime.now()
+            
+            # Select formatter based on time
+            hour = now.hour
+            if hour % 6 == 0:  # Every 6 hours
+                tweet = self.tweet_formatters.format_success_rate(history)
+            elif hour % 4 == 0:  # Every 4 hours
+                tweet = self.tweet_formatters.format_prediction(history)
+            elif hour % 3 == 0:  # Every 3 hours
+                tweet = self.tweet_formatters.format_winners(history)
+            else:
+                # For other hours, rotate between first_hour, breakout, and performance
+                if volume_data and 'spikes' in volume_data and volume_data['spikes']:
+                    # Get latest spike token
+                    _, token = volume_data['spikes'][0]
+                    
+                    # Check how long ago token was first mentioned
+                    symbol = token['symbol']
+                    if symbol in history:
+                        first_mention = datetime.fromisoformat(history[symbol]['first_mention_date'])
+                        time_diff = now - first_mention
+                        
+                        if time_diff < timedelta(hours=1):
+                            tweet = self.tweet_formatters.format_first_hour(history[symbol])
+                        elif time_diff < timedelta(hours=2):
+                            tweet = self.tweet_formatters.format_breakout(history[symbol])
+                        else:
+                            tweet = self.tweet_formatters.format_performance(history[symbol])
+                    else:
+                        # New token, use breakout formatter
+                        tweet = self.tweet_formatters.format_breakout(token)
+                else:
+                    # No new tokens, use winners recap
+                    tweet = self.tweet_formatters.format_winners(history)
+            
+            return tweet
+            
+        except Exception as e:
+            logger.error(f"Error generating tweet: {e}")
+            return None
+
+    def format_tweet(self, tweet_type: str, market_data: Dict, variant: str = 'A') -> Optional[str]:
         """Format a tweet using market data"""
         try:
-            # Get personality trait
-            trait = self.personality.get_trait()
+            logger.info(f"Formatting tweet type: {tweet_type}")
             
-            # Core A/B formats
-            if tweet_type in ['performance_compare', 'volume_breakout', 'trend_momentum',
-                            'winners_recap', 'vmc_alert', 'pattern_alert']:
-                
-                # For performance_compare and winners_recap, we need token history data
-                if tweet_type in ['performance_compare', 'winners_recap']:
-                    # Get token history data from the tracker
-                    token_history = self.token_monitor.history_tracker.get_all_token_history()
-                    if not token_history:
-                        logger.warning("No token history available")
+            # Get token history for performance formatters
+            history = self.token_monitor.history_tracker.get_all_token_history()
+            
+            # Handle performance formatters
+            if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
+                formatter = self.tweet_formatters.FORMATTERS.get(tweet_type)
+                if not formatter:
+                    logger.warning(f"Formatter {tweet_type} not found")
+                    return None
+                    
+                if tweet_type == 'performance_compare':
+                    # For performance compare, we need a specific token
+                    if not market_data or 'token' not in market_data:
+                        logger.warning("No token data for performance compare")
                         return None
-                        
-                    if tweet_type == 'performance_compare':
-                        # For variant A (token performance), use the most recent token
-                        if variant == 'A':
-                            recent_token = None
-                            latest_time = datetime.min
-                            for symbol, data in token_history.items():
-                                if data.last_updated > latest_time:
-                                    latest_time = data.last_updated
-                                    recent_token = {
-                                        'symbol': symbol,
-                                        'gain_24h': ((data.current_price - data.first_mention_price) / data.first_mention_price * 100) if data.first_mention_price > 0 else 0,
-                                        'entry_price': data.first_mention_price,
-                                        'current_price': data.current_price,
-                                        'volume_change_24h': ((data.current_volume - data.first_mention_volume_24h) / data.first_mention_volume_24h * 100) if data.first_mention_volume_24h > 0 else 0
-                                    }
-                            market_data = recent_token
-                        # For variant B (portfolio performance), use portfolio data
-                        else:
-                            portfolio_data = market_data.get('portfolio', {})
-                            market_data = {
-                                'daily_pnl': portfolio_data.get('daily_pnl', 0),
-                                'current_capital': portfolio_data.get('current_balance', '$0'),
-                                'win_rate': portfolio_data.get('win_rate', 0),
-                                'total_trades': portfolio_data.get('total_trades', 0),
-                                'last_symbol': portfolio_data.get('last_symbol', 'N/A'),
-                                'last_gain': portfolio_data.get('last_gain', 0),
-                                'entry_price': portfolio_data.get('last_entry', 0),
-                                'exit_price': portfolio_data.get('last_exit', 0),
-                                'num_signals': len(market_data.get('trend', {}).get('trend_tokens', [])) + len(market_data.get('volume', {}).get('spikes', []))
-                            }
-                    elif tweet_type == 'winners_recap':
-                        # Convert TokenHistoricalData objects to dictionaries
-                        market_data = {
-                            symbol: {
-                                'symbol': symbol,
-                                'current_price': data.current_price,
-                                'first_mention_price': data.first_mention_price,
-                                'volume_mcap_ratio': data.first_mention_volume_mcap_ratio,
-                                'gain_24h': ((data.current_price - data.first_mention_price) / data.first_mention_price * 100) if data.first_mention_price > 0 else 0
-                            }
-                            for symbol, data in token_history.items()
-                        }
-                
-                # Get method from tweet_formatters
-                method_name = f'format_{tweet_type}'
-                if hasattr(self.tweet_formatters, method_name):
-                    format_method = getattr(self.tweet_formatters, method_name)
-                    return format_method(market_data, variant=variant)
-                
-            # Additional types
-            elif tweet_type == 'self_aware':
-                return self.tweet_formatters.format_self_aware(trait)
-            elif tweet_type == 'alpha':
-                return self.tweet_formatters.format_alpha(market_data, trait)
-            elif tweet_type == 'personal':
-                return self.tweet_formatters.format_personal(trait)
-            elif tweet_type == 'volume_alert':
-                return self.tweet_formatters.format_volume_alert(market_data, trait)
-            elif tweet_type == 'performance_update':
-                return self.tweet_formatters.format_performance_update(market_data, trait)
-            else:
-                logger.error(f"Unknown tweet type: {tweet_type}")
+                    return formatter.format_tweet(market_data['token'])
+                else:
+                    # Other performance formatters use history data
+                    return formatter.format_tweet(history)
+            
+            # Handle regular formatters
+            template = self.tweet_formatters.get_template(tweet_type, variant)
+            if not template:
+                logger.warning(f"No template found for {tweet_type}")
                 return None
                 
+            return template.format(**market_data)
+            
         except Exception as e:
-            logger.error(f"Error formatting {tweet_type} tweet: {e}")
+            logger.error(f"Error formatting tweet: {e}")
             return None
             
     def generate_tweet(self, tweet_type: str = None) -> Optional[str]:
