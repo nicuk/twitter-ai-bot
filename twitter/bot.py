@@ -236,9 +236,6 @@ class AIGamingBot:
         schedule.every().day.at("18:00").do(self.post_format_tweet)  # Early US
         schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US
 
-        # === Additional Type Post (1 per day) ===
-        schedule.every().day.at("12:00").do(self.post_extra_tweet)   # Mid-day personality
-
     def _post_tweet(self, tweet):
         """Post a tweet with error handling and backup content"""
         try:
@@ -294,33 +291,6 @@ class AIGamingBot:
                 
         except Exception as e:
             logger.error(f"Error posting format tweet: {e}")
-            return self._post_fallback_tweet()
-
-    def post_extra_tweet(self):
-        """Post tweet using current hour's format at mid-day"""
-        try:
-            logger.info("=== Starting Extra Format Post ===")
-            
-            # Get market data
-            market_data = self.elion.get_market_data()
-            if not market_data:
-                logger.warning("No market data available")
-                return self._post_fallback_tweet()
-            
-            # Get format for current hour
-            format_type = self._get_next_format()
-            
-            # Generate tweet using format
-            tweet = self.elion.format_tweet(format_type, market_data)
-            if not tweet:
-                logger.warning(f"Failed to format {format_type} tweet")
-                return self._post_fallback_tweet()
-            
-            # Post tweet
-            self._post_tweet(tweet)
-                
-        except Exception as e:
-            logger.error(f"Error posting extra format tweet: {e}")
             return self._post_fallback_tweet()
 
     def post_ai_mystique(self):
