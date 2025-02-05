@@ -27,10 +27,10 @@ class TokenMonitor:
             for score, token in volume_data['spikes']:
                 formatted_token = {
                     'symbol': token['symbol'],
-                    'current_price': token['price'],
-                    'current_volume': token['volume24h'],
-                    'current_mcap': token['marketCap'],
-                    'price_change_24h': token['price_change']
+                    'price': token['price'],
+                    'volume24h': token['volume'],  # Volume strategy uses 'volume'
+                    'marketCap': token['mcap'],    # Volume strategy uses 'mcap'
+                    'priceChange24h': token.get('price_change', 0)
                 }
                 self.history_tracker.update_token(formatted_token)
                 
@@ -38,10 +38,10 @@ class TokenMonitor:
             for score, token in volume_data['anomalies']:
                 formatted_token = {
                     'symbol': token['symbol'],
-                    'current_price': token['price'],
-                    'current_volume': token['volume24h'],
-                    'current_mcap': token['marketCap'],
-                    'price_change_24h': token['price_change']
+                    'price': token['price'],
+                    'volume24h': token['volume'],  # Volume strategy uses 'volume'
+                    'marketCap': token['mcap'],    # Volume strategy uses 'mcap'
+                    'priceChange24h': token.get('price_change', 0)
                 }
                 self.history_tracker.update_token(formatted_token)
         
