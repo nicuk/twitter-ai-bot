@@ -451,7 +451,8 @@ class TweetFormatters:
         
         # Use VolumeStrategy's format_twitter_output
         volume_strategy = VolumeStrategy(api_key=os.getenv('CRYPTORANK_API_KEY'))
-        return self.optimize_tweet_length(self.validate_tweet_length(volume_strategy.format_twitter_output(spikes, anomalies)))
+        history = market_data.get('history', {})  # Get history from market data
+        return self.optimize_tweet_length(self.validate_tweet_length(volume_strategy.format_twitter_output(spikes, anomalies, history=history)))
 
     def format_trend_insight(self, market_data: Dict, trait: str) -> str:
         """Format trend insight tweet with personality"""

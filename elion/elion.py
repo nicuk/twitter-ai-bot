@@ -166,30 +166,39 @@ class Elion:
             # Track tokens from trend strategy
             for token in trend_data.get('trend_tokens', []):
                 if 'symbol' in token:
-                    self.token_monitor.track_token(
-                        token['symbol'],
-                        price=token.get('price'),
-                        volume=token.get('volume24h')
-                    )
+                    formatted_token = {
+                        'symbol': token['symbol'],
+                        'current_price': token.get('price'),
+                        'current_volume': token.get('volume24h'),
+                        'current_mcap': token.get('marketCap'),
+                        'price_change_24h': token.get('price_change')
+                    }
+                    self.token_monitor.track_token(formatted_token)
             
             # Track tokens from volume strategy
             if 'spikes' in volume_data:
                 for score, token in volume_data['spikes']:
                     if 'symbol' in token:
-                        self.token_monitor.track_token(
-                            token['symbol'],
-                            price=token.get('price'),
-                            volume=token.get('volume')
-                        )
+                        formatted_token = {
+                            'symbol': token['symbol'],
+                            'current_price': token.get('price'),
+                            'current_volume': token.get('volume'),
+                            'current_mcap': token.get('marketCap'),
+                            'price_change_24h': token.get('price_change')
+                        }
+                        self.token_monitor.track_token(formatted_token)
                         
             if 'anomalies' in volume_data:
                 for score, token in volume_data['anomalies']:
                     if 'symbol' in token:
-                        self.token_monitor.track_token(
-                            token['symbol'],
-                            price=token.get('price'),
-                            volume=token.get('volume')
-                        )
+                        formatted_token = {
+                            'symbol': token['symbol'],
+                            'current_price': token.get('price'),
+                            'current_volume': token.get('volume'),
+                            'current_mcap': token.get('marketCap'),
+                            'price_change_24h': token.get('price_change')
+                        }
+                        self.token_monitor.track_token(formatted_token)
             
             # Combine all data
             market_data = {

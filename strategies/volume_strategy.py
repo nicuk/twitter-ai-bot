@@ -550,7 +550,7 @@ class VolumeStrategy:
             print(f"Error generating insight: {e}")
             return "ELAI: Analyzing volume patterns... 🔄"
 
-    def format_twitter_output(self, spikes: list, anomalies: list) -> str:
+    def format_twitter_output(self, spikes: list, anomalies: list, history: Dict = None) -> str:
         """Format output for Twitter (max 280 chars)"""
         tweet = ""
         shown_symbols = set()  # Track which symbols we've shown
@@ -571,6 +571,12 @@ class VolumeStrategy:
             section += f"💰 ${price:.4f} {movement}\n"
             section += f"📊 Vol: ${volume:.1f}M\n"
             section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
+            
+            # Add historical performance if available
+            if history and symbol in history:
+                token_history = history[symbol]
+                if hasattr(token_history, 'max_gain_7d') and token_history.max_gain_7d:
+                    section += f"📈 7d High: +{token_history.max_gain_7d:.1f}%\n"
             
             return section
         
@@ -657,11 +663,11 @@ def get_opportunity_message() -> str:
 
 def get_movement_description(change: float) -> str:
     """Get a descriptive term for the price movement"""
-    if change > 10:
+    if change > 30:
         return "🌙 Mooning"
     elif change > 3:
         return "🚀 Surging"
-    elif change < -10:
+    elif change < -30:
         return "🩸 Bleeding"
     elif change < -3:
         return "📉 Dipping"

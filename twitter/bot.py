@@ -249,19 +249,25 @@ class AIGamingBot:
                 return True
                 
         except Exception as e:
+            # If it's a duplicate content error, don't try backup tweet
+            if "duplicate content" in str(e).lower():
+                logger.warning("Duplicate tweet detected, skipping backup attempt")
+                return False
+                
             logger.error(f"Error posting main tweet: {e}")
             
-        # If main tweet fails, try backup tweet
-        try:
-            logger.info("Attempting to post backup tweet...")
-            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
-            if backup_tweet:
-                self.api.post_tweet(backup_tweet)
-                logger.info(f"Posted backup tweet: {backup_tweet}")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error posting backup tweet: {e}")
+            # Only try backup tweet for non-duplicate errors
+            try:
+                logger.info("Attempting to post backup tweet...")
+                backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+                if backup_tweet:
+                    response = self.api.create_tweet(backup_tweet)
+                    if response:
+                        logger.info(f"Posted backup tweet: {backup_tweet}")
+                        return True
+                    
+            except Exception as e:
+                logger.error(f"Error posting backup tweet: {e}")
             
         return False
 
