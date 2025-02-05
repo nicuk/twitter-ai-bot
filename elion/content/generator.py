@@ -6,7 +6,7 @@ from typing import Dict, List, Any
 import random
 from datetime import datetime
 from strategies.portfolio_tracker import PortfolioTracker
-from tweet_formatters import TweetFormatters  # Import TweetFormatters
+from elion.content.tweet_formatters import TweetFormatters  # Fixed import path
 
 class ContentGenerator:
     def __init__(self, portfolio: PortfolioTracker, llm: Any):
