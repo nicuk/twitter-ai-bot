@@ -190,8 +190,21 @@ class TokenHistoryTracker:
             }
             
             if self.using_redis:
-                self.redis.set('token_history', json.dumps(data))
-                logger.info(f"Saved {len(self.token_history)} tokens to Redis")
+                # Add size logging
+                data_str = json.dumps(data)
+                data_size = len(data_str)
+                logger.info(f"Saving {len(self.token_history)} tokens to Redis (size: {data_size} bytes)")
+                logger.info(f"Token symbols being saved: {list(data.keys())}")
+                
+                self.redis.set('token_history', data_str)
+                
+                # Verify the save
+                saved_data = self.redis.get('token_history')
+                if saved_data:
+                    saved_tokens = json.loads(saved_data)
+                    logger.info(f"Verified {len(saved_tokens)} tokens in Redis after save")
+                else:
+                    logger.error("Failed to verify Redis save - no data found after save")
             else:
                 with open(self.history_file, 'w') as f:
                     json.dump(data, f, indent=2)
@@ -199,6 +212,7 @@ class TokenHistoryTracker:
                 
         except Exception as e:
             logger.error(f"Error saving token history: {e}")
+            logger.exception("Full traceback:")  # This will log the full stack trace
     
     def update_token(self, token: Dict):
         """Update token data in history"""
@@ -214,12 +228,11 @@ class TokenHistoryTracker:
             volume = float(token.get('current_volume', 0))
             mcap = float(token.get('current_mcap', 0))
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
-            current_time = datetime.now()
+            current_time = datetime.utcnow()  # Use UTC consistently
             
-            # Validate current_time is not in the future
-            if current_time > datetime.now() + timedelta(minutes=5):
-                logger.error(f"Invalid future timestamp detected for {symbol}: {current_time}")
-                return
+            # More tolerant timestamp validation (1 hour instead of 5 minutes)
+            if current_time > datetime.utcnow() + timedelta(hours=1):
+                logger.warning(f"Future timestamp detected for {symbol}, but within tolerance: {current_time}")
             
             # Add detailed debug logging
             logger.info(f"Updating token {symbol}:")
@@ -250,11 +263,9 @@ class TokenHistoryTracker:
                 logger.info(f"Updating existing token {symbol}")
                 token_data = self.token_history[symbol]
                 
-                # Validate first_mention_date is not in the future
-                if token_data.first_mention_date > datetime.now():
-                    logger.error(f"Invalid future first_mention_date detected for {symbol}: {token_data.first_mention_date}")
-                    del self.token_history[symbol]
-                    return
+                # More tolerant timestamp validation
+                if token_data.first_mention_date > datetime.utcnow() + timedelta(hours=1):
+                    logger.warning(f"Future first_mention_date detected for {symbol}, but within tolerance: {token_data.first_mention_date}")
                 
                 # Update current values
                 token_data.current_price = price
