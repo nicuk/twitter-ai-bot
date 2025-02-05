@@ -146,7 +146,7 @@ from twitter.api_client import TwitterAPI
 from twitter.rate_limiter import RateLimiter
 from twitter.history_manager import TweetHistory
 from elion.elion import Elion
-from elion.volume_strategy import VolumeStrategy
+from strategies.volume_strategy import VolumeStrategy
 
 class AIGamingBot:
     """Twitter bot for AI-powered crypto insights"""
