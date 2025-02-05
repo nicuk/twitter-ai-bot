@@ -162,25 +162,39 @@ class TokenHistoryTracker:
                 data = self.redis.get('token_history')
                 if data:
                     json_data = json.loads(data)
-                    self.token_history = {
+                    # Filter out tokens with invalid (0) first mention values
+                    valid_tokens = {
                         symbol: TokenHistoricalData.from_dict(token_data)
                         for symbol, token_data in json_data.items()
+                        if token_data.get('first_mention_price', 0) > 0 
+                        and token_data.get('first_mention_volume_24h', 0) > 0
+                        and token_data.get('first_mention_mcap', 0) > 0
                     }
-                    logger.info(f"Loaded {len(self.token_history)} tokens from Redis")
+                    self.token_history = valid_tokens
+                    logger.info(f"Loaded {len(self.token_history)} valid tokens from Redis")
+                    if len(valid_tokens) < len(json_data):
+                        logger.info(f"Removed {len(json_data) - len(valid_tokens)} invalid tokens with 0 values")
             else:
                 if os.path.exists(self.history_file):
                     with open(self.history_file, 'r') as f:
                         data = json.load(f)
                         if data:
-                            self.token_history = {
+                            # Filter out tokens with invalid (0) first mention values
+                            valid_tokens = {
                                 symbol: TokenHistoricalData.from_dict(token_data)
                                 for symbol, token_data in data.items()
+                                if token_data.get('first_mention_price', 0) > 0 
+                                and token_data.get('first_mention_volume_24h', 0) > 0
+                                and token_data.get('first_mention_mcap', 0) > 0
                             }
-                            logger.info(f"Loaded {len(self.token_history)} tokens from file")
+                            self.token_history = valid_tokens
+                            logger.info(f"Loaded {len(self.token_history)} valid tokens from file")
+                            if len(valid_tokens) < len(data):
+                                logger.info(f"Removed {len(data) - len(valid_tokens)} invalid tokens with 0 values")
                         
         except Exception as e:
             logger.error(f"Error loading token history: {e}")
-            
+    
     def save_history(self):
         """Save token history to storage"""
         try:
@@ -190,21 +204,8 @@ class TokenHistoryTracker:
             }
             
             if self.using_redis:
-                # Add size logging
-                data_str = json.dumps(data)
-                data_size = len(data_str)
-                logger.info(f"Saving {len(self.token_history)} tokens to Redis (size: {data_size} bytes)")
-                logger.info(f"Token symbols being saved: {list(data.keys())}")
-                
-                self.redis.set('token_history', data_str)
-                
-                # Verify the save
-                saved_data = self.redis.get('token_history')
-                if saved_data:
-                    saved_tokens = json.loads(saved_data)
-                    logger.info(f"Verified {len(saved_tokens)} tokens in Redis after save")
-                else:
-                    logger.error("Failed to verify Redis save - no data found after save")
+                self.redis.set('token_history', json.dumps(data))
+                logger.info(f"Saved {len(self.token_history)} tokens to Redis")
             else:
                 with open(self.history_file, 'w') as f:
                     json.dump(data, f, indent=2)
@@ -212,7 +213,6 @@ class TokenHistoryTracker:
                 
         except Exception as e:
             logger.error(f"Error saving token history: {e}")
-            logger.exception("Full traceback:")  # This will log the full stack trace
     
     def update_token(self, token: Dict):
         """Update token data in history"""
@@ -224,15 +224,16 @@ class TokenHistoryTracker:
                 return
                 
             # Extract values from passed token data
-            price = float(token.get('price', 0) or 0)
-            volume = float(token.get('volume24h', 0) or 0)
-            mcap = float(token.get('marketCap', 0) or 0)
+            price = float(token.get('current_price', 0))
+            volume = float(token.get('current_volume', 0))
+            mcap = float(token.get('current_mcap', 0))
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
-            current_time = datetime.utcnow()  # Use UTC consistently
+            current_time = datetime.now()
             
-            # More tolerant timestamp validation (1 hour instead of 5 minutes)
-            if current_time > datetime.utcnow() + timedelta(hours=1):
-                logger.warning(f"Future timestamp detected for {symbol}, but within tolerance: {current_time}")
+            # Validate current_time is not in the future
+            if current_time > datetime.now() + timedelta(minutes=5):
+                logger.error(f"Invalid future timestamp detected for {symbol}: {current_time}")
+                return
             
             # Add detailed debug logging
             logger.info(f"Updating token {symbol}:")
@@ -263,9 +264,11 @@ class TokenHistoryTracker:
                 logger.info(f"Updating existing token {symbol}")
                 token_data = self.token_history[symbol]
                 
-                # More tolerant timestamp validation
-                if token_data.first_mention_date > datetime.utcnow() + timedelta(hours=1):
-                    logger.warning(f"Future first_mention_date detected for {symbol}, but within tolerance: {token_data.first_mention_date}")
+                # Validate first_mention_date is not in the future
+                if token_data.first_mention_date > datetime.now():
+                    logger.error(f"Invalid future first_mention_date detected for {symbol}: {token_data.first_mention_date}")
+                    del self.token_history[symbol]
+                    return
                 
                 # Update current values
                 token_data.current_price = price
@@ -299,13 +302,23 @@ class TokenHistoryTracker:
                     logger.info(f"New max price for {symbol}: {price}")
                     token_data.max_price_7d = price
                     token_data.max_price_7d_date = current_time
-                    token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
+                    # Avoid division by zero for price gain calculation
+                    if token_data.first_mention_price > 0:
+                        token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
+                    else:
+                        token_data.max_gain_percentage_7d = 0
+                        logger.warning(f"First mention price is 0 for {symbol}, cannot calculate gain percentage")
                 
                 if volume > token_data.max_volume_7d:
                     logger.info(f"New max volume for {symbol}: {volume}")
                     token_data.max_volume_7d = volume
                     token_data.max_volume_7d_date = current_time
-                    token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
+                    # Avoid division by zero for volume increase calculation
+                    if token_data.first_mention_volume_24h > 0:
+                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
+                    else:
+                        token_data.max_volume_increase_7d = 0
+                        logger.warning(f"First mention volume is 0 for {symbol}, cannot calculate volume increase")
             
             # Save changes to storage
             self.save_history()
@@ -319,7 +332,7 @@ class TokenHistoryTracker:
 
     def calculate_price_change(self, symbol: str) -> float:
         """Calculate price change percentage since first mention"""
-        token = self.get_token_history(symbol)
+        token = self.token_history.get(symbol)
         if not token:
             return 0.0
         if token.first_mention_price == 0:
