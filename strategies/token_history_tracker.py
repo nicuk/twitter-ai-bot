@@ -224,9 +224,9 @@ class TokenHistoryTracker:
                 return
                 
             # Extract values from passed token data
-            price = float(token.get('current_price', 0) or 0)
-            volume = float(token.get('current_volume', 0) or 0)
-            mcap = float(token.get('current_mcap', 0) or 0)
+            price = float(token.get('price', 0) or 0)
+            volume = float(token.get('volume24h', 0) or 0)
+            mcap = float(token.get('marketCap', 0) or 0)
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
             current_time = datetime.utcnow()  # Use UTC consistently
             
