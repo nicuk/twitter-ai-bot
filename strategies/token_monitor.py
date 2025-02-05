@@ -63,6 +63,17 @@ class TokenMonitor:
             'trend_data': trend_data or {}
         }
     
+    def track_token(self, token: Dict) -> None:
+        """Track a single token's data"""
+        formatted_token = {
+            'symbol': token['symbol'],
+            'current_price': token.get('price', 0),
+            'current_volume': token.get('volume24h', 0),
+            'current_mcap': token.get('marketCap', 0),
+            'price_change_24h': token.get('price_change', 0)
+        }
+        self.history_tracker.update_token(formatted_token)
+    
     def get_performance_insights(self, days: int = 30) -> Dict:
         """Get insights about how well our token detection is performing"""
         stats = self.history_tracker.get_performance_stats()

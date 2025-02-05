@@ -6,11 +6,13 @@ from typing import Dict, List, Any
 import random
 from datetime import datetime
 from strategies.portfolio_tracker import PortfolioTracker
+from tweet_formatters import TweetFormatters  # Import TweetFormatters
 
 class ContentGenerator:
     def __init__(self, portfolio: PortfolioTracker, llm: Any):
         self.portfolio = portfolio
         self.llm = llm
+        self.tweet_formatters = TweetFormatters()  # Add tweet formatters
         
         # List of excluded tokens (top market cap coins)
         self.excluded_tokens = {'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX'}
