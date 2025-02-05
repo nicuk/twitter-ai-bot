@@ -146,6 +146,7 @@ from twitter.api_client import TwitterAPI
 from twitter.rate_limiter import RateLimiter
 from twitter.history_manager import TweetHistory
 from elion.elion import Elion
+from elion.volume_strategy import VolumeStrategy
 
 class AIGamingBot:
     """Twitter bot for AI-powered crypto insights"""
@@ -390,14 +391,13 @@ class AIGamingBot:
     def post_volume(self):
         """Post volume analysis tweet"""
         try:
-            logger.info("=== Starting Volume Analysis Post ===")
-            # Get volume analysis
+            # Get volume data from strategy
             volume_data = self.elion.volume_strategy.analyze()
+            
             if not volume_data:
                 logger.warning("No volume data available")
                 return self._post_fallback_tweet()
             
-            # Filter out excluded tokens
             if 'spikes' in volume_data:
                 volume_data['spikes'] = [
                     (score, data) for score, data in volume_data['spikes']
@@ -462,7 +462,7 @@ class AIGamingBot:
             market_data = self.elion.get_market_data()
             if market_data:
                 format_type = self._get_next_format()
-                tweet = self.elion.format_tweet(format_type, market_data)
+                tweet = self.elion.content.format_tweet(format_type, market_data)
                 if tweet:
                     logger.info(f"Posting {format_type} as fallback")
                     return self._post_tweet(tweet)
@@ -470,7 +470,7 @@ class AIGamingBot:
             # If that fails, try winners recap with history
             history = self.elion.token_monitor.history_tracker.get_all_token_history()
             if history:
-                tweet = self.elion.tweet_formatters.format_winners_recap(history)
+                tweet = self.elion.content.format_winners_recap(history)
                 if tweet:
                     logger.info("Posting winners recap as fallback")
                     return self._post_tweet(tweet)
