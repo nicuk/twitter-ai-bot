@@ -240,7 +240,7 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
     
     def format_tweet(self, history_data: Dict) -> str:
         """Format winners recap tweet"""
-        winners = self._get_top_winners(history_data)
+        winners = self._get_top_winners(history_data, limit=3)  # Changed to get top 3
         if not winners:
             return None
             
@@ -257,7 +257,80 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
 • Gain: +{winners[1].get('gain_percentage', 0):.1f}%
 • Peak: +{winners[1].get('max_gain_percentage_7d', 0):.1f}%"""
 
+        if len(winners) > 2:  # Added third winner
+            tweet += f"""
+
+3. ${winners[2]['symbol']}
+• Gain: +{winners[2].get('gain_percentage', 0):.1f}%
+• Peak: +{winners[2].get('max_gain_percentage_7d', 0):.1f}%"""
+
         return self.optimize_tweet_length(tweet, {'history': history_data}, 'winners_recap')
+
+class FirstHourGainsFormatter(BasePerformanceFormatter):
+    """Format first hour gains tweet"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet with first hour performance data"""
+        symbol = token_data.get('symbol', '')
+        entry_price = token_data.get('entry_price', 0)
+        current_price = token_data.get('current_price', 0)
+        peak_price = token_data.get('peak_price', 0)
+        volume_change = token_data.get('volume_change', 0)
+        similar_token = token_data.get('similar_token', '')
+        similar_token_gain = token_data.get('similar_token_gain', 0)
+        next_key_level = token_data.get('next_key_level', 0)
+        
+        current_gain = ((current_price - entry_price) / entry_price) * 100
+        peak_gain = ((peak_price - entry_price) / entry_price) * 100
+        
+        tweet = (
+            f"🔄 First Hour Analysis: ${symbol}\n\n"
+            f"📊 Performance:\n"
+            f"• Entry: ${entry_price:.3f} → Current: ${current_price:.3f} ({current_gain:+.1f}%)\n"
+            f"• Peak: ${peak_price:.3f} ({peak_gain:+.1f}%)\n"
+            f"• Volume: {volume_change:+d}% surge\n\n"
+            f"🔍 Similar to ${similar_token}'s {similar_token_gain:+d}% run\n"
+            f"🎯 Key level to watch: ${next_key_level:.3f}"
+        )
+        
+        return tweet
+
+class BreakoutValidationFormatter(BasePerformanceFormatter):
+    """Format breakout validation tweet"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet with breakout validation data"""
+        symbol = token_data.get('symbol', '')
+        resistance = token_data.get('resistance_level', 0)
+        volume_24h = token_data.get('volume_24h', 0)
+        volume_change = token_data.get('volume_change', 0)
+        vmc_ratio = token_data.get('vmc_ratio', 0)
+        similar_token = token_data.get('similar_token', '')
+        similar_gain = token_data.get('similar_token_gain', 0)
+        next_targets = token_data.get('next_targets', [])
+        pattern_success = token_data.get('pattern_success_rate', 0)
+        
+        # Format volume in millions
+        volume_m = volume_24h / 1_000_000
+        
+        # Format next targets
+        targets_str = " → ".join([f"${t:.3f}" for t in next_targets])
+        
+        # Get V/MC ratio category
+        vmc_category = "High" if vmc_ratio > 3 else "Medium" if vmc_ratio > 1 else "Low"
+        
+        tweet = (
+            f"🚨 Breakout Alert: ${symbol}\n\n"
+            f"💰 Price Action:\n"
+            f"• Breaking ${resistance:.3f} resistance\n"
+            f"• Volume: ${volume_m:.0f}M ({volume_change:+d}% 24h)\n"
+            f"• V/MC Ratio: {vmc_ratio:.2f} ({vmc_category})\n\n"
+            f"📈 Pattern matches ${similar_token}'s {similar_gain:+d}% move\n"
+            f"🎯 Next targets: {targets_str}\n\n"
+            f"⚡ {pattern_success}% of similar setups were profitable"
+        )
+        
+        return tweet
 
 def get_mock_data():
     """Get mock data for testing"""
