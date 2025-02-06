@@ -61,10 +61,14 @@ class MarketDataSource(BaseDataSource):
             if symbol in self.excluded_tokens:
                 return False
                 
-            # Basic data validation - just ensure numbers are valid
+            # Basic data validation - handle both API format and strategy format
             try:
                 price = float(token['price'])
-                volume = float(token.get('volume24h', 0))
+                # Match TokenMonitor's format handling exactly
+                volume = float(token.get('volume24h', token.get('volume', 0)))  # Try API format first, fallback to strategy format
+                mcap = float(token.get('marketCap', token.get('mcap', 0)))     # Try API format first, fallback to strategy format
+                price_change = float(token.get('priceChange24h', token.get('price_change', 0)))  # Try API format first, fallback to strategy format
+                
                 if price <= 0:  # Only check if price is positive
                     logger.warning(f"Invalid price for {symbol}: ${price}")
                     return False

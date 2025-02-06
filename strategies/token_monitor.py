@@ -69,9 +69,9 @@ class TokenMonitor:
         formatted_token = {
             'symbol': token['symbol'],
             'price': token.get('price', 0),
-            'volume24h': token.get('volume24h', 0),
-            'marketCap': token.get('marketCap', 0),
-            'priceChange24h': token.get('priceChange24h', 0)
+            'volume24h': token.get('volume24h', token.get('volume', 0)),  # Try API format first, fallback to strategy format
+            'marketCap': token.get('marketCap', token.get('mcap', 0)),    # Try API format first, fallback to strategy format
+            'priceChange24h': token.get('priceChange24h', token.get('price_change', 0))  # Try API format first, fallback to strategy format
         }
         self.history_tracker.update_token(formatted_token)
     
