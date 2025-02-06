@@ -68,10 +68,10 @@ class TokenMonitor:
         """Track a single token's data"""
         formatted_token = {
             'symbol': token['symbol'],
-            'current_price': token.get('price', 0),
-            'current_volume': token.get('volume24h', 0),
-            'current_mcap': token.get('marketCap', 0),
-            'price_change_24h': token.get('price_change', 0)
+            'price': token.get('price', 0),
+            'volume24h': token.get('volume24h', 0),
+            'marketCap': token.get('marketCap', 0),
+            'priceChange24h': token.get('priceChange24h', 0)
         }
         self.history_tracker.update_token(formatted_token)
     
