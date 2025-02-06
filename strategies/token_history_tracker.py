@@ -217,16 +217,16 @@ class TokenHistoryTracker:
     def update_token(self, token: Dict):
         """Update token data in history"""
         try:
-            # Extract token data using correct keys from CryptoRank API
+            # Extract token data using normalized format from TokenMonitor.run_analysis()
             symbol = token.get('symbol', '').upper()
             if not symbol:
                 logger.warning("No symbol found in token data")
                 return
                 
-            # Extract values from passed token data
-            price = float(token.get('current_price', 0))
-            volume = float(token.get('current_volume', 0))
-            mcap = float(token.get('current_mcap', 0))
+            # Extract values from passed token data - handle both API and strategy format
+            price = float(token.get('price', 0))
+            volume = float(token.get('volume24h', token.get('volume', 0)))  # Try volume24h first, fallback to volume
+            mcap = float(token.get('marketCap', token.get('mcap', 0)))     # Try marketCap first, fallback to mcap
             volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
             current_time = datetime.now()
             
