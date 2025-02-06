@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import redis
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ class TokenHistoryTracker:
     
     _instance = None
     _initialized = False
+    _lock = threading.Lock()
     
     def __new__(cls):
         """Create singleton instance"""
@@ -222,109 +224,121 @@ class TokenHistoryTracker:
             if not symbol:
                 logger.warning("No symbol found in token data")
                 return
+            
+            with self._lock:  # Ensure thread safety for the entire update operation
+                # Log raw token data type and content
+                logger.info(f"[{symbol}] TokenHistoryTracker received token data type: {type(token)}")
+                logger.info(f"[{symbol}] TokenHistoryTracker raw token keys: {token.keys()}")
+                logger.info(f"[{symbol}] TokenHistoryTracker raw token values: {token.values()}")
+                    
+                # Extract values from passed token data
+                price = float(token.get('price', 0))
+                volume = float(token.get('volume24h', 0))
+                mcap = float(token.get('marketCap', 0))
                 
-            # Extract values from passed token data - handle both API and strategy format
-            price = float(token.get('price', 0))
-            volume = float(token.get('volume24h', token.get('volume', 0)))  # Try volume24h first, fallback to volume
-            mcap = float(token.get('marketCap', token.get('mcap', 0)))     # Try marketCap first, fallback to mcap
-            volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
-            current_time = datetime.now()
-            
-            # Validate current_time is not in the future
-            if current_time > datetime.now() + timedelta(minutes=5):
-                logger.error(f"Invalid future timestamp detected for {symbol}: {current_time}")
-                return
-            
-            # Add detailed debug logging
-            logger.info(f"Updating token {symbol}:")
-            logger.info(f"Raw token data: {token}")
-            logger.info(f"Extracted values:")
-            logger.info(f"  Price: {price}")
-            logger.info(f"  Volume: {volume}")
-            logger.info(f"  Market Cap: {mcap}")
-            logger.info(f"  V/MC Ratio: {volume_mcap_ratio}")
-            
-            if symbol not in self.token_history:
-                # First mention of token
-                logger.info(f"First mention of token {symbol}")
-                self.token_history[symbol] = TokenHistoricalData(
-                    symbol=symbol,
-                    first_mention_date=current_time,
-                    first_mention_price=price,
-                    first_mention_volume_24h=volume,
-                    first_mention_mcap=mcap,
-                    first_mention_volume_mcap_ratio=volume_mcap_ratio,
-                    current_price=price,
-                    current_volume=volume,
-                    current_mcap=mcap,
-                    last_updated=current_time
-                )
-            else:
-                # Update existing token data
-                logger.info(f"Updating existing token {symbol}")
-                token_data = self.token_history[symbol]
+                # Log individual value extractions
+                logger.info(f"[{symbol}] Raw price value: {token.get('price')}, type: {type(token.get('price'))}")
+                logger.info(f"[{symbol}] Raw volume value: {token.get('volume24h')}, type: {type(token.get('volume24h'))}")
+                logger.info(f"[{symbol}] Raw mcap value: {token.get('marketCap')}, type: {type(token.get('marketCap'))}")
                 
-                # Validate first_mention_date is not in the future
-                if token_data.first_mention_date > datetime.now():
-                    logger.error(f"Invalid future first_mention_date detected for {symbol}: {token_data.first_mention_date}")
-                    del self.token_history[symbol]
+                volume_mcap_ratio = (volume / mcap * 100) if mcap > 0 else 0
+                current_time = datetime.now()
+                
+                # Validate current_time is not in the future
+                if current_time > datetime.now() + timedelta(minutes=5):
+                    logger.error(f"[{symbol}] Invalid future timestamp detected: {current_time}")
                     return
                 
-                # Update current values
-                token_data.current_price = price
-                token_data.current_volume = volume
-                token_data.current_mcap = mcap
-                token_data.last_updated = current_time
+                # Add detailed debug logging
+                logger.info(f"[{symbol}] Updating token:")
+                logger.info(f"[{symbol}] Raw token data: {token}")
+                logger.info(f"[{symbol}] Extracted values:")
+                logger.info(f"[{symbol}]   Price: {price}")
+                logger.info(f"[{symbol}]   Volume: {volume}")
+                logger.info(f"[{symbol}]   Market Cap: {mcap}")
+                logger.info(f"[{symbol}]   V/MC Ratio: {volume_mcap_ratio}")
                 
-                # Calculate time since first mention
-                time_diff = current_time - token_data.first_mention_date
-                logger.info(f"Time since first mention: {time_diff}")
+                if symbol not in self.token_history:
+                    # First mention of token
+                    logger.info(f"[{symbol}] First mention of token")
+                    self.token_history[symbol] = TokenHistoricalData(
+                        symbol=symbol,
+                        first_mention_date=current_time,
+                        first_mention_price=price,
+                        first_mention_volume_24h=volume,
+                        first_mention_mcap=mcap,
+                        first_mention_volume_mcap_ratio=volume_mcap_ratio,
+                        current_price=price,
+                        current_volume=volume,
+                        current_mcap=mcap,
+                        last_updated=current_time
+                    )
+                else:
+                    # Update existing token data
+                    logger.info(f"[{symbol}] Updating existing token")
+                    token_data = self.token_history[symbol]
+                    
+                    # Validate first_mention_date is not in the future
+                    if token_data.first_mention_date > datetime.now():
+                        logger.error(f"[{symbol}] Invalid future first_mention_date detected: {token_data.first_mention_date}")
+                        del self.token_history[symbol]
+                        return
+                    
+                    # Update current values
+                    token_data.current_price = price
+                    token_data.current_volume = volume
+                    token_data.current_mcap = mcap
+                    token_data.last_updated = current_time
+                    
+                    # Calculate time since first mention
+                    time_diff = current_time - token_data.first_mention_date
+                    logger.info(f"[{symbol}] Time since first mention: {time_diff}")
+                    
+                    # Update time-based metrics if enough time has passed
+                    # Continue updating these values even after the time period
+                    if time_diff >= timedelta(hours=24):
+                        logger.info(f"[{symbol}] Updating 24h metrics")
+                        token_data.price_24h_after = price
+                        token_data.volume_24h_after = volume
+                    
+                    if time_diff >= timedelta(hours=48):
+                        logger.info(f"[{symbol}] Updating 48h metrics")
+                        token_data.price_48h_after = price
+                        token_data.volume_48h_after = volume
+                    
+                    if time_diff >= timedelta(days=7):
+                        logger.info(f"[{symbol}] Updating 7d metrics")
+                        token_data.price_7d_after = price
+                        token_data.volume_7d_after = volume
+                    
+                    # Update max values (now tracked beyond 7 days)
+                    if price > token_data.max_price_7d:
+                        logger.info(f"[{symbol}] New max price: {price}")
+                        token_data.max_price_7d = price
+                        token_data.max_price_7d_date = current_time
+                        # Avoid division by zero for price gain calculation
+                        if token_data.first_mention_price > 0:
+                            token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
+                        else:
+                            token_data.max_gain_percentage_7d = 0
+                            logger.warning(f"[{symbol}] First mention price is 0, cannot calculate gain percentage")
+                    
+                    if volume > token_data.max_volume_7d:
+                        logger.info(f"[{symbol}] New max volume: {volume}")
+                        token_data.max_volume_7d = volume
+                        token_data.max_volume_7d_date = current_time
+                        # Avoid division by zero for volume increase calculation
+                        if token_data.first_mention_volume_24h > 0:
+                            token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
+                        else:
+                            token_data.max_volume_increase_7d = 0
+                            logger.warning(f"[{symbol}] First mention volume is 0, cannot calculate volume increase")
                 
-                # Update time-based metrics if enough time has passed
-                # Continue updating these values even after the time period
-                if time_diff >= timedelta(hours=24):
-                    logger.info(f"Updating 24h metrics for {symbol}")
-                    token_data.price_24h_after = price
-                    token_data.volume_24h_after = volume
+                # Save changes to storage
+                self.save_history()
                 
-                if time_diff >= timedelta(hours=48):
-                    logger.info(f"Updating 48h metrics for {symbol}")
-                    token_data.price_48h_after = price
-                    token_data.volume_48h_after = volume
-                
-                if time_diff >= timedelta(days=7):
-                    logger.info(f"Updating 7d metrics for {symbol}")
-                    token_data.price_7d_after = price
-                    token_data.volume_7d_after = volume
-                
-                # Update max values (now tracked beyond 7 days)
-                if price > token_data.max_price_7d:
-                    logger.info(f"New max price for {symbol}: {price}")
-                    token_data.max_price_7d = price
-                    token_data.max_price_7d_date = current_time
-                    # Avoid division by zero for price gain calculation
-                    if token_data.first_mention_price > 0:
-                        token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
-                    else:
-                        token_data.max_gain_percentage_7d = 0
-                        logger.warning(f"First mention price is 0 for {symbol}, cannot calculate gain percentage")
-                
-                if volume > token_data.max_volume_7d:
-                    logger.info(f"New max volume for {symbol}: {volume}")
-                    token_data.max_volume_7d = volume
-                    token_data.max_volume_7d_date = current_time
-                    # Avoid division by zero for volume increase calculation
-                    if token_data.first_mention_volume_24h > 0:
-                        token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
-                    else:
-                        token_data.max_volume_increase_7d = 0
-                        logger.warning(f"First mention volume is 0 for {symbol}, cannot calculate volume increase")
-            
-            # Save changes to storage
-            self.save_history()
-            
         except Exception as e:
-            logger.error(f"Error updating token {symbol}: {e}")
+            logger.error(f"[{symbol}] Error updating token: {e}")
     
     def get_token_history(self, symbol: str) -> Optional[TokenHistoricalData]:
         """Get historical data for a specific token"""
