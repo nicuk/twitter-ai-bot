@@ -294,6 +294,8 @@ class Elion:
     def format_tweet(self, tweet_type: str, market_data: Dict, variant: str = 'A') -> Optional[str]:
         """Format a tweet using market data"""
         try:
+            from elion.content.tweet_formatters import FORMATTERS
+            
             logger.info(f"Formatting tweet type: {tweet_type}")
             
             # Get token history for performance formatters
@@ -301,7 +303,7 @@ class Elion:
             
             # Handle performance formatters
             if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
-                formatter = self.tweet_formatters.FORMATTERS.get(tweet_type)
+                formatter = FORMATTERS.get(tweet_type)
                 if not formatter:
                     logger.warning(f"Formatter {tweet_type} not found")
                     return None

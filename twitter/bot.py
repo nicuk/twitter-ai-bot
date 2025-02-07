@@ -181,6 +181,8 @@ class AIGamingBot:
 
     def _get_next_format(self) -> str:
         """Get next format to use based on current hour"""
+        from elion.content.tweet_formatters import FORMATTERS
+        
         current_hour = datetime.now().hour
         
         # Map hours to specific formats
@@ -197,7 +199,7 @@ class AIGamingBot:
         format_type = hour_to_format.get(current_hour, 'winners_recap')
         
         # Check if format is available, fallback to winners_recap
-        if not self.elion.content.tweet_formatters.FORMATTERS.get(format_type):
+        if not FORMATTERS.get(format_type):
             logger.info(f"Format {format_type} not available, falling back to winners_recap")
             format_type = 'winners_recap'
             
