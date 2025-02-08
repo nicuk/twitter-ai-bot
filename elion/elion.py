@@ -301,6 +301,19 @@ class Elion:
             # Get token history for performance formatters
             history = self.token_monitor.history_tracker.get_all_token_history()
             
+            # Convert TokenHistoricalData to dictionary
+            history_dict = {}
+            for symbol, token_data in history.items():
+                history_dict[symbol] = {
+                    'symbol': symbol,
+                    'current_price': token_data.current_price,
+                    'first_mention_price': token_data.first_mention_price,
+                    'gain_percentage': token_data.gain_percentage,
+                    'max_gain_percentage_7d': token_data.max_gain_7d,
+                    'volume_24h': token_data.volume_24h,
+                    'first_mention_volume_24h': token_data.first_mention_volume_24h
+                }
+            
             # Handle performance formatters
             if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
                 formatter = FORMATTERS.get(tweet_type)
@@ -316,7 +329,7 @@ class Elion:
                     return formatter.format_tweet(market_data['token'])
                 else:
                     # Other performance formatters use history data
-                    return formatter.format_tweet(history)
+                    return formatter.format_tweet(history_dict)
             
             # Handle regular formatters
             template = self.tweet_formatters.get_template(tweet_type, variant)

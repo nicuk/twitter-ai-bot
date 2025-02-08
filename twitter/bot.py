@@ -459,28 +459,12 @@ class AIGamingBot:
         """Post a fallback tweet when main tweet generation fails"""
         try:
             logger.info("Attempting to post fallback tweet...")
-            
-            # Try to get market data and use current hour's format
-            market_data = self.elion.get_market_data()
-            if market_data:
-                format_type = self._get_next_format()
-                tweet = self.elion.content.format_tweet(format_type, market_data)
-                if tweet:
-                    logger.info(f"Posting {format_type} as fallback")
-                    return self._post_tweet(tweet)
-            
-            # If that fails, try winners recap with history
-            history = self.elion.token_monitor.history_tracker.get_all_token_history()
-            if history:
-                tweet = self.elion.content.format_winners_recap(history)
-                if tweet:
-                    logger.info("Posting winners recap as fallback")
-                    return self._post_tweet(tweet)
-            
-            # If all else fails, use a simple market update
-            logger.info("Posting simple market update as final fallback")
-            return self._post_tweet("🔄 Market Update: Analyzing latest crypto movements. Stay tuned for insights! 📊 #crypto #trading")
-            
+            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+            if backup_tweet:
+                return self._post_tweet(backup_tweet)
+            else:
+                logger.error("No backup tweet available")
+                return False
         except Exception as e:
             logger.error(f"Error posting fallback tweet: {e}")
             return False
