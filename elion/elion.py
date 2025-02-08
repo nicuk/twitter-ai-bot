@@ -331,7 +331,12 @@ class Elion:
                     if not market_data or 'token' not in market_data:
                         logger.warning("No token data for performance compare")
                         return None
-                    return formatter.format_tweet(market_data['token'])
+                    token = market_data['token']
+                    # Mark token as posted
+                    if 'symbol' in token:
+                        self.token_monitor.history_tracker.mark_as_posted(token['symbol'])
+                        logger.info(f"Marked {token['symbol']} as posted")
+                    return formatter.format_tweet(token)
                 else:
                     # Other performance formatters use history data
                     return formatter.format_tweet(history_dict)
@@ -341,6 +346,11 @@ class Elion:
             if not template:
                 logger.warning(f"No template found for {tweet_type}")
                 return None
+                
+            # Mark token as posted for regular tweets
+            if market_data and 'symbol' in market_data:
+                self.token_monitor.history_tracker.mark_as_posted(market_data['symbol'])
+                logger.info(f"Marked {market_data['symbol']} as posted")
                 
             return template.format(**market_data)
             
@@ -362,6 +372,7 @@ class Elion:
                 tweet_type = self._get_next_tweet_type()
                 
             tweet = None
+            token_symbol = None  # Track which token we tweet about
             
             # Handle trend tweets
             if tweet_type == 'trend':
@@ -369,6 +380,7 @@ class Elion:
                     trend_data = self.trend_strategy.analyze()
                     if trend_data:
                         tweet = self.tweet_formatters.format_trend_insight(trend_data, self.personality.get_trait())
+                        token_symbol = trend_data.get('symbol')  # Get symbol from trend data
                 except Exception as e:
                     print(f"Error in trend strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
@@ -379,6 +391,7 @@ class Elion:
                     volume_data = self.volume_strategy.analyze()
                     if volume_data:
                         tweet = self.tweet_formatters.format_volume_insight(volume_data, self.personality.get_trait())
+                        token_symbol = volume_data.get('symbol')  # Get symbol from volume data
                 except Exception as e:
                     print(f"Error in volume strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
@@ -399,6 +412,11 @@ class Elion:
                 self.state['last_strategy'] = tweet_type
                 self.state['last_tweet_time'] = datetime.now()
                 self.state['tweets_today'] += 1
+                
+                # Mark token as posted if we tweeted about it
+                if token_symbol:
+                    self.token_monitor.history_tracker.mark_as_posted(token_symbol)
+                    logger.info(f"Marked {token_symbol} as posted")
                 return tweet
                 
             return None

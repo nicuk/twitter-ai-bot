@@ -24,6 +24,7 @@ class TokenHistoricalData:
     current_volume: float
     current_mcap: float
     last_updated: datetime
+    posted: bool = False  # Track if token was posted about
     
     # Performance metrics after first mention (with defaults)
     price_24h_after: float = 0
@@ -62,7 +63,8 @@ class TokenHistoricalData:
             'current_price': self.current_price,
             'current_volume': self.current_volume,
             'current_mcap': self.current_mcap,
-            'last_updated': self.last_updated.isoformat()
+            'last_updated': self.last_updated.isoformat(),
+            'posted': self.posted
         }
         
         if self.max_price_7d_date:
@@ -95,7 +97,8 @@ class TokenHistoricalData:
             'current_price': data['current_price'],
             'current_volume': data['current_volume'],
             'current_mcap': data['current_mcap'],
-            'last_updated': datetime.fromisoformat(data['last_updated'])
+            'last_updated': datetime.fromisoformat(data['last_updated']),
+            'posted': data.get('posted', False)
         }
         
         if 'max_price_7d_date' in data:
@@ -271,7 +274,8 @@ class TokenHistoryTracker:
                         current_price=price,
                         current_volume=volume,
                         current_mcap=mcap,
-                        last_updated=current_time
+                        last_updated=current_time,
+                        posted=False
                     )
                 else:
                     # Update existing token data
@@ -488,3 +492,10 @@ class TokenHistoryTracker:
             patterns['avg_time_to_peak'] /= patterns['total_successful']
             
         return patterns
+
+    def mark_as_posted(self, symbol: str) -> None:
+        """Mark a token as having been posted about"""
+        if symbol in self.token_history:
+            self.token_history[symbol].posted = True
+            self.save_history()
+            logger.info(f"Marked {symbol} as posted")
