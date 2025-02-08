@@ -304,13 +304,18 @@ class Elion:
             # Convert TokenHistoricalData to dictionary
             history_dict = {}
             for symbol, token_data in history.items():
+                # Calculate gain percentage
+                gain_percentage = 0
+                if token_data.first_mention_price and token_data.first_mention_price > 0:
+                    gain_percentage = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100
+                
                 history_dict[symbol] = {
                     'symbol': symbol,
                     'current_price': token_data.current_price,
                     'first_mention_price': token_data.first_mention_price,
-                    'gain_percentage': token_data.gain_percentage,
-                    'max_gain_percentage_7d': token_data.max_gain_7d,
-                    'volume_24h': token_data.volume_24h,
+                    'gain_percentage': gain_percentage,
+                    'max_gain_percentage_7d': token_data.max_gain_percentage_7d,
+                    'volume_24h': token_data.current_volume,
                     'first_mention_volume_24h': token_data.first_mention_volume_24h
                 }
             
