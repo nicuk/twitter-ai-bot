@@ -304,24 +304,28 @@ class Elion:
             # Convert TokenHistoricalData to dictionary
             history_dict = {}
             for symbol, token_data in history.items():
-                # Calculate gain percentage
+                # Calculate current gain percentage
                 gain_percentage = 0
                 if token_data.first_mention_price and token_data.first_mention_price > 0:
                     gain_percentage = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100
                 
-                history_dict[symbol] = {
-                    'symbol': symbol,
-                    'current_price': token_data.current_price,
-                    'first_mention_price': token_data.first_mention_price,
-                    'gain_percentage': gain_percentage,
-                    'max_gain_percentage_7d': token_data.max_gain_percentage_7d,
-                    'volume_24h': token_data.current_volume,
-                    'first_mention_volume_24h': token_data.first_mention_volume_24h
-                }
+                # Only include tokens that have been posted about
+                if token_data.posted:
+                    history_dict[symbol] = {
+                        'symbol': symbol,
+                        'current_price': token_data.current_price,
+                        'first_mention_price': token_data.first_mention_price,
+                        'gain_percentage': gain_percentage,
+                        'max_gain_percentage_7d': token_data.max_gain_percentage_7d,
+                        'volume_24h': token_data.current_volume,
+                        'first_mention_volume_24h': token_data.first_mention_volume_24h,
+                        'first_mention_date': token_data.first_mention_date.isoformat(),
+                        'posted': token_data.posted
+                    }
             
             # Handle performance formatters
             if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
-                formatter = FORMATTERS.get(tweet_type)
+                formatter = self.tweet_formatters.formatters.get(tweet_type.replace('prediction_accuracy', 'prediction'))
                 if not formatter:
                     logger.warning(f"Formatter {tweet_type} not found")
                     return None
@@ -339,6 +343,7 @@ class Elion:
                     return formatter.format_tweet(token)
                 else:
                     # Other performance formatters use history data
+                    # No need to mark as posted here since they use already posted tokens
                     return formatter.format_tweet(history_dict)
             
             # Handle regular formatters

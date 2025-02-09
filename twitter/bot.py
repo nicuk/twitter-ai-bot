@@ -317,16 +317,29 @@ class AIGamingBot:
     def post_performance(self):
         """Post performance update, alternating between token and portfolio performance"""
         try:
-            # Get token performance data
-            token_data = self.elion.token_history.get_recent_performance()
+            # Get token performance data from token monitor
+            token_data = self.elion.token_monitor.get_latest_token()
+            if not token_data:
+                logger.warning("No token data available for performance update")
+                return False
+                
+            # Get token history for portfolio view
+            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            if not history:
+                logger.warning("No token history available for portfolio view")
+                return False
             
             # Alternate between token and portfolio updates
             if random.random() < 0.5:  # 50% chance for each type
                 # Token performance update
-                tweet = self.elion.format_tweet('performance_compare', token_data, variant='A')
+                tweet = self.elion.format_tweet('performance_compare', {'token': token_data}, variant='A')
             else:
-                # Portfolio performance update - use token data as fallback
-                tweet = self.elion.format_tweet('performance_compare', token_data, variant='B')
+                # Portfolio performance update
+                tweet = self.elion.format_tweet('performance_compare', {'history': history}, variant='B')
+            
+            if not tweet:
+                logger.warning("Failed to generate performance tweet")
+                return False
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()

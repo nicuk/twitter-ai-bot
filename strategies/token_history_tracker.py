@@ -98,12 +98,12 @@ class TokenHistoricalData:
             'current_volume': data['current_volume'],
             'current_mcap': data['current_mcap'],
             'last_updated': datetime.fromisoformat(data['last_updated']),
-            'posted': data.get('posted', False)
+            'posted': data.get('posted', False)  # Make sure to load the posted flag
         }
         
-        if 'max_price_7d_date' in data:
+        if 'max_price_7d_date' in data and data['max_price_7d_date']:
             kwargs['max_price_7d_date'] = datetime.fromisoformat(data['max_price_7d_date'])
-        if 'max_volume_7d_date' in data:
+        if 'max_volume_7d_date' in data and data['max_volume_7d_date']:
             kwargs['max_volume_7d_date'] = datetime.fromisoformat(data['max_volume_7d_date'])
             
         return cls(**kwargs)
@@ -155,47 +155,54 @@ class TokenHistoryTracker:
         
     def setup_file_storage(self):
         """Set up file-based storage"""
-        self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-        os.makedirs(self.data_dir, exist_ok=True)
-        self.history_file = os.path.join(self.data_dir, 'token_history.json')
+        # Get the directory containing this file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up one level to project root
+        project_root = os.path.dirname(current_dir)
+        # Create data directory if it doesn't exist
+        data_dir = os.path.join(project_root, 'data')
+        os.makedirs(data_dir, exist_ok=True)
+        # Set history file path
+        self.history_file = os.path.join(data_dir, 'token_history.json')
         logger.info(f"Using file storage at: {self.history_file}")
         
     def load_history(self):
         """Load token history from storage"""
         try:
             if self.using_redis:
-                data = self.redis.get('token_history')
-                if data:
-                    json_data = json.loads(data)
-                    # Filter out tokens with invalid (0) first mention values
-                    valid_tokens = {
-                        symbol: TokenHistoricalData.from_dict(token_data)
-                        for symbol, token_data in json_data.items()
-                        if token_data.get('first_mention_price', 0) > 0 
-                        and token_data.get('first_mention_volume_24h', 0) > 0
-                        and token_data.get('first_mention_mcap', 0) > 0
-                    }
+                data_str = self.redis.get('token_history')
+                if data_str:
+                    data = json.loads(data_str)
+                    valid_tokens = {}
+                    for symbol, token_data in data.items():
+                        try:
+                            token = TokenHistoricalData.from_dict(token_data)
+                            if token.first_mention_price > 0:  # Basic validation
+                                valid_tokens[symbol] = token
+                                if token.posted:  # Log tokens that were previously posted about
+                                    logger.info(f"Loaded posted token: {symbol}")
+                        except Exception as e:
+                            logger.error(f"Error loading token {symbol}: {e}")
                     self.token_history = valid_tokens
                     logger.info(f"Loaded {len(self.token_history)} valid tokens from Redis")
-                    if len(valid_tokens) < len(json_data):
-                        logger.info(f"Removed {len(json_data) - len(valid_tokens)} invalid tokens with 0 values")
+                    logger.info(f"Found {sum(1 for t in valid_tokens.values() if t.posted)} posted tokens")
             else:
                 if os.path.exists(self.history_file):
                     with open(self.history_file, 'r') as f:
                         data = json.load(f)
-                        if data:
-                            # Filter out tokens with invalid (0) first mention values
-                            valid_tokens = {
-                                symbol: TokenHistoricalData.from_dict(token_data)
-                                for symbol, token_data in data.items()
-                                if token_data.get('first_mention_price', 0) > 0 
-                                and token_data.get('first_mention_volume_24h', 0) > 0
-                                and token_data.get('first_mention_mcap', 0) > 0
-                            }
-                            self.token_history = valid_tokens
-                            logger.info(f"Loaded {len(self.token_history)} valid tokens from file")
-                            if len(valid_tokens) < len(data):
-                                logger.info(f"Removed {len(data) - len(valid_tokens)} invalid tokens with 0 values")
+                        valid_tokens = {}
+                        for symbol, token_data in data.items():
+                            try:
+                                token = TokenHistoricalData.from_dict(token_data)
+                                if token.first_mention_price > 0:  # Basic validation
+                                    valid_tokens[symbol] = token
+                                    if token.posted:  # Log tokens that were previously posted about
+                                        logger.info(f"Loaded posted token: {symbol}")
+                            except Exception as e:
+                                logger.error(f"Error loading token {symbol}: {e}")
+                        self.token_history = valid_tokens
+                        logger.info(f"Loaded {len(self.token_history)} valid tokens from file")
+                        logger.info(f"Found {sum(1 for t in valid_tokens.values() if t.posted)} posted tokens")
                         
         except Exception as e:
             logger.error(f"Error loading token history: {e}")
@@ -282,17 +289,24 @@ class TokenHistoryTracker:
                     logger.info(f"[{symbol}] Updating existing token")
                     token_data = self.token_history[symbol]
                     
+                    # Keep track of whether this token was posted about
+                    was_posted = token_data.posted
+                    
                     # Validate first_mention_date is not in the future
                     if token_data.first_mention_date > datetime.now():
                         logger.error(f"[{symbol}] Invalid future first_mention_date detected: {token_data.first_mention_date}")
                         del self.token_history[symbol]
                         return
+                        
+                    time_since_mention = current_time - token_data.first_mention_date
+                    logger.info(f"[{symbol}] Time since first mention: {time_since_mention}")
                     
-                    # Update current values
+                    # Update current metrics
                     token_data.current_price = price
                     token_data.current_volume = volume
                     token_data.current_mcap = mcap
                     token_data.last_updated = current_time
+                    token_data.posted = was_posted  # Preserve posted status
                     
                     # Calculate time since first mention
                     time_diff = current_time - token_data.first_mention_date
@@ -496,6 +510,7 @@ class TokenHistoryTracker:
     def mark_as_posted(self, symbol: str) -> None:
         """Mark a token as having been posted about"""
         if symbol in self.token_history:
+            logger.info(f"[{symbol}] Marking as posted. Current posted status: {self.token_history[symbol].posted}")
             self.token_history[symbol].posted = True
             self.save_history()
-            logger.info(f"Marked {symbol} as posted")
+            logger.info(f"[{symbol}] Successfully marked as posted and saved to storage")
