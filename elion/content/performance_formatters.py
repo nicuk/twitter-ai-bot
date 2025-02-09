@@ -1,4 +1,4 @@
-"""Performance-focused tweet formatters"""
+"""Performance-focused tweet formatters """
 
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -188,10 +188,10 @@ class PredictionAccuracyFormatter(BaseFormatter):
             return ""
 
 class WinnersRecapFormatter(BaseFormatter):
-    """Shows top performing tokens"""
+    """Shows top performing tokens from the past 7 days"""
     
     def format_tweet(self, history_data: Dict[str, Dict]) -> str:
-        """Format tweet showing top performers"""
+        """Format tweet showing 7-day top performers"""
         try:
             # Get today's tokens
             now = datetime.now()
@@ -212,7 +212,7 @@ class WinnersRecapFormatter(BaseFormatter):
             profitable = sum(1 for v in todays_tokens.values() if v.get('max_gain_percentage_7d', 0) > 0)
             
             # Format tweet
-            tweet = "🏆 Top Performers:"
+            tweet = "🏆 Weekly Hall of Fame\n"
             
             # Add top 3 with medals
             for i, (symbol, gain) in enumerate(performers[:3]):
