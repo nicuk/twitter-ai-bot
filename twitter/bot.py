@@ -239,37 +239,42 @@ class AIGamingBot:
         schedule.every().day.at("18:00").do(self.post_format_tweet)  # Early US
         schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US
 
-    def _post_tweet(self, tweet):
-        """Post a tweet with error handling and backup content"""
+    def _post_tweet(self, tweet, is_fallback=False):
+        """Post a tweet with error handling"""
         try:
-            # Try to post main tweet
+            # Try to post tweet
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info(f"Posted tweet: {tweet}")
                 return True
                 
         except Exception as e:
-            # If it's a duplicate content error, don't try backup tweet
+            # If it's a duplicate content error, don't retry
             if "duplicate content" in str(e).lower():
-                logger.warning("Duplicate tweet detected, skipping backup attempt")
+                logger.warning("Duplicate tweet detected")
                 return False
                 
-            logger.error(f"Error posting main tweet: {e}")
+            logger.error(f"Error posting tweet: {e}")
             
-            # Only try backup tweet for non-duplicate errors
-            try:
-                logger.info("Attempting to post backup tweet...")
-                backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
-                if backup_tweet:
-                    response = self.api.create_tweet(backup_tweet)
-                    if response:
-                        logger.info(f"Posted backup tweet: {backup_tweet}")
-                        return True
-                    
-            except Exception as e:
-                logger.error(f"Error posting backup tweet: {e}")
+            # Only try fallback if this isn't already a fallback tweet
+            if not is_fallback:
+                return self._post_fallback_tweet()
             
         return False
+
+    def _post_fallback_tweet(self):
+        """Post a fallback tweet when main tweet generation fails"""
+        try:
+            logger.info("Attempting to post fallback tweet...")
+            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+            if backup_tweet:
+                return self._post_tweet(backup_tweet, is_fallback=True)
+            else:
+                logger.error("No backup tweet available")
+                return False
+        except Exception as e:
+            logger.error(f"Error posting fallback tweet: {e}")
+            return False
 
     def post_format_tweet(self):
         """Post tweet using format based on current hour"""
@@ -452,20 +457,6 @@ class AIGamingBot:
             logger.error(f"Error posting volume tweet: {e}")
             logger.exception("Full traceback:")  # Add full traceback for debugging
             return self._post_fallback_tweet()
-
-    def _post_fallback_tweet(self):
-        """Post a fallback tweet when main tweet generation fails"""
-        try:
-            logger.info("Attempting to post fallback tweet...")
-            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
-            if backup_tweet:
-                return self._post_tweet(backup_tweet)
-            else:
-                logger.error("No backup tweet available")
-                return False
-        except Exception as e:
-            logger.error(f"Error posting fallback tweet: {e}")
-            return False
 
     def is_valid_token(self, symbol: str) -> bool:
         """Check if token should be included in analysis"""
