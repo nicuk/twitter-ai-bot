@@ -8,6 +8,7 @@
     "startCommand": "redis-server redis.conf & python main.py",
     "restartPolicyType": "NEVER",
     "healthcheckPath": "/",
-    "healthcheckTimeout": 100
+    "healthcheckTimeout": 100,
+    "numReplicas": 1
   }
 }
