@@ -14,6 +14,31 @@ class TwitterAPI:
         """Initialize Twitter API client"""
         # Initialize Twitter API clients
         logger.info("Initializing Twitter client...")
+        
+        # Monkey patch Tweepy's rate limit handling to log before sleeping
+        original_make_request = tweepy.client.Client._make_request
+        def _make_request_with_logging(client, *args, **kwargs):
+            try:
+                return original_make_request(client, *args, **kwargs)
+            except tweepy.errors.TooManyRequests as e:
+                logger.error("\n=== RATE LIMIT ERROR ===")
+                logger.error(f"Error type: {type(e).__name__}")
+                logger.error(f"Error message: {str(e)}")
+                
+                # Log rate limit details from response headers
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f"Rate limit headers:")
+                    for header, value in e.response.headers.items():
+                        if 'rate' in header.lower() or 'limit' in header.lower():
+                            logger.error(f"{header}: {value}")
+                    logger.error(f"Response status: {e.response.status_code}")
+                    logger.error(f"Response text: {e.response.text}")
+                
+                logger.error("=== END RATE LIMIT ERROR ===\n")
+                raise  # Re-raise for Tweepy's handler
+                
+        tweepy.client.Client._make_request = _make_request_with_logging
+        
         self.api = tweepy.Client(
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
