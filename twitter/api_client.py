@@ -19,7 +19,7 @@ class TwitterAPI:
         
         # Initialize Redis client
         self.redis = redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
-        self.instance_id = str(uuid4())
+        self.instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
         
         # Monkey patch Tweepy's rate limit handling to log before sleeping
         original_make_request = tweepy.client.Client._make_request
@@ -81,10 +81,10 @@ class TwitterAPI:
         
     def _check_instance_lock(self) -> bool:
         """Check if this instance has the lock"""
-        current_holder = self.redis.get('bot_instance_lock')
+        current_holder = self.redis.get('twitter_bot_lock')  # Use same key as bot.py
         if current_holder is None:
             return False
-        return current_holder.decode('utf-8') == self.instance_id
+        return current_holder.decode('utf-8') == self.instance_id  # Use same instance ID format
     
     def create_tweet(self, text: str, reply_to_id: str = None) -> Optional[Dict]:
         """Create a new tweet"""
