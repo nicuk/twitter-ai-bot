@@ -39,9 +39,9 @@ class TwitterAPI:
                 text=text,
                 in_reply_to_tweet_id=reply_to_id
             )
-            if response:
-                logger.info("Tweet posted successfully!")
-                return {"id": "unknown"}  # Return dummy ID to avoid verification
+            if response and hasattr(response, 'data'):
+                logger.info(f"Tweet posted successfully! ID: {response.data['id']}")
+                return response.data
             else:
                 logger.error("Failed to post tweet - invalid response")
                 return None
