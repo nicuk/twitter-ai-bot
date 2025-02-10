@@ -6,6 +6,8 @@ import logging
 import asyncio
 from typing import Optional, Dict, List
 from datetime import datetime
+import redis
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,10 @@ class TwitterAPI:
         """Initialize Twitter API client"""
         # Initialize Twitter API clients
         logger.info("Initializing Twitter client...")
+        
+        # Initialize Redis client
+        self.redis = redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
+        self.instance_id = str(uuid4())
         
         # Monkey patch Tweepy's rate limit handling to log before sleeping
         original_make_request = tweepy.client.Client._make_request
@@ -73,9 +79,21 @@ class TwitterAPI:
         logger.warning(f"Rate limits in last 15min: {len(recent_limits)}")
         logger.warning(f"Total API calls to {endpoint}: {self.api_calls[endpoint]['count']}")
         
+    def _check_instance_lock(self) -> bool:
+        """Check if this instance has the lock"""
+        current_holder = self.redis.get('bot_instance_lock')
+        if current_holder is None:
+            return False
+        return current_holder.decode('utf-8') == self.instance_id
+    
     def create_tweet(self, text: str, reply_to_id: str = None) -> Optional[Dict]:
         """Create a new tweet"""
         try:
+            # Check if we have the lock
+            if not self._check_instance_lock():
+                logger.error(f"Instance {self.instance_id} does not have the lock, skipping tweet")
+                return None
+                
             self._log_api_call('create_tweet')
             logger.info(f"Attempting to post tweet: {text[:50]}...")
             logger.info(f"API calls in last 15min: {self.api_calls['create_tweet']['count']}")
@@ -123,6 +141,11 @@ class TwitterAPI:
     async def create_tweet_async(self, text: str, reply_to_id: str = None) -> Optional[Dict]:
         """Create a new tweet asynchronously"""
         try:
+            # Check if we have the lock
+            if not self._check_instance_lock():
+                logger.error(f"Instance {self.instance_id} does not have the lock, skipping tweet")
+                return None
+                
             # Run tweepy call in a thread pool since it's blocking
             self._log_api_call('create_tweet')
             loop = asyncio.get_event_loop()
@@ -161,6 +184,11 @@ class TwitterAPI:
     def get_tweet(self, tweet_id: str, fields: list = None) -> Optional[Dict]:
         """Get tweet by ID with metrics"""
         try:
+            # Check if we have the lock
+            if not self._check_instance_lock():
+                logger.error(f"Instance {self.instance_id} does not have the lock, skipping tweet")
+                return None
+                
             self._log_api_call('get_tweet')
             return self.api.get_tweet(
                 tweet_id,
@@ -187,6 +215,11 @@ class TwitterAPI:
     def get_tweet_responses(self, tweet_id: str) -> List[Dict]:
         """Get responses to a tweet"""
         try:
+            # Check if we have the lock
+            if not self._check_instance_lock():
+                logger.error(f"Instance {self.instance_id} does not have the lock, skipping tweet")
+                return None
+                
             self._log_api_call('search_tweets')
             responses = self.api.search_recent_tweets(
                 query=f"conversation_id:{tweet_id}",
@@ -236,6 +269,11 @@ class TwitterAPI:
     def verify_credentials(self) -> bool:
         """Verify Twitter API credentials"""
         try:
+            # Check if we have the lock
+            if not self._check_instance_lock():
+                logger.error(f"Instance {self.instance_id} does not have the lock, skipping verification")
+                return False
+                
             # Try to get the authenticated user's info
             user = self.api.get_me()
             return user is not None
