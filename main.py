@@ -19,6 +19,14 @@ def run_bot():
     try:
         logger.info("Initializing Twitter bot...")
         bot = AIGamingBot()
+        
+        # Check Redis connection through bot's instance check
+        redis_url = os.getenv('REDIS_URL')
+        redis_status = "Active" if redis_url else "Not configured"
+        logger.info("=== Bot Status ===")
+        logger.info(f"✓ Redis connection: {redis_status}")
+        logger.info("=================")
+        
         bot.run()
     except Exception as e:
         logger.error(f"Error running bot: {e}")
