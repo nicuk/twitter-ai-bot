@@ -1,11 +1,16 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
+  "services": {
+    "redis": {
+      "image": "redis:alpine"
+    }
+  },
   "build": {
     "builder": "NIXPACKS",
     "buildCommand": "pip install redis && pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "redis-server redis.conf & python main.py",
+    "startCommand": "python main.py",
     "restartPolicyType": "NEVER",
     "healthcheckPath": "/",
     "healthcheckTimeout": 100,
