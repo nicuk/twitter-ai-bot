@@ -548,11 +548,15 @@ class AIGamingBot:
             while True:
                 now = datetime.now()
                 
-                # Only run jobs that are due NOW, ignore missed jobs
+                # Only run jobs that are due in the current minute
                 for job in schedule.get_jobs():
-                    if job.should_run and (now - job.next_run).total_seconds() < 60:
-                        job.run()
-                        job._schedule_next_run()
+                    next_run = job.next_run
+                    if next_run:
+                        # Only run if the job is due in the current minute
+                        time_diff = (next_run - now).total_seconds()
+                        if 0 <= time_diff <= 60:  # Due within the next minute
+                            job.run()
+                            job._schedule_next_run()
                 
                 # Refresh Redis lock (every minute)
                 if REDIS_AVAILABLE and (now - last_lock_refresh).total_seconds() >= 60:
