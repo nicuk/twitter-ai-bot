@@ -22,24 +22,14 @@ def setup_routes(app: FastAPI):
     async def test_tweet(text: str = Query(..., description="Tweet text to post")):
         """Test endpoint to post a tweet directly"""
         try:
-            from twitter.bot import AIGamingBot, check_single_instance, cleanup_redis_lock
+            from twitter.bot import AIGamingBot
             
-            # Check if another instance is running
-            if not check_single_instance():
-                return {
-                    "status": "error",
-                    "message": "Another bot instance is running"
-                }
-            
-            # Initialize bot with rate limiter
+            # Initialize bot without checking instance
             bot = AIGamingBot()
             
             # Try to post tweet
             logger.info(f"Test endpoint attempting to post tweet: {text}")
             result = bot._post_tweet(text)
-            
-            # Clean up lock
-            cleanup_redis_lock()
             
             if result:
                 logger.info(f"Tweet posted successfully!")
