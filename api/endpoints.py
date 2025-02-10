@@ -18,6 +18,41 @@ def setup_routes(app: FastAPI):
     # Initialize token monitor with API key
     monitor = TokenMonitor(api_key=os.getenv('CRYPTORANK_API_KEY'))
     
+    @app.post("/test/tweet")
+    async def test_tweet(text: str = Query(..., description="Tweet text to post")):
+        """Test endpoint to post a tweet directly"""
+        try:
+            from twitter.api_client import TwitterAPI
+            
+            # Initialize Twitter API
+            api = TwitterAPI()
+            
+            # Try to post tweet
+            logger.info(f"Test endpoint attempting to post tweet: {text}")
+            response = api.create_tweet(text)
+            
+            if response:
+                tweet_id = response.get('id')
+                logger.info(f"Tweet posted successfully! ID: {tweet_id}")
+                return {
+                    "status": "success",
+                    "tweet_id": tweet_id,
+                    "message": "Tweet posted successfully"
+                }
+            else:
+                logger.error("Failed to post tweet - no response")
+                return {
+                    "status": "error",
+                    "message": "Failed to post tweet - no response"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error posting test tweet: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+    
     @app.get("/")
     async def root():
         """Root endpoint"""
@@ -28,7 +63,8 @@ def setup_routes(app: FastAPI):
                 "/token-history",
                 "/token-history/{symbol}",
                 "/analysis/current",
-                "/analysis/performance"
+                "/analysis/performance",
+                "/test/tweet"
             ]
         }
         
