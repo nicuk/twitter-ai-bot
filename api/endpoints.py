@@ -64,6 +64,37 @@ def setup_routes(app: FastAPI):
                 "message": str(e)
             }
     
+    @app.post("/tweet")
+    async def post_tweet(text: str):
+        """Post a tweet directly with the given text"""
+        try:
+            from twitter.api_client import TwitterAPI
+            
+            # Initialize Twitter API
+            api = TwitterAPI()
+            
+            # Post tweet
+            response = api.create_tweet(text)
+            
+            if response:
+                return {
+                    'success': True,
+                    'message': 'Tweet posted successfully',
+                    'tweet_id': response.get('id')
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Failed to post tweet'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error posting tweet: {e}")
+            return {
+                'success': False,
+                'message': str(e)
+            }
+
     @app.get("/")
     async def root():
         """Root endpoint"""
@@ -75,7 +106,9 @@ def setup_routes(app: FastAPI):
                 "/token-history/{symbol}",
                 "/analysis/current",
                 "/analysis/performance",
-                "/test/tweet"
+                "/test/tweet",
+                "/post/{post_type}",
+                "/tweet"
             ]
         }
         
@@ -226,5 +259,42 @@ def setup_routes(app: FastAPI):
     ) -> Dict:
         """Get performance insights about our token detection"""
         return monitor.get_performance_insights(days)
+
+    @app.post("/post/{post_type}")
+    async def trigger_post(post_type: str):
+        """Trigger a specific type of post
+        Valid types: trend, volume, format, performance"""
+        try:
+            from twitter.bot import AIGamingBot
+            bot = AIGamingBot()
+            
+            post_functions = {
+                'trend': bot.post_trend,
+                'volume': bot.post_volume,
+                'format': bot.post_format_tweet,
+                'performance': bot.post_performance
+            }
+            
+            if post_type not in post_functions:
+                return {
+                    'success': False,
+                    'message': f'Invalid post type. Must be one of: {", ".join(post_functions.keys())}'
+                }
+                
+            # Call the post function
+            result = post_functions[post_type]()
+            
+            return {
+                'success': True,
+                'message': f'Successfully triggered {post_type} post',
+                'result': result
+            }
+            
+        except Exception as e:
+            logger.error(f"Error triggering {post_type} post: {e}")
+            return {
+                'success': False,
+                'message': str(e)
+            }
 
 setup_routes(app)

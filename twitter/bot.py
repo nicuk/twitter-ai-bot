@@ -277,14 +277,23 @@ class AIGamingBot:
             logger.info("=== Starting Format Post ===")
             format_type = self._get_next_format()
             
-            # Get market data
-            market_data = self.elion.get_market_data()
-            if not market_data:
-                logger.warning("No market data available")
-                return self._post_fallback_tweet()
+            # Get appropriate data based on format type
+            if format_type == 'performance_compare':
+                # For performance compare, use token history data
+                token_data = self.elion.token_history.get_recent_performance()
+                if not token_data:
+                    logger.warning("No token history data available")
+                    return self._post_fallback_tweet()
+                data = token_data
+            else:
+                # For other formats, use market data
+                data = self.elion.get_market_data()
+                if not data:
+                    logger.warning("No market data available")
+                    return self._post_fallback_tweet()
             
             # Generate tweet using format
-            tweet = self.elion.format_tweet(format_type, market_data)
+            tweet = self.elion.format_tweet(format_type, data)
             if not tweet:
                 logger.warning(f"Failed to format {format_type} tweet")
                 return self._post_fallback_tweet()
