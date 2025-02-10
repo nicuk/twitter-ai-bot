@@ -84,20 +84,14 @@ def test_post_type(bot: AIGamingBot, post_type: str):
     api_logger.info(f"Start time: {start_time}")
     
     try:
-        # Get the post function
-        post_func = getattr(bot, f"post_{post_type}")
-        if not post_func:
-            api_logger.error(f"Post type {post_type} not found")
-            return
-            
         # Log pre-post state
         api_logger.info("Checking Twitter API status...")
         api_status = bot.api.verify_credentials()
         api_logger.info(f"Twitter API status: {'OK' if api_status else 'Failed'}")
         
-        # Try to post
-        api_logger.info(f"Attempting to post {post_type}...")
-        result = post_func()
+        # Try to force post
+        api_logger.info(f"Attempting to force {post_type} post...")
+        result = bot.force_post(post_type)
         
         # Log result
         end_time = datetime.now()
@@ -125,7 +119,7 @@ def main():
         crypto_logger.info(f"Got {len(currencies)} currencies from CryptoRank")
         
         # Test each post type
-        post_types = ['trend', 'volume', 'performance', 'ai_mystique']
+        post_types = ['trend', 'volume', 'performance', 'format', 'ai_mystique']
         for post_type in post_types:
             test_post_type(bot, post_type)
             time.sleep(5)  # Wait between posts

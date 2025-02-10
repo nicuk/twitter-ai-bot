@@ -463,6 +463,34 @@ class AIGamingBot:
             return False
         return symbol.upper() not in self.EXCLUDED_TOKENS
 
+    def force_post(self, post_type: str):
+        """Force an immediate post without waiting for schedule"""
+        logger.info(f"\n=== Forcing immediate {post_type} post ===")
+        try:
+            # Map post types to methods
+            post_methods = {
+                'trend': self.post_trend,
+                'volume': self.post_volume,
+                'performance': self.post_performance,
+                'format': self.post_format_tweet,
+                'ai_mystique': self.post_ai_mystique
+            }
+            
+            # Get the post method
+            post_method = post_methods.get(post_type)
+            if not post_method:
+                logger.error(f"Invalid post type: {post_type}")
+                return False
+                
+            # Execute the post
+            logger.info(f"Executing {post_type} post...")
+            return post_method()
+            
+        except Exception as e:
+            logger.error(f"Error forcing {post_type} post: {str(e)}")
+            logger.exception("Full traceback:")
+            return False
+
     def run(self):
         """Run the bot"""
         try:
