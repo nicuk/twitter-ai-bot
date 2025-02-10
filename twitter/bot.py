@@ -463,9 +463,24 @@ class AIGamingBot:
             return False
         return symbol.upper() not in self.EXCLUDED_TOKENS
 
-    def force_post(self, post_type: str):
-        """Force an immediate post without waiting for schedule"""
+    def force_post(self, post_type: str, bypass_lock: bool = True):
+        """Force an immediate post without waiting for schedule
+        
+        Args:
+            post_type: Type of post to force ('trend', 'volume', 'performance', 'format', 'ai_mystique')
+            bypass_lock: If True, bypasses the Redis lock check (use carefully!)
+        """
         logger.info(f"\n=== Forcing immediate {post_type} post ===")
+        
+        # Check if another instance is running (unless bypassing)
+        if not bypass_lock:
+            is_running = is_bot_running()
+            if is_running:
+                logger.warning("Another bot instance is running. Skipping force post.")
+                return False
+        else:
+            logger.warning("Bypassing Redis lock for testing!")
+            
         try:
             # Map post types to methods
             post_methods = {
