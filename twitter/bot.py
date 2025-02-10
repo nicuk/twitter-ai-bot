@@ -251,7 +251,7 @@ class AIGamingBot:
                 return True
                 
         except tweepy.errors.TooManyRequests as e:
-            logger.error("\n=== TWITTER API ERROR DETAILS ===")
+            logger.error("\n=== BOT ERROR HANDLING ===")
             logger.error(f"Error type: {type(e).__name__}")
             logger.error(f"Error message: {str(e)}")
             logger.error(f"Error repr: {repr(e)}")
@@ -261,7 +261,7 @@ class AIGamingBot:
                 logger.error(f"Response headers: {e.response.headers}")
             logger.error(f"Is fallback tweet: {is_fallback}")
             logger.error(f"Tweet content: {tweet[:100]}...")
-            logger.error("=== END ERROR DETAILS ===\n")
+            logger.error("=== END BOT ERROR ===\n")
             
             logger.warning("Rate limit hit, will retry in 15 minutes")
             # Sleep for 15 minutes and 1 second to ensure rate limit window has passed
