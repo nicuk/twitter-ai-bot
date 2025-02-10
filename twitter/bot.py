@@ -317,27 +317,18 @@ class AIGamingBot:
     def post_performance(self):
         """Post performance update for latest token"""
         try:
-            logger.info("\n=== Starting Performance Post ===")
-            logger.info(f"Current time: {datetime.utcnow()}")
-            
-            # Get token performance data
-            logger.info("Fetching latest token data...")
+            # Get token performance data from token monitor
             token_data = self.elion.token_monitor.get_latest_token()
             if not token_data:
                 logger.warning("No token data available for performance update")
                 return False
                 
-            logger.info(f"Latest token data: {token_data}")
-                
             # Format performance tweet
-            logger.info("Formatting performance tweet...")
             tweet = self.elion.format_tweet('performance_compare', {'token': token_data}, variant='A')
             
             if not tweet:
                 logger.warning("Failed to generate performance tweet")
                 return False
-            
-            logger.info(f"Generated tweet: {tweet[:100]}...")
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()
@@ -348,7 +339,6 @@ class AIGamingBot:
             
         except Exception as e:
             logger.error(f"Error posting performance update: {str(e)}")
-            logger.exception("Full traceback:")
             return False
 
     def post_summary(self):
@@ -369,17 +359,12 @@ class AIGamingBot:
     def post_trend(self):
         """Post trend analysis tweet"""
         try:
-            logger.info("\n=== Starting Trend Analysis Post ===")
-            logger.info(f"Current time: {datetime.utcnow()}")
-            
+            logger.info("=== Starting Trend Analysis Post ===")
             # Get trend analysis
-            logger.info("Fetching trend data from Elion...")
             trend_data = self.elion.trend_strategy.analyze()
             if not trend_data:
                 logger.warning("No trend data available")
                 return self._post_fallback_tweet()
-                
-            logger.info(f"Raw trend data: {trend_data}")
             
             # Filter out excluded tokens
             trend_tokens = [
@@ -387,23 +372,18 @@ class AIGamingBot:
                 if self.is_valid_token(token.get('symbol'))
             ]
             
-            logger.info(f"Found {len(trend_tokens)} valid tokens after filtering")
             if not trend_tokens:
                 logger.warning("No valid tokens after filtering")
                 return self._post_fallback_tweet()
             
             # Format trend tweet using strategy's own formatter
-            logger.info("Formatting trend tweet...")
             tweet = self.elion.trend_strategy.format_twitter_output(trend_tokens)
             if not tweet:
                 logger.warning("Failed to format trend tweet")
                 return self._post_fallback_tweet()
                 
-            logger.info(f"Generated tweet: {tweet[:100]}...")
-                
             # Post tweet
             self._post_tweet(tweet)
-            return True
                 
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
@@ -413,34 +393,64 @@ class AIGamingBot:
     def post_volume(self):
         """Post volume analysis tweet"""
         try:
-            logger.info("\n=== Starting Volume Analysis Post ===")
-            logger.info(f"Current time: {datetime.utcnow()}")
-            
             # Get volume data
-            logger.info("Fetching volume data from Elion...")
             volume_data = self.elion.volume_strategy.analyze()
             if not volume_data:
                 logger.warning("No volume data available")
                 return self._post_fallback_tweet()
-                
-            logger.info(f"Raw volume data: {volume_data}")
             
-            # Format volume tweet
-            logger.info("Formatting volume tweet...")
-            tweet = self.elion.volume_strategy.format_twitter_output(volume_data)
+            if 'spikes' in volume_data:
+                volume_data['spikes'] = [
+                    (score, data) for score, data in volume_data['spikes']
+                    if self.is_valid_token(data.get('symbol'))
+                ]
+            
+            if 'anomalies' in volume_data:
+                volume_data['anomalies'] = [
+                    (score, data) for score, data in volume_data['anomalies']
+                    if self.is_valid_token(data.get('symbol'))
+                ]
+            
+            # Skip if no valid tokens after filtering
+            if not (volume_data.get('spikes') or volume_data.get('anomalies')):
+                logger.warning("No valid tokens after filtering")
+                return self._post_fallback_tweet()
+            
+            # Get the highest V/MC ratio token from spikes and anomalies
+            all_tokens = []
+            if volume_data.get('spikes'):
+                all_tokens.extend(volume_data['spikes'])
+            if volume_data.get('anomalies'):
+                all_tokens.extend(volume_data['anomalies'])
+                
+            if not all_tokens:
+                logger.warning("No tokens to process")
+                return self._post_fallback_tweet()
+                
+            # Get token with highest score
+            score, token = max(all_tokens, key=lambda x: x[0])
+            
+            # Format volume tweet using filtered data
+            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            tweet = self.elion.volume_strategy.format_twitter_output(
+                volume_data.get('spikes', []),
+                volume_data.get('anomalies', []),
+                history=history  # Pass history data to the formatter
+            )
+            
             if not tweet:
                 logger.warning("Failed to format volume tweet")
                 return self._post_fallback_tweet()
                 
-            logger.info(f"Generated tweet: {tweet[:100]}...")
+            # Track tokens using TokenMonitor
+            self.elion.token_monitor.run_analysis()
             
             # Post tweet
             self._post_tweet(tweet)
-            return True
-            
+                
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
-            logger.exception("Full traceback:")
+            logger.exception("Full traceback:")  # Add full traceback for debugging
             return self._post_fallback_tweet()
 
     def _post_fallback_tweet(self):
