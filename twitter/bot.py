@@ -545,6 +545,7 @@ class AIGamingBot:
             # Main loop
             last_log_time = datetime.now()
             last_health_check = datetime.now()
+            last_lock_refresh = datetime.now()
             
             logger.info("\n=== Bot Running ===")
             logger.info("Monitoring for scheduled tasks...")
@@ -552,6 +553,23 @@ class AIGamingBot:
             while True:
                 schedule.run_pending()
                 now = datetime.now()
+                
+                # Refresh Redis lock (every minute)
+                if REDIS_AVAILABLE and (now - last_lock_refresh).total_seconds() >= 60:
+                    try:
+                        redis_url = os.getenv('REDIS_URL')
+                        if redis_url:
+                            redis_client = redis.from_url(redis_url)
+                            instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+                            current_holder = redis_client.get('twitter_bot_lock')
+                            if current_holder and current_holder.decode() == instance_id:
+                                redis_client.expire('twitter_bot_lock', 300)  # Refresh 5-minute expiry
+                            else:
+                                logger.error(f"Redis lock lost! Current holder: {current_holder.decode() if current_holder else 'None'}")
+                                return  # Exit if we lost the lock
+                    except Exception as e:
+                        logger.error(f"Error refreshing Redis lock: {e}")
+                    last_lock_refresh = now
                 
                 # Log next scheduled tweet (every minute)
                 if (now - last_log_time).total_seconds() >= 60:
@@ -593,13 +611,21 @@ class AIGamingBot:
                         if redis_url:
                             redis_client = redis.from_url(redis_url)
                             redis_client.ping()
+                            # Refresh lock
+                            instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+                            current_holder = redis_client.get('twitter_bot_lock')
+                            if current_holder and current_holder.decode() == instance_id:
+                                redis_client.expire('twitter_bot_lock', 300)  # Refresh 5-minute expiry
+                                logger.info(f"✓ Redis Lock: Refreshed for instance {instance_id}")
+                            else:
+                                logger.error(f"Redis lock lost! Current holder: {current_holder.decode() if current_holder else 'None'}")
+                                return  # Exit if we lost the lock
                             logger.info("✓ Redis: Connected")
                         
                         # Check scheduled jobs
                         if len(schedule.get_jobs()) > 0:
                             logger.info("✓ Scheduler: Active")
-                            
-                        logger.info("All systems operational")
+                    
                     except Exception as e:
                         logger.error(f"Health check failed: {e}")
                     

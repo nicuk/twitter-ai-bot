@@ -5,6 +5,7 @@ import tweepy
 import logging
 import asyncio
 from typing import Optional, Dict, List
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,39 @@ class TwitterAPI:
             bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
             wait_on_rate_limit=True
         )
+        self.api_calls = {
+            'create_tweet': {'count': 0, 'last_call': None, 'rate_limits': []},
+            'get_tweet': {'count': 0, 'last_call': None, 'rate_limits': []},
+            'search_tweets': {'count': 0, 'last_call': None, 'rate_limits': []}
+        }
         logger.info("Twitter client initialized")
     
+    def _log_api_call(self, endpoint: str):
+        """Log API call with timing"""
+        now = datetime.now()
+        self.api_calls[endpoint]['count'] += 1
+        self.api_calls[endpoint]['last_call'] = now
+        logger.debug(f"API Call to {endpoint} - Total calls: {self.api_calls[endpoint]['count']}")
+    
+    def _log_rate_limit(self, endpoint: str):
+        """Log rate limit hit"""
+        now = datetime.now()
+        self.api_calls[endpoint]['rate_limits'].append(now)
+        recent_limits = [t for t in self.api_calls[endpoint]['rate_limits'] 
+                        if (now - t).total_seconds() < 900]  # Last 15 minutes
+        self.api_calls[endpoint]['rate_limits'] = recent_limits
+        
+        logger.warning(f"Rate limit hit for {endpoint}")
+        logger.warning(f"Rate limits in last 15min: {len(recent_limits)}")
+        logger.warning(f"Total API calls to {endpoint}: {self.api_calls[endpoint]['count']}")
+        
     def create_tweet(self, text: str, reply_to_id: str = None) -> Optional[Dict]:
         """Create a new tweet"""
         try:
+            self._log_api_call('create_tweet')
+            logger.info(f"Attempting to post tweet: {text[:50]}...")
+            logger.info(f"API calls in last 15min: {self.api_calls['create_tweet']['count']}")
+            
             response = self.api.create_tweet(
                 text=text,
                 in_reply_to_tweet_id=reply_to_id
@@ -36,6 +65,11 @@ class TwitterAPI:
             else:
                 logger.error("Failed to post tweet - invalid response")
                 return None
+        except tweepy.errors.TooManyRequests as e:
+            self._log_rate_limit('create_tweet')
+            logger.error(f"Rate limit exceeded for create_tweet. Full error: {str(e)}")
+            logger.error(f"Rate limit headers: {e.response.headers if hasattr(e, 'response') else 'No headers'}")
+            raise
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")
             return None
@@ -44,6 +78,7 @@ class TwitterAPI:
         """Create a new tweet asynchronously"""
         try:
             # Run tweepy call in a thread pool since it's blocking
+            self._log_api_call('create_tweet')
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(None, self.api.create_tweet, text, in_reply_to_tweet_id=reply_to_id)
             if response and hasattr(response, 'data'):
@@ -52,6 +87,10 @@ class TwitterAPI:
             else:
                 logger.error("Failed to post tweet - invalid response")
                 return None
+        except tweepy.errors.TooManyRequests as e:
+            self._log_rate_limit('create_tweet')
+            logger.error(f"Rate limit exceeded for create_tweet_async: {e}")
+            raise
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")
             return None
@@ -59,10 +98,15 @@ class TwitterAPI:
     def get_tweet(self, tweet_id: str, fields: list = None) -> Optional[Dict]:
         """Get tweet by ID with metrics"""
         try:
+            self._log_api_call('get_tweet')
             return self.api.get_tweet(
                 tweet_id,
                 tweet_fields=fields or ['public_metrics', 'created_at']
             )
+        except tweepy.errors.TooManyRequests as e:
+            self._log_rate_limit('get_tweet')
+            logger.error(f"Rate limit exceeded for get_tweet: {e}")
+            raise
         except Exception as e:
             logger.error(f"Error getting tweet {tweet_id}: {e}")
             return None
@@ -70,6 +114,7 @@ class TwitterAPI:
     def get_tweet_responses(self, tweet_id: str) -> List[Dict]:
         """Get responses to a tweet"""
         try:
+            self._log_api_call('search_tweets')
             responses = self.api.search_recent_tweets(
                 query=f"conversation_id:{tweet_id}",
                 tweet_fields=['public_metrics', 'created_at', 'author_id'],
@@ -97,6 +142,10 @@ class TwitterAPI:
                 
             return processed
             
+        except tweepy.errors.TooManyRequests as e:
+            self._log_rate_limit('search_tweets')
+            logger.error(f"Rate limit exceeded for get_tweet_responses: {e}")
+            raise
         except Exception as e:
             logger.error(f"Error getting responses for tweet {tweet_id}: {e}")
             return []
