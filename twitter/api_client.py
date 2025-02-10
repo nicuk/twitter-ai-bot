@@ -13,6 +13,15 @@ class TwitterAPI:
         """Initialize Twitter API client"""
         # Initialize Twitter API clients
         logger.info("Initializing Twitter client...")
+        
+        # Debug token loading
+        token_keys = ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_ACCESS_TOKEN', 'TWITTER_ACCESS_TOKEN_SECRET', 'TWITTER_BEARER_TOKEN']
+        for key in token_keys:
+            if os.getenv(key):
+                logger.info(f"✓ {key} is set")
+            else:
+                logger.warning(f"✗ {key} is not set")
+        
         self.api = tweepy.Client(
             consumer_key=os.getenv('TWITTER_CLIENT_ID'),
             consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
