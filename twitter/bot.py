@@ -102,43 +102,45 @@ def is_bot_running():
             logger.warning("REDIS_URL not set, skipping lock check")
             return False
             
-        logger.info("Checking Redis lock...")
         redis_client = redis.from_url(redis_url)
-        
-        # Generate unique instance ID if not exists
         instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
         
-        # First try to get the lock
+        # Check if lock exists and get TTL
+        current_holder = redis_client.get('twitter_bot_lock')
+        if current_holder:
+            ttl = redis_client.ttl('twitter_bot_lock')
+            logger.info(f"Lock exists with TTL: {ttl}s, held by Instance: {current_holder}")
+            
+            if current_holder.decode() == instance_id:
+                # We hold the lock, refresh TTL
+                redis_client.expire('twitter_bot_lock', 300)
+                return False
+                
+            if ttl > 0:
+                # Another instance is running
+                logger.error(f"Another bot instance ({current_holder.decode()}) is already running (TTL: {ttl}s). This instance ({instance_id}) will exit.")
+                sys.exit(0)  # Exit cleanly, Railway will restart if needed
+                
+            # Lock exists but expired
+            redis_client.delete('twitter_bot_lock')
+            
+        # Try to acquire lock
         lock = redis_client.setnx('twitter_bot_lock', instance_id)
         if lock:
-            # We got the lock
-            logger.info(f"Got Redis lock (Instance: {instance_id})")
-            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute TTL
+            logger.info(f"Instance {instance_id} acquired lock")
             return False
             
-        # If we didn't get the lock, check if it's stale
-        ttl = redis_client.ttl('twitter_bot_lock')
+        # Double check in case of race condition
         current_holder = redis_client.get('twitter_bot_lock')
-        logger.info(f"Lock exists with TTL: {ttl}s, held by Instance: {current_holder}")
-        
-        if ttl == -2:  # Key doesn't exist
-            logger.info("Lock doesn't exist, clearing")
-            redis_client.delete('twitter_bot_lock')
-            return False
+        if current_holder and current_holder.decode() != instance_id:
+            logger.error(f"Race condition: Lock taken by {current_holder.decode()}. This instance ({instance_id}) will exit.")
+            sys.exit(0)
             
-        if ttl == -1:  # No expiry set
-            logger.info("Lock has no expiry, clearing stale lock")
-            redis_client.delete('twitter_bot_lock')
-            return False
-            
-        # Lock exists and has valid TTL
-        sleep_time = 60  # 1 minute
-        logger.warning(f"Redis Lock: Another bot instance ({current_holder}) is running (TTL: {ttl}s). This instance ({instance_id}) will sleep for {sleep_time} seconds to avoid conflicts.")
-        time.sleep(sleep_time)
-        return True
+        return False
             
     except Exception as e:
-        logger.error(f"Error checking Redis lock: {e}")
+        logger.error(f"Error checking bot lock: {e}")
         return False
 
 from custom_llm import GeminiComponent
@@ -249,12 +251,18 @@ class AIGamingBot:
                 return True
                 
         except tweepy.errors.TooManyRequests as e:
-            logger.error("=== BOT ERROR HANDLING ===")
-            logger.error(f"Caught error type: {type(e).__name__}")
+            logger.error("\n=== TWITTER API ERROR DETAILS ===")
+            logger.error(f"Error type: {type(e).__name__}")
             logger.error(f"Error message: {str(e)}")
+            logger.error(f"Error repr: {repr(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
+                logger.error(f"Response headers: {e.response.headers}")
             logger.error(f"Is fallback tweet: {is_fallback}")
-            logger.error(f"Tweet content: {tweet[:100]}...")  # First 100 chars
-            logger.error("=== END BOT ERROR ===")
+            logger.error(f"Tweet content: {tweet[:100]}...")
+            logger.error("=== END ERROR DETAILS ===\n")
+            
             logger.warning("Rate limit hit, will retry in 15 minutes")
             # Sleep for 15 minutes and 1 second to ensure rate limit window has passed
             time.sleep(901)
@@ -262,13 +270,19 @@ class AIGamingBot:
             return self._post_tweet(tweet, is_fallback)
             
         except Exception as e:
+            logger.error("\n=== TWEET ERROR ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            logger.error(f"Error repr: {repr(e)}")
+            logger.error(f"Is fallback tweet: {is_fallback}")
+            logger.error(f"Tweet content: {tweet[:100]}...")
+            logger.error("=== END ERROR ===\n")
+            
             # If it's a duplicate content error, don't retry
             if "duplicate content" in str(e).lower():
                 logger.warning("Duplicate tweet detected")
                 return False
                 
-            logger.error(f"Error posting tweet: {e}")
-            
             # Only try fallback if this isn't already a fallback tweet
             if not is_fallback:
                 return self._post_fallback_tweet()
