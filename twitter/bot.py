@@ -478,142 +478,20 @@ class AIGamingBot:
     def run(self):
         """Run the bot"""
         try:
-            # Check if another instance is running
-            if is_bot_running():
-                logger.error("Another bot instance is already running")
-                return
-                
-            logger.info("=== Bot Status ===")
-            logger.info("✓ Redis connection: Active")
-            logger.info("✓ Twitter API: Initialized")
-            logger.info("✓ Schedule: Set up")
+            # Clear any pending jobs from schedule
+            schedule.clear()
             
-            # Log all scheduled jobs
-            logger.info("\n=== Scheduled Tasks ===")
-            all_jobs = schedule.get_jobs()
+            # Set up fresh schedule starting from next occurrence
+            self._schedule_tweets()
             
-            # Group jobs by function name and find earliest run time for each
-            job_groups = {}
-            for job in all_jobs:
-                func_name = job.job_func.__name__
-                next_run = job.next_run
-                if next_run:
-                    mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
-                    if func_name not in job_groups or mins_to_next < job_groups[func_name]:
-                        job_groups[func_name] = mins_to_next
-            
-            # Display next occurrence of each task type
-            for func_name, mins in sorted(job_groups.items(), key=lambda x: x[1]):
-                hours = mins // 60
-                remaining_mins = mins % 60
-                if hours > 0:
-                    logger.info(f"• {func_name}: Next run in {hours}h {remaining_mins}m")
-                else:
-                    logger.info(f"• {func_name}: Next run in {mins}m")
-            
-            # Get and log next job
-            next_run = schedule.next_run()
-            if next_run:
-                # Find the next job(s)
-                next_jobs = [
-                    job for job in schedule.get_jobs()
-                    if job.next_run == next_run
-                ]
-                
-                mins_to_next = int((next_run - datetime.now()).total_seconds() / 60)
-                hours = mins_to_next // 60
-                remaining_mins = mins_to_next % 60
-                
-                logger.info(f"\n=== Next Tweet ===")
-                # Map function names to friendly names
-                tweet_types = {
-                    'post_trend': 'Trend Analysis',
-                    'post_volume': 'Volume Alert',
-                    'post_format_tweet': 'ELAI Update',
-                    'post_extra_tweet': 'Market Insight',
-                    '_post_fallback_tweet': 'Fallback Tweet'
-                }
-                
-                for job in next_jobs:
-                    tweet_type = tweet_types.get(job.job_func.__name__, 'Fallback Tweet')
-                    if hours > 0:
-                        logger.info(f"{tweet_type}: {hours}h {remaining_mins}m")
-                    else:
-                        logger.info(f"{tweet_type}: {mins_to_next}m")
-            
-            # Run pending tasks immediately
-            schedule.run_pending()
-            
-            # Main loop
-            last_log_time = datetime.now()
-            last_health_check = datetime.now()
-            
-            logger.info("\n=== Bot Running ===")
-            logger.info("Monitoring for scheduled tasks...")
-            
+            # Run continuously
             while True:
+                # Only run pending jobs (skip missed ones)
                 schedule.run_pending()
-                now = datetime.now()
+                time.sleep(60)
                 
-                # Log next scheduled tweet (every minute)
-                if (now - last_log_time).total_seconds() >= 60:
-                    next_run = schedule.next_run()
-                    if next_run:
-                        # Find the next job(s)
-                        next_jobs = [
-                            job for job in schedule.get_jobs()
-                            if job.next_run == next_run
-                        ]
-                        
-                        mins_to_next = int((next_run - now).total_seconds() / 60)
-                        hours = mins_to_next // 60
-                        remaining_mins = mins_to_next % 60
-                        
-                        # Map function names to friendly names
-                        tweet_types = {
-                            'post_trend': 'Trend Analysis',
-                            'post_volume': 'Volume Alert',
-                            'post_format_tweet': 'ELAI Update',
-                            'post_extra_tweet': 'Market Insight',
-                            '_post_fallback_tweet': 'Fallback Tweet'
-                        }
-                        
-                        for job in next_jobs:
-                            tweet_type = tweet_types.get(job.job_func.__name__, 'Fallback Tweet')
-                            if hours > 0:
-                                logger.info(f"Next tweet: {tweet_type} in {hours}h {remaining_mins}m")
-                            else:
-                                logger.info(f"Next tweet: {tweet_type} in {mins_to_next}m")
-                    last_log_time = now
-                
-                # Health check (every hour)
-                if (now - last_health_check).total_seconds() >= 3600:
-                    logger.info("\n=== Health Check ===")
-                    try:
-                        # Check Redis
-                        redis_url = os.getenv('REDIS_URL')
-                        if redis_url:
-                            redis_client = redis.from_url(redis_url)
-                            redis_client.ping()
-                            logger.info("✓ Redis: Connected")
-                        
-                        # Check scheduled jobs
-                        if len(schedule.get_jobs()) > 0:
-                            logger.info("✓ Scheduler: Active")
-                            
-                        logger.info("All systems operational")
-                    except Exception as e:
-                        logger.error(f"Health check failed: {e}")
-                    
-                    last_health_check = now
-                
-                time.sleep(60)  # Check every minute
-                
-        except KeyboardInterrupt:
-            logger.info("Bot stopped by user")
         except Exception as e:
-            logger.error(f"Bot crashed: {e}")
-            logger.exception("Full traceback:")  # Add full traceback
+            logger.error(f"Error in bot run loop: {e}")
             raise
 
 if __name__ == "__main__":

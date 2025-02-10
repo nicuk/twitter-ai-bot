@@ -19,7 +19,7 @@ class TwitterAPI:
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
             access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
             bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
-            wait_on_rate_limit=True
+            wait_on_rate_limit=False
         )
         logger.info("Twitter client initialized")
     
