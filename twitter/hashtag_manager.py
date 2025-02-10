@@ -15,7 +15,11 @@ class HashtagManager:
             "#ML",
             "#AIBot",
             "#AIMeme",
-            "#AIxWeb3"
+            "#BNB",
+            "#TON",
+            "#SOL",
+            "#AVAX",
+            "#XRP"
         ]
         
         self.CRYPTO_HASHTAGS = [
@@ -26,8 +30,7 @@ class HashtagManager:
             "#NFTs",
             "#Web3",
             "#Altcoin",
-            "#AltSeason",
-            "#Blockchain"
+            
         ]
         
         self.TRADING_HASHTAGS = [
@@ -39,34 +42,6 @@ class HashtagManager:
             "#AIAgent"
         ]
         
-        self.CHAIN_TOKENS = [
-            "$BTC",
-            "$ETH",
-            "$SOL",
-            "$MATIC",
-            "$ADA",
-            "$DOT",
-            "$AVAX",
-            "$BNB"
-        ]
-
-        self.CHAIN_HASHTAGS = [
-            "#Layer1",
-            "#Layer2",
-            "#CrossChain",
-            "#OnChain",
-            "#Interoperability"
-        ]
-
-        self.WEB3_HASHTAGS = [
-            "#DePIN",
-            "#GameFi",
-            "#SocialFi",
-            "#Web3",
-            "#DeFi",
-            "#NFTs"
-        ]
-
         self.MEME_HASHTAGS = [
             "#Memecoin",
             "#MemeToken",
@@ -76,35 +51,24 @@ class HashtagManager:
             "#PEPE",
             "#SHIB"
         ]
-
+        
     def get_hashtags(self, tweet_type: str) -> Tuple[List[str], int]:
         """Get hashtags and their total character length for tweet type"""
-        # Always select exactly 3 hashtags and 2 token mentions
-        if tweet_type == 'performance':
+        # Always select exactly TWEET_MAX_HASHTAGS hashtags
+        if tweet_type == 'trend':
             tags = (
                 random.sample(self.TRADING_HASHTAGS, 1) +
-                random.sample(self.CHAIN_HASHTAGS, 1) +
-                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, 1) +
-                random.sample(self.CHAIN_TOKENS, 2)  # Add 2 random chain tokens
+                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, TWEET_MAX_HASHTAGS - 1)
             )
-        elif tweet_type == 'success':
+        elif tweet_type == 'volume':
             tags = (
-                random.sample(self.WEB3_HASHTAGS, 1) +
-                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, 2) +
-                random.sample(self.CHAIN_TOKENS, 2)
-            )
-        elif tweet_type == 'accuracy':
-            tags = (
-                random.sample(self.AI_HASHTAGS, 1) +
                 random.sample(self.TRADING_HASHTAGS, 1) +
-                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, 1) +
-                random.sample(self.CHAIN_TOKENS, 2)
+                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, TWEET_MAX_HASHTAGS - 1)
             )
-        else:  # winners
+        else:  # personal
             tags = (
-                random.sample(self.WEB3_HASHTAGS, 1) +
-                random.sample(self.CRYPTO_HASHTAGS + self.MEME_HASHTAGS, 2) +
-                random.sample(self.CHAIN_TOKENS, 2)
+                random.sample(self.AI_HASHTAGS, 2) +
+                random.sample(self.CRYPTO_HASHTAGS, TWEET_MAX_HASHTAGS - 2)
             )
             
         # Calculate total length including spaces

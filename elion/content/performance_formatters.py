@@ -1,24 +1,22 @@
-"""Performance-focused tweet formatters """
+"""Performance-focused tweet formatters"""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List
 import random
 import sys
 import os
-import logging
-from twitter.hashtag_manager import HashtagManager
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Add parent directory to path so we can import elion modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-class BaseFormatter:
+from elion.content.tweet_formatters import TweetFormatters
+
+class BasePerformanceFormatter(TweetFormatters):
     """Base class for performance formatters with common utilities."""
     
     def __init__(self):
         self.MAX_TWEET_LENGTH = 280
         self.MIN_TWEET_LENGTH = 210
-        self.hashtag_manager = HashtagManager()
     
     def _calculate_gain(self, current: float, previous: float) -> float:
         """Calculate percentage gain safely"""
@@ -26,211 +24,313 @@ class BaseFormatter:
             return 0
         return ((current - previous) / previous) * 100
         
-    def _get_top_winners(self, history: Dict, limit: int = 3) -> List[Dict]:
+    def _get_top_winners(self, history: Dict, limit: int = 2) -> List[Dict]:
         """Get top performing tokens"""
-        try:
-            # Get today's tokens
-            now = datetime.now()
-            today = now.date()
-            todays_tokens = {k: v for k, v in history.get('tokens', {}).items() 
-                           if datetime.fromisoformat(v.get('first_mention_date', '')).date() == today}
-            
-            # Sort by gain and get top N
-            sorted_tokens = sorted([(k, v) for k, v in todays_tokens.items()], 
-                                key=lambda x: x[1].get('gain_percentage', 0),
-                                reverse=True)[:limit]
-            
-            # Format token data
-            return [{'symbol': k, 'gain_percentage': v.get('gain_percentage', 0)} 
-                   for k, v in sorted_tokens]
-            
-        except Exception:
-            return []
+        winners = []
+        for symbol, data in history.items():
+            if data.get('first_mention_price', 0) > 0:
+                gain = self._calculate_gain(data.get('current_price', 0), data.get('first_mention_price', 0))
+                winners.append({
+                    'symbol': symbol,
+                    'gain_percentage': gain,
+                    'max_gain_percentage_7d': data.get('max_gain_percentage_7d', 0)
+                })
+        return sorted(winners, key=lambda x: x.get('max_gain_percentage_7d', 0), reverse=True)[:limit]
         
     def optimize_tweet_length(self, tweet: str, data: Dict, format_type: str) -> str:
-        """Optimize tweet length to be between 260-265 characters."""
-        # Get similar tokens with fallback
-        similar_tokens = data.get('similar_tokens', [])
-        if not similar_tokens and format_type != 'performance':
-            similar_tokens = ['BTC', 'ETH', 'SOL']  # Fallback to major coins
-            
-        # Get hashtags from manager
-        hashtags, _ = self.hashtag_manager.get_hashtags(format_type)
+        """Optimize tweet length to be between 210-280 characters.
         
-        # Add format-specific padding with relevant token mentions
-        if len(tweet) < 260:
-            tweet += f"\n\n{' '.join(hashtags)}"
-            if len(tweet) < 260 and similar_tokens:
-                # Use next set of similar tokens if available
-                next_tokens = similar_tokens[3:5] if len(similar_tokens) > 4 else similar_tokens[:2]
-                tweet += f"\n${' $'.join(next_tokens)}"
+        Args:
+            tweet: Base tweet to optimize
+            data: Data dictionary used to generate the tweet
+            format_type: Type of tweet format
+            
+        Returns:
+            Optimized tweet with length between 210-280 characters
+        """
+        # If tweet is already in range, return as is
+        if self.MIN_TWEET_LENGTH <= len(tweet) <= self.MAX_TWEET_LENGTH:
+            return tweet
+            
+        # If tweet is too long, truncate it
+        if len(tweet) > self.MAX_TWEET_LENGTH:
+            return tweet[:self.MAX_TWEET_LENGTH-3] + "..."
+            
+        # If tweet is too short, add relevant insight
+        insights = {
+            'performance_compare': [
+                "\n\n💡 Strong momentum with increasing volume",
+                "\n\n💡 Pattern suggests potential continuation",
+                "\n\n💡 Technical indicators remain bullish",
+                "\n\n💡 Similar setups had positive outcomes"
+            ],
+            'success_rate': [
+                "\n\n💡 Consistent performance across cycles",
+                "\n\n💡 Strategy shows improving accuracy",
+                "\n\n💡 Risk management remains key focus",
+                "\n\n💡 Data-driven approach yields results"
+            ],
+            'prediction_accuracy': [
+                "\n\n💡 Pattern recognition improving",
+                "\n\n💡 Models show high confidence",
+                "\n\n💡 Historical accuracy validates approach",
+                "\n\n💡 Continuous model refinement"
+            ],
+            'winners_recap': [
+                "\n\n💡 Winners show strong fundamentals",
+                "\n\n💡 Volume profile remains healthy",
+                "\n\n💡 Technical setup looks promising",
+                "\n\n💡 Market sentiment stays positive"
+            ]
+        }
+        
+        if format_type in insights:
+            # Get random insight for this type
+            available_insights = insights[format_type]
+            insight = random.choice(available_insights)
+            
+            # Add insight if it fits
+            if len(tweet) + len(insight) <= self.MAX_TWEET_LENGTH:
+                return tweet + insight
                 
         return tweet
 
-class PerformanceCompareFormatter(BaseFormatter):
-    """Shows individual token performance"""
+class PerformanceCompareFormatter(BasePerformanceFormatter):
+    """Formats tweets comparing token performance"""
     
     def format_tweet(self, token_data: Dict) -> str:
-        """Format tweet comparing entry vs current performance"""
-        try:
-            symbol = token_data.get('symbol', 'UNKNOWN')
-            first_price = token_data.get('first_mention_price', 0)
-            current_price = token_data.get('current_price', 0)
-            volume = token_data.get('volume_24h', 0)
-            volume_change = token_data.get('volume_change_24h', 0)
-            gain = token_data.get('gain_percentage', 0)
-            vmc_ratio = token_data.get('volume_mcap_ratio', 0) * 100  # Convert to percentage
-            similar_tokens = token_data.get('similar_tokens', [])  # Get similar tokens
-            
-            tweet = f"""🤖 Performance: ${symbol}
+        """Format a performance comparison tweet"""
+        # Safely calculate percentage changes
+        price_change = ((token_data.get('current_price', 0) - token_data.get('first_mention_price', 0)) / 
+                       token_data.get('first_mention_price', 1) * 100) if token_data.get('first_mention_price', 0) > 0 else 0
+                       
+        volume_change = ((token_data.get('volume_24h', 0) - token_data.get('first_mention_volume_24h', 0)) / 
+                        token_data.get('first_mention_volume_24h', 1) * 100) if token_data.get('first_mention_volume_24h', 0) > 0 else 0
+        
+        # Base tweet
+        tweet = f"""🤖 Performance: ${token_data.get('symbol', 'UNKNOWN')}
 
 💰 Price Action:
-• Entry: ${first_price:.6f}
-• Current: ${current_price:.6f}
-• Change: {gain:+.1f}%
+• Entry: ${token_data.get('first_mention_price', 0):.4f}
+• Current: ${token_data.get('current_price', 0):.4f}
+• Change: {price_change:+.1f}%
 
 📈 Volume:
-• 24h: ${volume:,.0f}
+• 24h: {token_data.get('volume_24h', 0):,.0f}
 • Change: {volume_change:+.1f}%
-• V/MC: {vmc_ratio:.1f}%"""
+• V/MC: {token_data.get('volume_mcap_ratio', 0) * 100:.1f}%"""
 
-            # Add similar tokens if available (increased to 8)
-            if similar_tokens:
-                tweet += f"\n\n👥 Special mentions: {' '.join([f'${t}' for t in similar_tokens[:8]])}"
-
-            return self.optimize_tweet_length(tweet, token_data, 'performance')
+        # Add similar V/MC tokens if available
+        similar_tokens = token_data.get('similar_vmc_tokens', [])
+        if similar_tokens:
+            # Sort by closest V/MC ratio to our token
+            target_vmc = token_data.get('volume_mcap_ratio', 0)
+            similar_tokens.sort(key=lambda x: abs(x['volume_mcap_ratio'] - target_vmc))
             
-        except Exception as e:
-            logger.error(f"Error formatting performance compare tweet: {e}")
-            return ""
+            # Add tokens while staying under limit
+            MAX_LENGTH = 265  # 280 - 15 buffer
+            token_tags = []
+            for token in similar_tokens:
+                next_tag = f"${token['symbol']}"
+                if len(tweet) + len(" " + next_tag) <= MAX_LENGTH:
+                    token_tags.append(next_tag)
+                else:
+                    break
+            
+            if token_tags:
+                tweet += "\n\n" + " ".join(token_tags)
 
-class SuccessRateFormatter(BaseFormatter):
-    """Shows overall success rates"""
+        return tweet
+
+class SuccessRateFormatter(BasePerformanceFormatter):
+    """Shows overall performance metrics."""
     
-    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
-        """Format tweet showing success rates"""
-        try:
-            # Get stats
-            stats = history_data.get('stats', {})
-            
-            # Get success rates and gains
-            success_rate = stats.get('success_rate_24h', 0)
-            avg_gain = stats.get('avg_gain_24h', 0)
-            best_gain = stats.get('best_gain_24h', 0)
-            
-            # Get top performers (increased to 5)
-            performers = self._get_top_winners(history_data, 5)
-            if not performers:
-                return ""
-                
-            tweet = """📊 Daily Performance Update
+    def _get_rank_emoji(self, rank: int) -> str:
+        """Get emoji for rank"""
+        if rank == 1:
+            return "1.💎"  # Diamond for 1st
+        elif rank == 2:
+            return "2.👑"  # Crown for 2nd
+        elif rank == 3:
+            return "3.⭐"  # Star for 3rd
+        elif rank <= 5:
+            return f"{rank}.🔥"  # Fire for 4th-5th
+        else:
+            return f"{rank}.⚡"  # Lightning for others
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format a success rate tweet"""
+        tweet = f"""📊 Daily Performance Update
 
 🏆 Top Performers:"""
+        
+        # Add ranked performers
+        MAX_LENGTH = 260  # 280 - 20 buffer
+        top_performers = token_data.get('top_performers', [])
+        if top_performers:
+            # Sort by gain descending
+            top_performers.sort(key=lambda x: x['gain'], reverse=True)
+            
+            # Add performers while staying under limit
+            for i, token in enumerate(top_performers, 1):
+                rank_emoji = self._get_rank_emoji(i)
+                next_line = f"\n{rank_emoji} ${token['symbol']} (+{token['gain']:.1f}%)"
+                if len(tweet) + len(next_line) <= MAX_LENGTH:
+                    tweet += next_line
+                else:
+                    break
 
-            # Add top performers with special emojis
-            emojis = ["1.💎", "2.👑", "3.⭐", "4.💫", "5.✨"]
-            for i, token in enumerate(performers):
-                symbol = token.get('symbol', '')
-                gain = token.get('gain_percentage', 0)
-                tweet += f"\n{emojis[i]} ${symbol} (+{gain:.1f}%)"
-                
-            tweet += f"""
+        # Add daily stats
+        tweet += f"""
 
 📈 Stats Today:
-• Success Rate: {success_rate:.0f}%
-• Avg Gain: +{avg_gain:.1f}%
-• Best: +{best_gain:.1f}%"""
+• Success Rate: {token_data.get('success_rate', 0)}%
+• Avg Gain: +{token_data.get('avg_gain', 0)}%
+• Best: +{token_data.get('best_gain', 0):.1f}%"""
 
-            return self.optimize_tweet_length(tweet, {'similar_tokens': [p.get('symbol') for p in performers]}, 'success')
-            
-        except Exception as e:
-            logger.error(f"Error formatting success rate tweet: {e}")
-            return ""
+        return tweet
 
-class PredictionAccuracyFormatter(BaseFormatter):
-    """Shows prediction accuracy stats"""
+class PredictionAccuracyFormatter(BasePerformanceFormatter):
+    """Shows prediction accuracy with pattern matches."""
     
-    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
-        """Format tweet showing prediction accuracy"""
+    def _is_positive_success(self, pred: Dict) -> bool:
+        """Check if prediction was successful and both predicted/actual were positive"""
         try:
-            # Get stats
-            stats = history_data.get('stats', {})
+            # Remove '%' and '+' signs and convert to float
+            predicted = float(pred['predicted'].replace('%', '').replace('+', ''))
+            actual = float(pred['actual'].replace('%', '').replace('+', ''))
+            # Only count as success if both predicted and actual were positive
+            return pred['success'] and predicted > 0 and actual > 0
+        except (ValueError, KeyError):
+            return False
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format a prediction accuracy tweet"""
+        # Get successful predictions with positive gains
+        successful_predictions = [
+            pred for pred in token_data.get('recent_predictions', [])
+            if self._is_positive_success(pred)
+        ]
+        
+        # If less than 2 successful predictions, return None
+        if len(successful_predictions) < 2:
+            return None
             
-            # Calculate success rates (default to 0 if missing)
-            success_rate_24h = stats.get('success_rate_24h', 0)
-            success_rate_7d = stats.get('success_rate_7d', 0)
-            total_predictions = stats.get('total_predictions', 0)
-            
-            # Get recent hits (show all 6)
-            recent_hits = stats.get('recent_hits', [])[:6]
-            
-            tweet = f"""🎯 Prediction Accuracy Update
+        tweet = f"""🎯 Prediction Accuracy Update
 
 📊 Performance:
-• 24h: {success_rate_24h:.0f}%
-• 7d: {success_rate_7d:.0f}%
-• Total: {total_predictions} predictions
+• 24h: {token_data.get('accuracy_24h', 0)}%
+• 7d: {token_data.get('accuracy_7d', 0)}%
+• Total: {token_data.get('total_predictions', 0)} predictions"""
 
-✅ Recent Hits:"""
+        # Add up to 6 successful predictions
+        if successful_predictions:
+            tweet += "\n\n✅ Recent Hits:"
+            for pred in successful_predictions[:6]:  # Limit to 6 successful predictions
+                next_line = f"\n• ${pred['symbol']}: {pred['predicted']} → {pred['actual']}"
+                if len(tweet) + len(next_line) <= 260:  # 280 - 20 buffer
+                    tweet += next_line
+                else:
+                    break
 
-            # Show all 6 hits
-            if recent_hits:
-                for hit in recent_hits:
-                    symbol = hit.get('symbol', '')
-                    target = hit.get('target', 0)
-                    actual = hit.get('actual', 0)
-                    tweet += f"\n• ${symbol}: +{target:.1f}% → +{actual:.1f}%"
+        return tweet
 
-            return self.optimize_tweet_length(tweet, {'similar_tokens': [h.get('symbol') for h in recent_hits]}, 'accuracy')
-            
-        except Exception as e:
-            logger.error(f"Error formatting prediction accuracy tweet: {e}")
-            return ""
-
-class WinnersRecapFormatter(BaseFormatter):
-    """Shows top performing tokens from the past 7 days"""
+class WinnersRecapFormatter(BasePerformanceFormatter):
+    """Shows weekly winners with key stats."""
     
-    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
-        """Format tweet showing 7-day top performers"""
-        try:
-            # Get today's tokens
-            now = datetime.now()
-            today = now.date()
-            todays_tokens = {k: v for k, v in history_data.get('tokens', {}).items() 
-                           if datetime.fromisoformat(v.get('first_mention_date', '')).date() == today}
+    def format_tweet(self, history_data: Dict) -> str:
+        """Format winners recap tweet"""
+        winners = self._get_top_winners(history_data, limit=3)  # Changed to get top 3
+        if not winners:
+            return None
             
-            if not todays_tokens:
-                return ""
-            
-            # Get top performers (increased to 10)
-            performers = sorted([(k, v.get('max_gain_percentage_7d', 0)) 
-                               for k, v in todays_tokens.items()],
-                              key=lambda x: x[1], reverse=True)[:10]  # Get top 10
-            
-            # Count profitable tokens
-            total_tokens = len(todays_tokens)
-            profitable = sum(1 for v in todays_tokens.values() if v.get('max_gain_percentage_7d', 0) > 0)
-            
-            # Format tweet
-            tweet = "🏆 Weekly Hall of Fame\n"
-            
-            # Add top 3 with medals
-            for i, (symbol, gain) in enumerate(performers[:3]):
-                medal = ["🥇", "🥈", "🥉"][i]
-                tweet += f"\n{medal} ${symbol}: +{gain:.1f}%"
-            
-            # Add remaining with numbers
-            numbers = ["4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-            for i, (symbol, gain) in enumerate(performers[3:]):
-                tweet += f"\n{numbers[i]} ${symbol}: +{gain:.1f}%"
-            
-            tweet += f"\n📊 Overall: {profitable}/{total_tokens} profitable"
-            
-            return self.optimize_tweet_length(tweet, {'similar_tokens': [p[0] for p in performers]}, 'winners')
-            
-        except Exception as e:
-            logger.error(f"Error formatting winners recap tweet: {e}")
-            return ""
+        tweet = f"""🏆 Weekly Winners Report
+
+1. ${winners[0]['symbol']}
+• Gain: +{winners[0].get('gain_percentage', 0):.1f}%
+• Peak: +{winners[0].get('max_gain_percentage_7d', 0):.1f}%"""
+
+        if len(winners) > 1:
+            tweet += f"""
+
+2. ${winners[1]['symbol']}
+• Gain: +{winners[1].get('gain_percentage', 0):.1f}%
+• Peak: +{winners[1].get('max_gain_percentage_7d', 0):.1f}%"""
+
+        if len(winners) > 2:  # Added third winner
+            tweet += f"""
+
+3. ${winners[2]['symbol']}
+• Gain: +{winners[2].get('gain_percentage', 0):.1f}%
+• Peak: +{winners[2].get('max_gain_percentage_7d', 0):.1f}%"""
+
+        return self.optimize_tweet_length(tweet, {'history': history_data}, 'winners_recap')
+
+class FirstHourGainsFormatter(BasePerformanceFormatter):
+    """Format first hour gains tweet"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet with first hour performance data"""
+        symbol = token_data.get('symbol', '')
+        entry_price = token_data.get('entry_price', 0)
+        current_price = token_data.get('current_price', 0)
+        peak_price = token_data.get('peak_price', 0)
+        volume_change = token_data.get('volume_change', 0)
+        similar_token = token_data.get('similar_token', '')
+        similar_token_gain = token_data.get('similar_token_gain', 0)
+        next_key_level = token_data.get('next_key_level', 0)
+        
+        current_gain = ((current_price - entry_price) / entry_price) * 100
+        peak_gain = ((peak_price - entry_price) / entry_price) * 100
+        
+        tweet = (
+            f"🔄 First Hour Analysis: ${symbol}\n\n"
+            f"📊 Performance:\n"
+            f"• Entry: ${entry_price:.3f} → Current: ${current_price:.3f} ({current_gain:+.1f}%)\n"
+            f"• Peak: ${peak_price:.3f} ({peak_gain:+.1f}%)\n"
+            f"• Volume: {volume_change:+d}% surge\n\n"
+            f"🔍 Similar to ${similar_token}'s {similar_token_gain:+d}% run\n"
+            f"🎯 Key level to watch: ${next_key_level:.3f}"
+        )
+        
+        return tweet
+
+class BreakoutValidationFormatter(BasePerformanceFormatter):
+    """Format breakout validation tweet"""
+    
+    def format_tweet(self, token_data: Dict) -> str:
+        """Format tweet with breakout validation data"""
+        symbol = token_data.get('symbol', '')
+        resistance = token_data.get('resistance_level', 0)
+        volume_24h = token_data.get('volume_24h', 0)
+        volume_change = token_data.get('volume_change', 0)
+        vmc_ratio = token_data.get('vmc_ratio', 0)
+        similar_token = token_data.get('similar_token', '')
+        similar_gain = token_data.get('similar_token_gain', 0)
+        next_targets = token_data.get('next_targets', [])
+        pattern_success = token_data.get('pattern_success_rate', 0)
+        
+        # Format volume in millions
+        volume_m = volume_24h / 1_000_000
+        
+        # Format next targets
+        targets_str = " → ".join([f"${t:.3f}" for t in next_targets])
+        
+        # Get V/MC ratio category
+        vmc_category = "High" if vmc_ratio > 3 else "Medium" if vmc_ratio > 1 else "Low"
+        
+        tweet = (
+            f"🚨 Breakout Alert: ${symbol}\n\n"
+            f"💰 Price Action:\n"
+            f"• Breaking ${resistance:.3f} resistance\n"
+            f"• Volume: ${volume_m:.0f}M ({volume_change:+d}% 24h)\n"
+            f"• V/MC Ratio: {vmc_ratio:.2f} ({vmc_category})\n\n"
+            f"📈 Pattern matches ${similar_token}'s {similar_gain:+d}% move\n"
+            f"🎯 Next targets: {targets_str}\n\n"
+            f"⚡ {pattern_success}% of similar setups were profitable"
+        )
+        
+        return tweet
 
 def get_mock_data():
     """Get mock data for testing"""
@@ -242,8 +342,12 @@ def get_mock_data():
         'volume_24h': 1500000,
         'volume_mcap_ratio': 0.75,
         'first_mention_date': '2024-01-01',
-        'similar_tokens': [
-            'TKN1', 'TKN2', 'TKN3', 'TKN4', 'TKN5'
+        'similar_vmc_tokens': [
+            {'symbol': 'TKN1', 'volume_mcap_ratio': 0.72, 'price_change_24h': 15.5},
+            {'symbol': 'TKN2', 'volume_mcap_ratio': 0.78, 'price_change_24h': 8.2},
+            {'symbol': 'TKN3', 'volume_mcap_ratio': 0.71, 'price_change_24h': 12.3},
+            {'symbol': 'TKN4', 'volume_mcap_ratio': 0.76, 'price_change_24h': -5.1},
+            {'symbol': 'TKN5', 'volume_mcap_ratio': 0.79, 'price_change_24h': 3.2}
         ]
     }
 

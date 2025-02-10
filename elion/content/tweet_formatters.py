@@ -1115,11 +1115,6 @@ class TweetFormatters:
         self.last_used[template_type] = variant_idx
         return templates[variant_idx]
 
-    def format_symbol(self, symbol: str) -> str:
-        """Ensure consistent $ formatting for token symbols"""
-        # Remove any existing $ symbols and add exactly one
-        return f"${symbol.strip('$')}"
-
     def format_volume(self, volume: float) -> str:
         """Format volume with K/M/B suffix
         
@@ -1188,7 +1183,7 @@ class FirstHourGainsFormatter:
     
     def format_tweet(self, token_data: Dict) -> str:
         """Format tweet showing first hour performance"""
-        symbol = self.format_symbol(token_data['symbol'])
+        symbol = token_data['symbol']
         current_price = token_data['current_price']
         first_price = token_data['first_mention_price']
         first_volume = token_data['first_mention_volume_24h']
@@ -1198,7 +1193,7 @@ class FirstHourGainsFormatter:
         price_gain = ((current_price - first_price) / first_price * 100) 
         volume_change = ((current_volume - first_volume) / first_volume * 100)
         
-        tweet = f"🔄 First Hour Update {symbol}\n\n"
+        tweet = f"🔄 First Hour Update ${symbol}\n\n"
         tweet += f"📈 Price: ${first_price:.4f} ➡️ ${current_price:.4f}\n"
         tweet += f"💰 Gain: {price_gain:+.1f}%\n"
         tweet += f"📊 Volume: {volume_change:+.1f}%\n\n"
@@ -1215,7 +1210,7 @@ class BreakoutValidationFormatter:
     
     def format_tweet(self, token_data: Dict) -> str:
         """Format tweet validating breakout signals"""
-        symbol = self.format_symbol(token_data['symbol'])
+        symbol = token_data['symbol']
         current_price = token_data['current_price']
         current_mcap = token_data['current_mcap']
         current_volume = token_data['current_volume']
@@ -1223,7 +1218,7 @@ class BreakoutValidationFormatter:
         # Calculate key metrics
         volume_mcap_ratio = (current_volume / current_mcap * 100) if current_mcap > 0 else 0
         
-        tweet = f"🚨 Breakout Validation {symbol}\n\n"
+        tweet = f"🚨 Breakout Validation ${symbol}\n\n"
         tweet += f"💰 Price: ${current_price:.4f}\n"
         tweet += f"📊 24h Vol: ${current_volume/1e6:.1f}M\n"
         tweet += f"📈 V/MC: {volume_mcap_ratio:.1f}%\n\n"
@@ -1281,22 +1276,18 @@ class SuccessRateFormatter:
         week_ago = datetime.now() - timedelta(days=7)
         
         for symbol, data in history_data.items():
-            # Only count tokens we've actually posted about
-            if not data.get('posted', False):
-                continue
-                
             first_mention = datetime.fromisoformat(data['first_mention_date'])
             gain = data.get('max_gain_percentage_7d', 0)
             
             # Weekly stats
             if first_mention > week_ago:
                 week_total += 1
-                if gain > 5:  # Lower threshold to 5% - more realistic for short term
+                if gain > 20:
                     week_successful += 1
                     
             # All-time stats
             all_total += 1
-            if gain > 5:  # Same 5% threshold for consistency
+            if gain > 20:
                 all_successful += 1
                 
         week_rate = (week_successful / week_total * 100) if week_total > 0 else 0
@@ -1317,7 +1308,7 @@ class PerformanceCompareFormatter:
     
     def format_tweet(self, token_data: Dict) -> str:
         """Format tweet comparing entry vs current performance"""
-        symbol = self.format_symbol(token_data['symbol'])
+        symbol = token_data['symbol']
         current_price = token_data['current_price']
         first_price = token_data['first_mention_price']
         current_volume = token_data['current_volume']
@@ -1326,7 +1317,7 @@ class PerformanceCompareFormatter:
         price_change = ((current_price - first_price) / first_price * 100)
         volume_change = ((current_volume - first_volume) / first_volume * 100)
         
-        tweet = f"📊 Performance Update {symbol}\n\n"
+        tweet = f"📊 Performance Update ${symbol}\n\n"
         tweet += f"Entry: ${first_price:.4f}\n"
         tweet += f"Current: ${current_price:.4f}\n"
         tweet += f"Change: {price_change:+.1f}%\n\n"

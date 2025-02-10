@@ -102,45 +102,43 @@ def is_bot_running():
             logger.warning("REDIS_URL not set, skipping lock check")
             return False
             
+        logger.info("Checking Redis lock...")
         redis_client = redis.from_url(redis_url)
+        
+        # Generate unique instance ID if not exists
         instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
         
-        # Check if lock exists and get TTL
-        current_holder = redis_client.get('twitter_bot_lock')
-        if current_holder:
-            ttl = redis_client.ttl('twitter_bot_lock')
-            logger.info(f"Lock exists with TTL: {ttl}s, held by Instance: {current_holder}")
-            
-            if current_holder.decode() == instance_id:
-                # We hold the lock, refresh TTL
-                redis_client.expire('twitter_bot_lock', 300)
-                return False
-                
-            if ttl > 0:
-                # Another instance is running
-                logger.error(f"Another bot instance ({current_holder.decode()}) is already running (TTL: {ttl}s). This instance ({instance_id}) will exit.")
-                sys.exit(0)  # Exit cleanly, Railway will restart if needed
-                
-            # Lock exists but expired
-            redis_client.delete('twitter_bot_lock')
-            
-        # Try to acquire lock
+        # First try to get the lock
         lock = redis_client.setnx('twitter_bot_lock', instance_id)
         if lock:
-            redis_client.expire('twitter_bot_lock', 300)  # 5 minute TTL
-            logger.info(f"Instance {instance_id} acquired lock")
+            # We got the lock
+            logger.info(f"Got Redis lock (Instance: {instance_id})")
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
             return False
             
-        # Double check in case of race condition
+        # If we didn't get the lock, check if it's stale
+        ttl = redis_client.ttl('twitter_bot_lock')
         current_holder = redis_client.get('twitter_bot_lock')
-        if current_holder and current_holder.decode() != instance_id:
-            logger.error(f"Race condition: Lock taken by {current_holder.decode()}. This instance ({instance_id}) will exit.")
-            sys.exit(0)
+        logger.info(f"Lock exists with TTL: {ttl}s, held by Instance: {current_holder}")
+        
+        if ttl == -2:  # Key doesn't exist
+            logger.info("Lock doesn't exist, clearing")
+            redis_client.delete('twitter_bot_lock')
+            return False
             
-        return False
+        if ttl == -1:  # No expiry set
+            logger.info("Lock has no expiry, clearing stale lock")
+            redis_client.delete('twitter_bot_lock')
+            return False
+            
+        # Lock exists and has valid TTL
+        sleep_time = 60  # 1 minute
+        logger.warning(f"Redis Lock: Another bot instance ({current_holder}) is running (TTL: {ttl}s). This instance ({instance_id}) will sleep for {sleep_time} seconds to avoid conflicts.")
+        time.sleep(sleep_time)
+        return True
             
     except Exception as e:
-        logger.error(f"Error checking bot lock: {e}")
+        logger.error(f"Error checking Redis lock: {e}")
         return False
 
 from custom_llm import GeminiComponent
@@ -241,35 +239,37 @@ class AIGamingBot:
         schedule.every().day.at("18:00").do(self.post_format_tweet)  # Early US
         schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US
 
-    def _post_tweet(self, tweet, is_fallback=False):
-        """Post a tweet with error handling"""
+    def _post_tweet(self, tweet):
+        """Post a tweet with error handling and backup content"""
         try:
-            # Try to post tweet
+            # Try to post main tweet
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info(f"Posted tweet: {tweet}")
                 return True
-            return False
                 
         except Exception as e:
-            logger.error(f"Error posting tweet: {e}")
-            if not is_fallback:
-                return self._post_fallback_tweet()
-            return False
-
-    def _post_fallback_tweet(self):
-        """Post a fallback tweet when main tweet generation fails"""
-        try:
-            logger.info("Attempting to post fallback tweet...")
-            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
-            if backup_tweet:
-                return self._post_tweet(backup_tweet, is_fallback=True)
-            else:
-                logger.error("No backup tweet available")
+            # If it's a duplicate content error, don't try backup tweet
+            if "duplicate content" in str(e).lower():
+                logger.warning("Duplicate tweet detected, skipping backup attempt")
                 return False
-        except Exception as e:
-            logger.error(f"Error posting fallback tweet: {e}")
-            return False
+                
+            logger.error(f"Error posting main tweet: {e}")
+            
+            # Only try backup tweet for non-duplicate errors
+            try:
+                logger.info("Attempting to post backup tweet...")
+                backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+                if backup_tweet:
+                    response = self.api.create_tweet(backup_tweet)
+                    if response:
+                        logger.info(f"Posted backup tweet: {backup_tweet}")
+                        return True
+                    
+            except Exception as e:
+                logger.error(f"Error posting backup tweet: {e}")
+            
+        return False
 
     def post_format_tweet(self):
         """Post tweet using format based on current hour"""
@@ -315,20 +315,18 @@ class AIGamingBot:
             logger.error(f"Error posting AI mystique tweet: {e}")
             
     def post_performance(self):
-        """Post performance update for latest token"""
+        """Post performance update, alternating between token and portfolio performance"""
         try:
-            # Get token performance data from token monitor
-            token_data = self.elion.token_monitor.get_latest_token()
-            if not token_data:
-                logger.warning("No token data available for performance update")
-                return False
-                
-            # Format performance tweet
-            tweet = self.elion.format_tweet('performance_compare', {'token': token_data}, variant='A')
+            # Get token performance data
+            token_data = self.elion.token_history.get_recent_performance()
             
-            if not tweet:
-                logger.warning("Failed to generate performance tweet")
-                return False
+            # Alternate between token and portfolio updates
+            if random.random() < 0.5:  # 50% chance for each type
+                # Token performance update
+                tweet = self.elion.format_tweet('performance_compare', token_data, variant='A')
+            else:
+                # Portfolio performance update - use token data as fallback
+                tweet = self.elion.format_tweet('performance_compare', token_data, variant='B')
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()
@@ -382,8 +380,10 @@ class AIGamingBot:
                 logger.warning("Failed to format trend tweet")
                 return self._post_fallback_tweet()
                 
-            # Post tweet
+            # Post tweet and track tokens
             self._post_tweet(tweet)
+            # Track tokens using TokenMonitor
+            self.elion.token_monitor.run_analysis()
                 
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
@@ -393,8 +393,9 @@ class AIGamingBot:
     def post_volume(self):
         """Post volume analysis tweet"""
         try:
-            # Get volume data
+            # Get volume data from strategy
             volume_data = self.elion.volume_strategy.analyze()
+            
             if not volume_data:
                 logger.warning("No volume data available")
                 return self._post_fallback_tweet()
@@ -416,6 +417,9 @@ class AIGamingBot:
                 logger.warning("No valid tokens after filtering")
                 return self._post_fallback_tweet()
             
+            # Format volume tweet using filtered data
+            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            
             # Get the highest V/MC ratio token from spikes and anomalies
             all_tokens = []
             if volume_data.get('spikes'):
@@ -430,8 +434,7 @@ class AIGamingBot:
             # Get token with highest score
             score, token = max(all_tokens, key=lambda x: x[0])
             
-            # Format volume tweet using filtered data
-            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            # Format tweet
             tweet = self.elion.volume_strategy.format_twitter_output(
                 volume_data.get('spikes', []),
                 volume_data.get('anomalies', []),
@@ -442,16 +445,29 @@ class AIGamingBot:
                 logger.warning("Failed to format volume tweet")
                 return self._post_fallback_tweet()
                 
+            # Post tweet and track tokens
+            self._post_tweet(tweet)
             # Track tokens using TokenMonitor
             self.elion.token_monitor.run_analysis()
-            
-            # Post tweet
-            self._post_tweet(tweet)
                 
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
             logger.exception("Full traceback:")  # Add full traceback for debugging
             return self._post_fallback_tweet()
+
+    def _post_fallback_tweet(self):
+        """Post a fallback tweet when main tweet generation fails"""
+        try:
+            logger.info("Attempting to post fallback tweet...")
+            backup_tweet = self.elion.tweet_formatters.get_backup_tweet()
+            if backup_tweet:
+                return self._post_tweet(backup_tweet)
+            else:
+                logger.error("No backup tweet available")
+                return False
+        except Exception as e:
+            logger.error(f"Error posting fallback tweet: {e}")
+            return False
 
     def is_valid_token(self, symbol: str) -> bool:
         """Check if token should be included in analysis"""
@@ -525,43 +541,19 @@ class AIGamingBot:
                     else:
                         logger.info(f"{tweet_type}: {mins_to_next}m")
             
+            # Run pending tasks immediately
+            schedule.run_pending()
+            
             # Main loop
             last_log_time = datetime.now()
             last_health_check = datetime.now()
-            last_lock_refresh = datetime.now()
             
             logger.info("\n=== Bot Running ===")
             logger.info("Monitoring for scheduled tasks...")
             
             while True:
+                schedule.run_pending()
                 now = datetime.now()
-                
-                # Only run jobs that are due in the current minute
-                for job in schedule.get_jobs():
-                    next_run = job.next_run
-                    if next_run:
-                        # Only run if the job is due in the current minute
-                        time_diff = (next_run - now).total_seconds()
-                        if 0 <= time_diff <= 60:  # Due within the next minute
-                            job.run()
-                            job._schedule_next_run()
-                
-                # Refresh Redis lock (every minute)
-                if REDIS_AVAILABLE and (now - last_lock_refresh).total_seconds() >= 60:
-                    try:
-                        redis_url = os.getenv('REDIS_URL')
-                        if redis_url:
-                            redis_client = redis.from_url(redis_url)
-                            instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
-                            current_holder = redis_client.get('twitter_bot_lock')
-                            if current_holder and current_holder.decode() == instance_id:
-                                redis_client.expire('twitter_bot_lock', 300)  # Refresh 5-minute expiry
-                            else:
-                                logger.error(f"Redis lock lost! Current holder: {current_holder.decode() if current_holder else 'None'}")
-                                return  # Exit if we lost the lock
-                    except Exception as e:
-                        logger.error(f"Error refreshing Redis lock: {e}")
-                    last_lock_refresh = now
                 
                 # Log next scheduled tweet (every minute)
                 if (now - last_log_time).total_seconds() >= 60:
@@ -603,21 +595,13 @@ class AIGamingBot:
                         if redis_url:
                             redis_client = redis.from_url(redis_url)
                             redis_client.ping()
-                            # Refresh lock
-                            instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
-                            current_holder = redis_client.get('twitter_bot_lock')
-                            if current_holder and current_holder.decode() == instance_id:
-                                redis_client.expire('twitter_bot_lock', 300)  # Refresh 5-minute expiry
-                                logger.info(f"✓ Redis Lock: Refreshed for instance {instance_id}")
-                            else:
-                                logger.error(f"Redis lock lost! Current holder: {current_holder.decode() if current_holder else 'None'}")
-                                return  # Exit if we lost the lock
                             logger.info("✓ Redis: Connected")
                         
                         # Check scheduled jobs
                         if len(schedule.get_jobs()) > 0:
                             logger.info("✓ Scheduler: Active")
-                    
+                            
+                        logger.info("All systems operational")
                     except Exception as e:
                         logger.error(f"Health check failed: {e}")
                     

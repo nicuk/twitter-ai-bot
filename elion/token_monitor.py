@@ -92,23 +92,3 @@ class TokenMonitor:
             'lowest_price': data.get('lowest_price'),
             'highest_volume': data.get('highest_volume')
         }
-
-    def get_latest_token(self) -> Optional[Dict]:
-        """Get the most recently updated token's data"""
-        if not self.tracked_tokens:
-            return None
-            
-        # Find most recently seen token
-        latest_token = max(self.tracked_tokens.items(), key=lambda x: x[1]['last_seen'])
-        symbol, data = latest_token
-        
-        # Format data for performance compare
-        if data.get('first_price') and data.get('last_price'):
-            return {
-                'symbol': symbol,
-                'current_price': data['last_price'],
-                'first_mention_price': data['first_price'],
-                'current_volume': data['highest_volume'],  # Use highest volume as current
-                'first_mention_volume_24h': data['volume_history'][0][1] if data['volume_history'] else 0
-            }
-        return None
