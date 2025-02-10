@@ -55,10 +55,15 @@ class TwitterAPI:
             logger.info(f"Attempting to post tweet: {text[:50]}...")
             logger.info(f"API calls in last 15min: {self.api_calls['create_tweet']['count']}")
             
+            # Add more detailed logging for the API call
+            logger.info("Making Twitter API call...")
             response = self.api.create_tweet(
                 text=text,
                 in_reply_to_tweet_id=reply_to_id
             )
+            logger.info(f"Raw API response: {response}")
+            if hasattr(response, '__dict__'):
+                logger.info(f"Response attributes: {response.__dict__}")
             
             # Skip verification since we've hit GET limits
             if response:
