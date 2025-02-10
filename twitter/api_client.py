@@ -67,8 +67,15 @@ class TwitterAPI:
                 return None
         except tweepy.errors.TooManyRequests as e:
             self._log_rate_limit('create_tweet')
-            logger.error(f"Rate limit exceeded for create_tweet. Full error: {str(e)}")
-            logger.error(f"Rate limit headers: {e.response.headers if hasattr(e, 'response') else 'No headers'}")
+            logger.error(f"=== TWITTER API ERROR DETAILS ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            logger.error(f"Full error object: {repr(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response headers: {e.response.headers}")
+                logger.error(f"Response text: {e.response.text}")
+            logger.error("=== END ERROR DETAILS ===")
             # Don't sleep, just raise the error
             raise
         except Exception as e:

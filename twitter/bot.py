@@ -249,7 +249,13 @@ class AIGamingBot:
                 return True
                 
         except tweepy.errors.TooManyRequests as e:
-            logger.error("Rate limit hit, will retry in 15 minutes")
+            logger.error("=== BOT ERROR HANDLING ===")
+            logger.error(f"Caught error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            logger.error(f"Is fallback tweet: {is_fallback}")
+            logger.error(f"Tweet content: {tweet[:100]}...")  # First 100 chars
+            logger.error("=== END BOT ERROR ===")
+            logger.warning("Rate limit hit, will retry in 15 minutes")
             # Sleep for 15 minutes and 1 second to ensure rate limit window has passed
             time.sleep(901)
             # Try again after sleeping
