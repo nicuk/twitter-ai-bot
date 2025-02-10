@@ -393,10 +393,8 @@ class AIGamingBot:
                 logger.warning("Failed to format trend tweet")
                 return self._post_fallback_tweet()
                 
-            # Post tweet and track tokens
+            # Post tweet
             self._post_tweet(tweet)
-            # Track tokens using TokenMonitor
-            self.elion.token_monitor.run_analysis()
                 
         except Exception as e:
             logger.error(f"Error posting trend tweet: {e}")
@@ -430,9 +428,6 @@ class AIGamingBot:
                 logger.warning("No valid tokens after filtering")
                 return self._post_fallback_tweet()
             
-            # Format volume tweet using filtered data
-            history = self.elion.token_monitor.history_tracker.get_all_token_history()
-            
             # Get the highest V/MC ratio token from spikes and anomalies
             all_tokens = []
             if volume_data.get('spikes'):
@@ -450,18 +445,15 @@ class AIGamingBot:
             # Format tweet
             tweet = self.elion.volume_strategy.format_twitter_output(
                 volume_data.get('spikes', []),
-                volume_data.get('anomalies', []),
-                history=history  # Pass history data to the formatter
+                volume_data.get('anomalies', [])
             )
             
             if not tweet:
                 logger.warning("Failed to format volume tweet")
                 return self._post_fallback_tweet()
                 
-            # Post tweet and track tokens
+            # Post tweet
             self._post_tweet(tweet)
-            # Track tokens using TokenMonitor
-            self.elion.token_monitor.run_analysis()
                 
         except Exception as e:
             logger.error(f"Error posting volume tweet: {e}")
