@@ -74,18 +74,9 @@ class TwitterAPI:
                 return None
         except tweepy.errors.TooManyRequests as e:
             self._log_rate_limit('create_tweet')
-            logger.error("\n=== TWITTER API ERROR DETAILS ===")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error message: {str(e)}")
-            logger.error(f"Full error object: {repr(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response headers: {e.response.headers}")
-                logger.error(f"Response text: {e.response.text}")
-            logger.error("=== END ERROR DETAILS ===\n")
-            
-            logger.warning("Note: Got rate limit despite wait_on_rate_limit=True")
-            raise  # Let bot.py handle the retry
+            logger.info("Letting Tweepy handle rate limit waiting...")
+            # Don't raise, let Tweepy retry with wait_on_rate_limit=True
+            return None
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")
             return None
@@ -107,8 +98,9 @@ class TwitterAPI:
                 return None
         except tweepy.errors.TooManyRequests as e:
             self._log_rate_limit('create_tweet')
-            logger.error(f"Rate limit exceeded for create_tweet_async: {e}")
-            raise
+            logger.info("Letting Tweepy handle rate limit waiting...")
+            # Don't raise, let Tweepy retry with wait_on_rate_limit=True
+            return None
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")
             return None
