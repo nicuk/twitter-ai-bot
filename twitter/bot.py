@@ -249,45 +249,13 @@ class AIGamingBot:
             if response:
                 logger.info(f"Posted tweet: {tweet}")
                 return True
+            return False
                 
-        except tweepy.errors.TooManyRequests as e:
-            logger.error("\n=== BOT ERROR HANDLING ===")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error message: {str(e)}")
-            logger.error(f"Error repr: {repr(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response text: {e.response.text}")
-                logger.error(f"Response headers: {e.response.headers}")
-            logger.error(f"Is fallback tweet: {is_fallback}")
-            logger.error(f"Tweet content: {tweet[:100]}...")
-            logger.error("=== END BOT ERROR ===\n")
-            
-            logger.warning("Rate limit hit, will retry in 15 minutes")
-            # Sleep for 15 minutes and 1 second to ensure rate limit window has passed
-            time.sleep(901)
-            # Try again after sleeping
-            return self._post_tweet(tweet, is_fallback)
-            
         except Exception as e:
-            logger.error("\n=== TWEET ERROR ===")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error message: {str(e)}")
-            logger.error(f"Error repr: {repr(e)}")
-            logger.error(f"Is fallback tweet: {is_fallback}")
-            logger.error(f"Tweet content: {tweet[:100]}...")
-            logger.error("=== END ERROR ===\n")
-            
-            # If it's a duplicate content error, don't retry
-            if "duplicate content" in str(e).lower():
-                logger.warning("Duplicate tweet detected")
-                return False
-                
-            # Only try fallback if this isn't already a fallback tweet
+            logger.error(f"Error posting tweet: {e}")
             if not is_fallback:
                 return self._post_fallback_tweet()
-            
-        return False
+            return False
 
     def _post_fallback_tweet(self):
         """Post a fallback tweet when main tweet generation fails"""

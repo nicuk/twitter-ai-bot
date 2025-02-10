@@ -74,6 +74,20 @@ class TwitterAPI:
                 return None
         except tweepy.errors.TooManyRequests as e:
             self._log_rate_limit('create_tweet')
+            logger.error("\n=== RATE LIMIT ERROR ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            
+            # Log rate limit details from response headers
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Rate limit headers:")
+                for header, value in e.response.headers.items():
+                    if 'rate' in header.lower() or 'limit' in header.lower():
+                        logger.error(f"{header}: {value}")
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
+            
+            logger.error("=== END RATE LIMIT ERROR ===\n")
             logger.info("Letting Tweepy handle rate limit waiting...")
             # Don't raise, let Tweepy retry with wait_on_rate_limit=True
             return None
@@ -98,6 +112,20 @@ class TwitterAPI:
                 return None
         except tweepy.errors.TooManyRequests as e:
             self._log_rate_limit('create_tweet')
+            logger.error("\n=== RATE LIMIT ERROR ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            
+            # Log rate limit details from response headers
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Rate limit headers:")
+                for header, value in e.response.headers.items():
+                    if 'rate' in header.lower() or 'limit' in header.lower():
+                        logger.error(f"{header}: {value}")
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
+            
+            logger.error("=== END RATE LIMIT ERROR ===\n")
             logger.info("Letting Tweepy handle rate limit waiting...")
             # Don't raise, let Tweepy retry with wait_on_rate_limit=True
             return None
