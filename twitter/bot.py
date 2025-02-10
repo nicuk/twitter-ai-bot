@@ -242,7 +242,7 @@ class AIGamingBot:
     def _post_tweet(self, tweet):
         """Post a tweet with error handling and backup content"""
         try:
-            # Try to post main tweet
+            # Try to post main tweet (Tweepy handles rate limits)
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info(f"Posted tweet: {tweet}")
