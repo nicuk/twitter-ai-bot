@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import FastAPI, Query
 from strategies.token_history_tracker import TokenHistoryTracker
 from strategies.token_monitor import TokenMonitor
+from twitter.bot import TwitterBot
 import os
 import logging
 
@@ -17,52 +18,8 @@ def setup_routes(app: FastAPI):
     
     # Initialize token monitor with API key
     monitor = TokenMonitor(api_key=os.getenv('CRYPTORANK_API_KEY'))
-    
-    @app.post("/test/tweet")
-    async def test_tweet(text: str = Query(..., description="Tweet text to post")):
-        """Test endpoint to post a tweet directly"""
-        try:
-            from twitter.api_client import TwitterAPI
-            from twitter.bot import check_single_instance, cleanup_redis_lock
-            
-            # Check if another instance is running
-            if not check_single_instance():
-                return {
-                    "status": "error",
-                    "message": "Another bot instance is running"
-                }
-            
-            # Initialize Twitter API
-            api = TwitterAPI()
-            
-            # Try to post tweet
-            logger.info(f"Test endpoint attempting to post tweet: {text}")
-            response = api.create_tweet(text)
-            
-            # Clean up lock
-            cleanup_redis_lock()
-            
-            if response:
-                tweet_id = response.get('id')
-                logger.info(f"Tweet posted successfully! ID: {tweet_id}")
-                return {
-                    "status": "success",
-                    "tweet_id": tweet_id,
-                    "message": "Tweet posted successfully"
-                }
-            else:
-                logger.error("Failed to post tweet - no response")
-                return {
-                    "status": "error",
-                    "message": "Failed to post tweet - no response"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error posting test tweet: {e}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+    # Initialize Twitter bot
+    twitter_bot = TwitterBot()
     
     @app.get("/")
     async def root():
@@ -226,5 +183,23 @@ def setup_routes(app: FastAPI):
     ) -> Dict:
         """Get performance insights about our token detection"""
         return monitor.get_performance_insights(days)
+
+    @app.post("/test/tweet")
+    async def test_tweet() -> Dict:
+        """Test endpoint to verify tweet posting functionality"""
+        try:
+            test_message = f"Test tweet from ELAI Bot at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 🤖"
+            tweet_id = twitter_bot._post_tweet(test_message)
+            return {
+                "success": True,
+                "message": "Tweet posted successfully",
+                "tweet_id": tweet_id
+            }
+        except Exception as e:
+            logger.error(f"Error posting test tweet: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
 setup_routes(app)
