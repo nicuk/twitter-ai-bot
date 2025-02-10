@@ -15,7 +15,7 @@ class TwitterAPI:
         logger.info("Initializing Twitter client...")
         
         # Debug token loading
-        token_keys = ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_ACCESS_TOKEN']
+        token_keys = ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_ACCESS_TOKEN', 'TWITTER_ACCESS_TOKEN_SECRET', 'TWITTER_BEARER_TOKEN']
         for key in token_keys:
             if os.getenv(key):
                 logger.info(f"✓ {key} is set")
@@ -23,9 +23,11 @@ class TwitterAPI:
                 logger.warning(f"✗ {key} is not set")
         
         self.api = tweepy.Client(
-            client_id=os.getenv('TWITTER_CLIENT_ID'),
-            client_secret=os.getenv('TWITTER_CLIENT_SECRET'),
+            consumer_key=os.getenv('TWITTER_CLIENT_ID'),
+            consumer_secret=os.getenv('TWITTER_CLIENT_SECRET'),
             access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+            access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
+            bearer_token=os.getenv('TWITTER_BEARER_TOKEN'),
             wait_on_rate_limit=True
         )
         logger.info("Twitter client initialized")
