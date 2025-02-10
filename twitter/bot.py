@@ -42,11 +42,24 @@ def cleanup_redis_lock():
             if redis_url:
                 redis_client = redis.from_url(redis_url)
                 instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
+                
+                logger.info(f"=== Cleanup Check ===")
+                logger.info(f"Instance attempting cleanup: {instance_id}")
+                
                 # Only remove lock if it belongs to this instance
                 current_holder = redis_client.get('twitter_bot_lock')
-                if current_holder and current_holder.decode() == instance_id:
-                    redis_client.delete('twitter_bot_lock')
-                    logger.info(f"Redis lock released by instance {instance_id}")
+                if current_holder:
+                    current_holder = current_holder.decode()
+                    logger.info(f"Current lock holder: {current_holder}")
+                    if current_holder == instance_id:
+                        redis_client.delete('twitter_bot_lock')
+                        logger.info(f"✓ Redis lock released by instance {instance_id}")
+                    else:
+                        logger.info(f"⚠️ Lock belongs to different instance, not cleaning up")
+                        logger.info(f"   - Our Instance: {instance_id}")
+                        logger.info(f"   - Lock Holder: {current_holder}")
+                else:
+                    logger.info("No lock exists, nothing to clean up")
     except Exception as e:
         logger.error(f"Error cleaning up Redis lock: {e}")
 
@@ -65,25 +78,40 @@ def check_single_instance():
         redis_client = redis.from_url(redis_url)
         instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
         
+        logger.info(f"=== Instance Check ===")
+        logger.info(f"Current Instance ID: {instance_id}")
+        logger.info(f"Process ID: {os.getpid()}")
+        logger.info(f"Redis URL: {redis_url}")
+        
         # Try to get the lock
         lock = redis_client.setnx('twitter_bot_lock', instance_id)
         if lock:
             # We got the lock, set expiry and register cleanup
-            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
+            redis_client.expire('twitter_bot_lock', 1800)  # 30 minute expiry
             atexit.register(cleanup_redis_lock)
-            logger.info(f"Instance {instance_id} acquired lock and will start")
+            logger.info(f"✓ Instance {instance_id} acquired lock and will start")
+            logger.info(f"✓ Lock TTL set to 1800 seconds (30 minutes)")
             return True
             
         # Check if lock is stale
         ttl = redis_client.ttl('twitter_bot_lock')
         current_holder = redis_client.get('twitter_bot_lock')
         
+        logger.info(f"=== Lock Status ===")
+        logger.info(f"Lock held by: {current_holder.decode() if current_holder else 'None'}")
+        logger.info(f"Lock TTL: {ttl} seconds")
+        logger.info(f"Lock Key: twitter_bot_lock")
+        
         if ttl in (-2, -1):  # Key doesn't exist or no expiry
+            logger.info("⚠️ Stale lock detected, clearing...")
             redis_client.delete('twitter_bot_lock')
             return check_single_instance()  # Try again
             
         # Another instance is running
-        logger.error(f"Another bot instance ({current_holder.decode()}) is already running (TTL: {ttl}s). This instance ({instance_id}) will exit.")
+        logger.error(f"❌ Cannot start - Another instance is running:")
+        logger.error(f"   - Current Instance: {instance_id}")
+        logger.error(f"   - Lock Holder: {current_holder.decode()}")
+        logger.error(f"   - Lock TTL: {ttl}s")
         return False
             
     except Exception as e:
@@ -113,7 +141,7 @@ def is_bot_running():
         if lock:
             # We got the lock
             logger.info(f"Got Redis lock (Instance: {instance_id})")
-            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
+            redis_client.expire('twitter_bot_lock', 1800)  # 30 minute expiry
             return False
             
         # If we didn't get the lock, check if it's stale
