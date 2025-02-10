@@ -537,9 +537,6 @@ class AIGamingBot:
                     else:
                         logger.info(f"{tweet_type}: {mins_to_next}m")
             
-            # Run pending tasks immediately
-            schedule.run_pending()
-            
             # Main loop
             last_log_time = datetime.now()
             last_health_check = datetime.now()
@@ -549,8 +546,13 @@ class AIGamingBot:
             logger.info("Monitoring for scheduled tasks...")
             
             while True:
-                schedule.run_pending()
                 now = datetime.now()
+                
+                # Only run jobs that are due NOW, ignore missed jobs
+                for job in schedule.get_jobs():
+                    if job.should_run and (now - job.next_run).total_seconds() < 60:
+                        job.run()
+                        job._schedule_next_run()
                 
                 # Refresh Redis lock (every minute)
                 if REDIS_AVAILABLE and (now - last_lock_refresh).total_seconds() >= 60:
