@@ -22,14 +22,12 @@ def setup_routes(app: FastAPI):
     async def test_tweet(text: str = Query(..., description="Tweet text to post")):
         """Test endpoint to post a tweet directly"""
         try:
-            from twitter.bot import AIGamingBot
+            from twitter.api_client import TwitterAPI
             
-            # Initialize bot without checking instance
-            bot = AIGamingBot()
-            
-            # Try to post tweet
+            # Use TwitterAPI directly without creating bot instance
             logger.info(f"Test endpoint attempting to post tweet: {text}")
-            result = bot._post_tweet(text)
+            api = TwitterAPI()
+            result = api.create_tweet(text)
             
             if result:
                 logger.info(f"Tweet posted successfully!")
@@ -46,6 +44,27 @@ def setup_routes(app: FastAPI):
                 
         except Exception as e:
             logger.error(f"Error posting test tweet: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+    
+    @app.post("/test/ip")
+    async def test_ip():
+        """Test endpoint to check if Railway IP is blocked by Twitter"""
+        try:
+            from test_twitter import test_twitter_limits
+            
+            logger.info("Starting IP block test - will attempt 3 tweets")
+            test_twitter_limits()
+            
+            return {
+                "status": "success",
+                "message": "Test completed - check logs for results"
+            }
+                
+        except Exception as e:
+            logger.error(f"Error running IP test: {e}")
             return {
                 "status": "error",
                 "message": str(e)
