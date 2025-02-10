@@ -4,21 +4,20 @@ from datetime import datetime
 import json
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
 class RateLimiter:
     def __init__(self):
         """Initialize rate limiter"""
-        # Default rate limits
+        # Just track counts without limits
         self.default_limits = {
             'post': {
                 'daily_count': 0,
                 'monthly_count': 0,
                 'last_reset': datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0),
-                'monthly_reset': datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
-                'daily_limit': 17,  # Keep 1 buffer from 18 limit
-                'monthly_limit': 100  # Twitter's monthly post cap
+                'monthly_reset': datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             }
         }
         self.rate_limits = self.default_limits.copy()
@@ -26,10 +25,9 @@ class RateLimiter:
         self._load_cache()
     
     def can_post(self) -> bool:
-        """Check if we can post based on rate limits"""
+        """Check if we can post"""
         self._check_resets()
-        return (self.rate_limits['post']['daily_count'] < self.rate_limits['post']['daily_limit'] and
-                self.rate_limits['post']['monthly_count'] < self.rate_limits['post']['monthly_limit'])
+        return True  # Always allow posting, Tweepy handles limits
     
     def update_counts(self) -> None:
         """Update post counts after successful post"""
@@ -52,7 +50,7 @@ class RateLimiter:
             self.rate_limits['post']['monthly_reset'] = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     def _load_cache(self) -> None:
-        """Load cached rate limits"""
+        """Load cached post counts"""
         try:
             with open(self.cache_file, 'r') as f:
                 data = json.load(f)
@@ -63,12 +61,12 @@ class RateLimiter:
                     data['post']['monthly_reset'] = datetime.fromisoformat(data['post']['monthly_reset'])
                     self.rate_limits = data
                 else:
-                    logger.warning("Invalid cache format, using default limits")
+                    logger.warning("Invalid cache format, using default values")
         except (FileNotFoundError, json.JSONDecodeError):
-            logger.info("No valid cache found, using default limits")
+            logger.info("No valid cache found, using default values")
             
     def _save_cache(self) -> None:
-        """Save current rate limits to cache"""
+        """Save current post counts to cache"""
         try:
             # Convert datetime to string for JSON serialization
             cache_data = {
@@ -81,17 +79,21 @@ class RateLimiter:
             with open(self.cache_file, 'w') as f:
                 json.dump(cache_data, f)
         except Exception as e:
-            logger.error(f"Error saving rate limits: {e}")
+            logger.error(f"Error saving post counts: {e}")
+
+    def wait(self) -> None:
+        """No waiting needed as Tweepy handles rate limits"""
+        return
 
     def cleanup(self) -> None:
-        """Clean up old rate limit data"""
+        """Clean up old post count data"""
         try:
-            # Reset to default limits
+            # Reset to default values
             self.rate_limits = self.default_limits.copy()
             
             # Check if cache file exists and delete it
             if os.path.exists(self.cache_file):
                 os.remove(self.cache_file)
-                logger.info("Rate limiter cache cleaned up")
+                logger.info("Cleaned up post count cache")
         except Exception as e:
-            logger.error(f"Error cleaning up rate limiter: {e}")
+            logger.error(f"Error during cleanup: {e}")
