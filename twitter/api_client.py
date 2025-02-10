@@ -69,6 +69,7 @@ class TwitterAPI:
             self._log_rate_limit('create_tweet')
             logger.error(f"Rate limit exceeded for create_tweet. Full error: {str(e)}")
             logger.error(f"Rate limit headers: {e.response.headers if hasattr(e, 'response') else 'No headers'}")
+            # Don't sleep, just raise the error
             raise
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")

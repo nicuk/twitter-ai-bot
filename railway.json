@@ -5,8 +5,9 @@
     "buildCommand": "pip install redis && pip install -r requirements.txt"
   },
   "deploy": {
-    "startCommand": "python main.py",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "startCommand": "redis-server redis.conf & python main.py",
+    "restartPolicyType": "NEVER",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 100
   }
 }

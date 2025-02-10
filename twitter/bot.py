@@ -248,6 +248,13 @@ class AIGamingBot:
                 logger.info(f"Posted tweet: {tweet}")
                 return True
                 
+        except tweepy.errors.TooManyRequests as e:
+            logger.error("Rate limit hit, will retry in 15 minutes")
+            # Sleep for 15 minutes and 1 second to ensure rate limit window has passed
+            time.sleep(901)
+            # Try again after sleeping
+            return self._post_tweet(tweet, is_fallback)
+            
         except Exception as e:
             # If it's a duplicate content error, don't retry
             if "duplicate content" in str(e).lower():
