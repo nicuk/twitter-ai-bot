@@ -23,6 +23,14 @@ def setup_routes(app: FastAPI):
         """Test endpoint to post a tweet directly"""
         try:
             from twitter.api_client import TwitterAPI
+            from twitter.bot import check_single_instance, cleanup_redis_lock
+            
+            # Check if another instance is running
+            if not check_single_instance():
+                return {
+                    "status": "error",
+                    "message": "Another bot instance is running"
+                }
             
             # Initialize Twitter API
             api = TwitterAPI()
@@ -30,6 +38,9 @@ def setup_routes(app: FastAPI):
             # Try to post tweet
             logger.info(f"Test endpoint attempting to post tweet: {text}")
             response = api.create_tweet(text)
+            
+            # Clean up lock
+            cleanup_redis_lock()
             
             if response:
                 tweet_id = response.get('id')
