@@ -53,14 +53,42 @@ def setup_routes(app: FastAPI):
     async def test_ip():
         """Test endpoint to check if Railway IP is blocked by Twitter"""
         try:
-            from test_twitter import test_twitter_limits
+            from twitter.api_client import TwitterAPI
+            import time
             
-            logger.info("Starting IP block test - will attempt 3 tweets")
-            test_twitter_limits()
+            # Initialize Twitter client
+            twitter = TwitterAPI()
+            results = []
+            
+            # Test 3 tweets
+            for i in range(3):
+                logger.info(f"\nTweet attempt {i+1}/3")
+                text = f"Test tweet #{i+1} - Checking IP block - {time.strftime('%H:%M:%S')}"
+                
+                try:
+                    response = twitter.create_tweet(text)
+                    if response:
+                        msg = f"Success! Tweet ID: {response.get('id')}"
+                        logger.info(msg)
+                        results.append({"status": "success", "message": msg})
+                    else:
+                        msg = "Failed to post tweet"
+                        logger.error(msg)
+                        results.append({"status": "error", "message": msg})
+                except Exception as e:
+                    logger.error(f"Error: {e}")
+                    logger.error(f"Error type: {type(e)}")
+                    logger.error(f"Full error details: {str(e)}")
+                    results.append({"status": "error", "message": str(e)})
+                
+                # Wait 5 seconds between tweets
+                if i < 2:  # Don't sleep after last tweet
+                    logger.info("Waiting 5 seconds...")
+                    time.sleep(5)
             
             return {
-                "status": "success",
-                "message": "Test completed - check logs for results"
+                "status": "completed",
+                "results": results
             }
                 
         except Exception as e:
