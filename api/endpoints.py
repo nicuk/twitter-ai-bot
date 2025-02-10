@@ -22,8 +22,7 @@ def setup_routes(app: FastAPI):
     async def test_tweet(text: str = Query(..., description="Tweet text to post")):
         """Test endpoint to post a tweet directly"""
         try:
-            from twitter.api_client import TwitterAPI
-            from twitter.bot import check_single_instance, cleanup_redis_lock
+            from twitter.bot import AIGamingBot, check_single_instance, cleanup_redis_lock
             
             # Check if another instance is running
             if not check_single_instance():
@@ -32,29 +31,27 @@ def setup_routes(app: FastAPI):
                     "message": "Another bot instance is running"
                 }
             
-            # Initialize Twitter API
-            api = TwitterAPI()
+            # Initialize bot with rate limiter
+            bot = AIGamingBot()
             
             # Try to post tweet
             logger.info(f"Test endpoint attempting to post tweet: {text}")
-            response = api.create_tweet(text)
+            result = bot._post_tweet(text)
             
             # Clean up lock
             cleanup_redis_lock()
             
-            if response:
-                tweet_id = response.get('id')
-                logger.info(f"Tweet posted successfully! ID: {tweet_id}")
+            if result:
+                logger.info(f"Tweet posted successfully!")
                 return {
                     "status": "success",
-                    "tweet_id": tweet_id,
                     "message": "Tweet posted successfully"
                 }
             else:
-                logger.error("Failed to post tweet - no response")
+                logger.error("Failed to post tweet")
                 return {
                     "status": "error",
-                    "message": "Failed to post tweet - no response"
+                    "message": "Failed to post tweet"
                 }
                 
         except Exception as e:
@@ -68,19 +65,18 @@ def setup_routes(app: FastAPI):
     async def post_tweet(text: str):
         """Post a tweet directly with the given text"""
         try:
-            from twitter.api_client import TwitterAPI
+            from twitter.bot import AIGamingBot
             
-            # Initialize Twitter API
-            api = TwitterAPI()
+            # Initialize bot with rate limiter
+            bot = AIGamingBot()
             
-            # Post tweet
-            response = api.create_tweet(text)
+            # Post tweet using bot's rate-limited posting mechanism
+            result = bot._post_tweet(text)
             
-            if response:
+            if result:
                 return {
                     'success': True,
-                    'message': 'Tweet posted successfully',
-                    'tweet_id': response.get('id')
+                    'message': 'Tweet posted successfully'
                 }
             else:
                 return {
