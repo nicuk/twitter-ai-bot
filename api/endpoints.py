@@ -22,12 +22,24 @@ def setup_routes(app: FastAPI):
     async def test_tweet(text: str = Query(..., description="Tweet text to post")):
         """Test endpoint to post a tweet directly"""
         try:
-            from twitter.api_client import TwitterAPI
+            from twitter.bot import AIGamingBot, check_single_instance, cleanup_redis_lock
             
-            # Use TwitterAPI directly without creating bot instance
+            # Check if another instance is running
+            if not check_single_instance():
+                return {
+                    "status": "error",
+                    "message": "Another bot instance is running"
+                }
+            
+            # Initialize bot with rate limiter
+            bot = AIGamingBot()
+            
+            # Try to post tweet
             logger.info(f"Test endpoint attempting to post tweet: {text}")
-            api = TwitterAPI()
-            result = api.create_tweet(text)
+            result = bot._post_tweet(text)
+            
+            # Clean up lock
+            cleanup_redis_lock()
             
             if result:
                 logger.info(f"Tweet posted successfully!")
@@ -44,55 +56,6 @@ def setup_routes(app: FastAPI):
                 
         except Exception as e:
             logger.error(f"Error posting test tweet: {e}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
-    
-    @app.post("/test/ip")
-    async def test_ip():
-        """Test endpoint to check if Railway IP is blocked by Twitter"""
-        try:
-            from twitter.api_client import TwitterAPI
-            import time
-            
-            # Initialize Twitter client
-            twitter = TwitterAPI()
-            results = []
-            
-            # Test 3 tweets
-            for i in range(3):
-                logger.info(f"\nTweet attempt {i+1}/3")
-                text = f"Test tweet #{i+1} - Checking IP block - {time.strftime('%H:%M:%S')}"
-                
-                try:
-                    response = twitter.create_tweet(text)
-                    if response:
-                        msg = f"Success! Tweet ID: {response.get('id')}"
-                        logger.info(msg)
-                        results.append({"status": "success", "message": msg})
-                    else:
-                        msg = "Failed to post tweet"
-                        logger.error(msg)
-                        results.append({"status": "error", "message": msg})
-                except Exception as e:
-                    logger.error(f"Error: {e}")
-                    logger.error(f"Error type: {type(e)}")
-                    logger.error(f"Full error details: {str(e)}")
-                    results.append({"status": "error", "message": str(e)})
-                
-                # Wait 5 seconds between tweets
-                if i < 2:  # Don't sleep after last tweet
-                    logger.info("Waiting 5 seconds...")
-                    time.sleep(5)
-            
-            return {
-                "status": "completed",
-                "results": results
-            }
-                
-        except Exception as e:
-            logger.error(f"Error running IP test: {e}")
             return {
                 "status": "error",
                 "message": str(e)

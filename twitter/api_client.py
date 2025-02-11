@@ -45,6 +45,9 @@ class TwitterAPI:
             else:
                 logger.error("Failed to post tweet - invalid response")
                 return None
+        except tweepy.errors.TooManyRequests as e:
+            logger.warning(f"Rate limit exceeded: {e}")
+            raise  # Propagate rate limit error up
         except Exception as e:
             logger.error(f"Error posting tweet: {e}")
             return None

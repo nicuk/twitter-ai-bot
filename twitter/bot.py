@@ -11,6 +11,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 import tempfile
 import atexit
+import tweepy
 
 # Optional Redis import
 try:
@@ -42,24 +43,11 @@ def cleanup_redis_lock():
             if redis_url:
                 redis_client = redis.from_url(redis_url)
                 instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
-                
-                logger.info(f"=== Cleanup Check ===")
-                logger.info(f"Instance attempting cleanup: {instance_id}")
-                
                 # Only remove lock if it belongs to this instance
                 current_holder = redis_client.get('twitter_bot_lock')
-                if current_holder:
-                    current_holder = current_holder.decode()
-                    logger.info(f"Current lock holder: {current_holder}")
-                    if current_holder == instance_id:
-                        redis_client.delete('twitter_bot_lock')
-                        logger.info(f"✓ Redis lock released by instance {instance_id}")
-                    else:
-                        logger.info(f"⚠️ Lock belongs to different instance, not cleaning up")
-                        logger.info(f"   - Our Instance: {instance_id}")
-                        logger.info(f"   - Lock Holder: {current_holder}")
-                else:
-                    logger.info("No lock exists, nothing to clean up")
+                if current_holder and current_holder.decode() == instance_id:
+                    redis_client.delete('twitter_bot_lock')
+                    logger.info(f"Redis lock released by instance {instance_id}")
     except Exception as e:
         logger.error(f"Error cleaning up Redis lock: {e}")
 
@@ -78,40 +66,25 @@ def check_single_instance():
         redis_client = redis.from_url(redis_url)
         instance_id = os.getenv('RAILWAY_REPLICA_ID', 'local-' + str(os.getpid()))
         
-        logger.info(f"=== Instance Check ===")
-        logger.info(f"Current Instance ID: {instance_id}")
-        logger.info(f"Process ID: {os.getpid()}")
-        logger.info(f"Redis URL: {redis_url}")
-        
         # Try to get the lock
         lock = redis_client.setnx('twitter_bot_lock', instance_id)
         if lock:
             # We got the lock, set expiry and register cleanup
-            redis_client.expire('twitter_bot_lock', 1800)  # 30 minute expiry
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
             atexit.register(cleanup_redis_lock)
-            logger.info(f"✓ Instance {instance_id} acquired lock and will start")
-            logger.info(f"✓ Lock TTL set to 1800 seconds (30 minutes)")
+            logger.info(f"Instance {instance_id} acquired lock and will start")
             return True
             
         # Check if lock is stale
         ttl = redis_client.ttl('twitter_bot_lock')
         current_holder = redis_client.get('twitter_bot_lock')
         
-        logger.info(f"=== Lock Status ===")
-        logger.info(f"Lock held by: {current_holder.decode() if current_holder else 'None'}")
-        logger.info(f"Lock TTL: {ttl} seconds")
-        logger.info(f"Lock Key: twitter_bot_lock")
-        
         if ttl in (-2, -1):  # Key doesn't exist or no expiry
-            logger.info("⚠️ Stale lock detected, clearing...")
             redis_client.delete('twitter_bot_lock')
             return check_single_instance()  # Try again
             
         # Another instance is running
-        logger.error(f"❌ Cannot start - Another instance is running:")
-        logger.error(f"   - Current Instance: {instance_id}")
-        logger.error(f"   - Lock Holder: {current_holder.decode()}")
-        logger.error(f"   - Lock TTL: {ttl}s")
+        logger.error(f"Another bot instance ({current_holder.decode()}) is already running (TTL: {ttl}s). This instance ({instance_id}) will exit.")
         return False
             
     except Exception as e:
@@ -141,7 +114,7 @@ def is_bot_running():
         if lock:
             # We got the lock
             logger.info(f"Got Redis lock (Instance: {instance_id})")
-            redis_client.expire('twitter_bot_lock', 1800)  # 30 minute expiry
+            redis_client.expire('twitter_bot_lock', 300)  # 5 minute expiry
             return False
             
         # If we didn't get the lock, check if it's stale
@@ -190,6 +163,8 @@ class AIGamingBot:
         self.max_retries = 3
         self.base_wait = 5  # Base wait time in minutes
         self.retry_count = 0
+        self.delayed_posts = []  # Queue for delayed posts
+        self.min_post_delay = 300  # Minimum 5 minutes between posts
         
         # Initialize core components
         self.api = TwitterAPI()
@@ -270,12 +245,19 @@ class AIGamingBot:
     def _post_tweet(self, tweet):
         """Post a tweet with error handling and backup content"""
         try:
-            # Try to post main tweet (Tweepy handles rate limits)
+            # Wait for rate limit before posting
+            self.rate_limiter.wait()
+            
+            # Try to post main tweet
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info(f"Posted tweet: {tweet}")
+                self.rate_limiter.update_post_time()  # Track successful post
                 return True
                 
+        except tweepy.errors.TooManyRequests:
+            # Let rate limit errors propagate up
+            raise
         except Exception as e:
             # If it's a duplicate content error, don't try backup tweet
             if "duplicate content" in str(e).lower():
@@ -292,6 +274,7 @@ class AIGamingBot:
                     response = self.api.create_tweet(backup_tweet)
                     if response:
                         logger.info(f"Posted backup tweet: {backup_tweet}")
+                        self.rate_limiter.update_post_time()  # Track successful backup post
                         return True
                     
             except Exception as e:
@@ -395,7 +378,8 @@ class AIGamingBot:
         """Post trend analysis tweet"""
         try:
             logger.info("=== Starting Trend Analysis Post ===")
-            # Get trend analysis
+            
+            # Get fresh trend analysis
             trend_data = self.elion.trend_strategy.analyze()
             if not trend_data:
                 logger.warning("No trend data available")
@@ -418,13 +402,22 @@ class AIGamingBot:
                 return self._post_fallback_tweet()
                 
             # Post tweet and track tokens
-            self._post_tweet(tweet)
-            # Track tokens using TokenMonitor
-            self.elion.token_monitor.run_analysis()
+            try:
+                if self._post_tweet(tweet):
+                    # Only track tokens if tweet was successful
+                    for token in trend_tokens:
+                        self.history.track_token(token['symbol'])
+                    return True
+                return False
+            except tweepy.errors.TooManyRequests:
+                # If we hit rate limit, don't use fallback
+                raise
+            except Exception as e:
+                logger.error(f"Error posting trend tweet: {e}")
+                return self._post_fallback_tweet()
                 
         except Exception as e:
-            logger.error(f"Error posting trend tweet: {e}")
-            logger.exception("Full traceback:")
+            logger.error(f"Error in trend analysis: {e}")
             return self._post_fallback_tweet()
 
     def post_volume(self):
@@ -523,9 +516,70 @@ class AIGamingBot:
             
             # Run continuously
             while True:
-                # Only run pending jobs (skip missed ones)
-                schedule.run_pending()
-                time.sleep(60)
+                try:
+                    current_time = time.time()
+                    
+                    # First, try to process any delayed posts
+                    if self.delayed_posts and not self.rate_limiter.is_rate_limited():
+                        logger.info(f"Processing {len(self.delayed_posts)} delayed posts...")
+                        
+                        # Sort by original scheduled time
+                        self.delayed_posts.sort(key=lambda x: x['scheduled_time'])
+                        
+                        while self.delayed_posts:
+                            post = self.delayed_posts[0]
+                            
+                            # Ensure minimum delay between posts
+                            if current_time - self.rate_limiter.last_post_time < self.min_post_delay:
+                                break
+                                
+                            try:
+                                # Get fresh data for the post
+                                if post['type'] == 'trend':
+                                    self.post_trend()
+                                elif post['type'] == 'volume':
+                                    self.post_volume()
+                                elif post['type'] == 'format':
+                                    self.post_format_tweet()
+                                    
+                                # Remove from queue if successful
+                                self.delayed_posts.pop(0)
+                                
+                                # Wait minimum delay before next post
+                                time.sleep(self.min_post_delay)
+                                
+                            except tweepy.errors.TooManyRequests:
+                                # Still rate limited, try again later
+                                logger.warning("Still rate limited, will retry delayed posts later")
+                                break
+                            except Exception as e:
+                                logger.error(f"Error processing delayed post: {e}")
+                                self.delayed_posts.pop(0)  # Remove failed post
+                    
+                    # Then process regular scheduled jobs
+                    try:
+                        schedule.run_pending()
+                    except tweepy.errors.TooManyRequests:
+                        # Get current job that failed
+                        current_job = schedule.get_jobs()[0] if schedule.get_jobs() else None
+                        if current_job:
+                            # Add to delayed posts queue
+                            self.delayed_posts.append({
+                                'type': current_job.job_func.__name__.replace('post_', ''),
+                                'scheduled_time': current_time
+                            })
+                            logger.info(f"Added {current_job.job_func.__name__} to delayed posts queue")
+                        
+                        # Handle rate limit with proper cooldown
+                        self.rate_limiter.handle_rate_limit()
+                    except Exception as e:
+                        logger.error(f"Error running scheduled jobs: {e}")
+                    
+                    time.sleep(60)
+                    
+                except Exception as e:
+                    logger.error(f"Error in main loop: {e}")
+                    time.sleep(60)  # Wait before retrying
                 
         except Exception as e:
             logger.error(f"Error in bot run loop: {e}")
