@@ -7,12 +7,7 @@ import sys
 import os
 import json
 
-# Add parent directory to path so we can import elion modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from elion.content.tweet_formatters import TweetFormatters
-
-class BasePerformanceFormatter(TweetFormatters):
+class BasePerformanceFormatter:
     """Base class for performance formatters with common utilities."""
     
     def __init__(self):
@@ -39,62 +34,19 @@ class BasePerformanceFormatter(TweetFormatters):
         return sorted(winners, key=lambda x: x.get('max_gain_percentage_7d', 0), reverse=True)[:limit]
         
     def optimize_tweet_length(self, tweet: str, data: Dict, format_type: str) -> str:
-        """Optimize tweet length to be between 210-280 characters.
-        
-        Args:
-            tweet: Base tweet to optimize
-            data: Data dictionary used to generate the tweet
-            format_type: Type of tweet format
-            
-        Returns:
-            Optimized tweet with length between 210-280 characters
-        """
-        # If tweet is already in range, return as is
-        if self.MIN_TWEET_LENGTH <= len(tweet) <= self.MAX_TWEET_LENGTH:
-            return tweet
-            
-        # If tweet is too long, truncate it
+        """Optimize tweet length to be between 210-280 characters."""
         if len(tweet) > self.MAX_TWEET_LENGTH:
-            return tweet[:self.MAX_TWEET_LENGTH-3] + "..."
-            
-        # If tweet is too short, add relevant insight
-        insights = {
-            'performance_compare': [
-                "\n\n💡 Strong momentum with increasing volume",
-                "\n\n💡 Pattern suggests potential continuation",
-                "\n\n💡 Technical indicators remain bullish",
-                "\n\n💡 Similar setups had positive outcomes"
-            ],
-            'success_rate': [
-                "\n\n💡 Consistent performance across cycles",
-                "\n\n💡 Strategy shows improving accuracy",
-                "\n\n💡 Risk management remains key focus",
-                "\n\n💡 Data-driven approach yields results"
-            ],
-            'prediction_accuracy': [
-                "\n\n💡 Pattern recognition improving",
-                "\n\n💡 Models show high confidence",
-                "\n\n💡 Historical accuracy validates approach",
-                "\n\n💡 Continuous model refinement"
-            ],
-            'winners_recap': [
-                "\n\n💡 Winners show strong fundamentals",
-                "\n\n💡 Volume profile remains healthy",
-                "\n\n💡 Technical setup looks promising",
-                "\n\n💡 Market sentiment stays positive"
-            ]
-        }
-        
-        if format_type in insights:
-            # Get random insight for this type
-            available_insights = insights[format_type]
-            insight = random.choice(available_insights)
-            
-            # Add insight if it fits
-            if len(tweet) + len(insight) <= self.MAX_TWEET_LENGTH:
-                return tweet + insight
-                
-        return tweet
+            # Try removing some hashtags
+            lines = tweet.split('\n')
+            if any('#' in line for line in lines):
+                hashtag_line = next(line for line in reversed(lines) if '#' in line)
+                hashtags = hashtag_line.split()
+                while len(tweet) > self.MAX_TWEET_LENGTH and len(hashtags) > 2:
+                    hashtags.pop()
+                    lines[-1] = ' '.join(hashtags)
+                    tweet = '\n'.join(lines)
+                    
+        return tweet[:self.MAX_TWEET_LENGTH]
 
 class PerformanceCompareFormatter(BasePerformanceFormatter):
     """Formats tweets comparing token performance"""
