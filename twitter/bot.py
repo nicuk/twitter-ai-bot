@@ -186,14 +186,15 @@ class AIGamingBot:
         
         current_hour = datetime.now().hour
         
-        # Map hours to specific formats
+        # Map hours to specific formats for our 7 daily format posts
         hour_to_format = {
-            2: 'first_hour',            # Early Asian
-            6: 'breakout',              # Mid Asian
-            10: 'prediction_accuracy',   # Early EU
-            14: 'success_rate',         # Mid EU
-            18: 'performance_compare',   # Early US
-            22: 'winners_recap'         # Late US
+            0: 'performance_compare',   # Midnight
+            4: 'prediction_accuracy',   # Mid Asian
+            8: 'success_rate',         # Early EU
+            12: 'winners_recap',       # Mid EU
+            16: 'performance_compare', # Early US
+            20: 'prediction_accuracy', # Mid US
+            23: 'success_rate'         # Late US
         }
         
         # Get format for current hour
