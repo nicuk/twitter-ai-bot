@@ -272,7 +272,7 @@ class FirstHourGainsFormatter(BasePerformanceFormatter):
     def format_tweet(self, token_data: Dict) -> str:
         """Format tweet with first hour performance data"""
         symbol = token_data.get('symbol', '')
-        entry_price = token_data.get('entry_price', 0)
+        first_mention_price = token_data.get('first_mention_price', 0)
         current_price = token_data.get('current_price', 0)
         peak_price = token_data.get('peak_price', 0)
         volume_change = token_data.get('volume_change', 0)
@@ -280,13 +280,13 @@ class FirstHourGainsFormatter(BasePerformanceFormatter):
         similar_token_gain = token_data.get('similar_token_gain', 0)
         next_key_level = token_data.get('next_key_level', 0)
         
-        current_gain = ((current_price - entry_price) / entry_price) * 100
-        peak_gain = ((peak_price - entry_price) / entry_price) * 100
+        current_gain = ((current_price - first_mention_price) / first_mention_price) * 100
+        peak_gain = ((peak_price - first_mention_price) / first_mention_price) * 100
         
         tweet = (
             f"🔄 First Hour Analysis: ${symbol}\n\n"
             f"📊 Performance:\n"
-            f"• Entry: ${entry_price:.3f} → Current: ${current_price:.3f} ({current_gain:+.1f}%)\n"
+            f"• Entry: ${first_mention_price:.3f} → Current: ${current_price:.3f} ({current_gain:+.1f}%)\n"
             f"• Peak: ${peak_price:.3f} ({peak_gain:+.1f}%)\n"
             f"• Volume: {volume_change:+d}% surge\n\n"
             f"🔍 Similar to ${similar_token}'s {similar_token_gain:+d}% run\n"

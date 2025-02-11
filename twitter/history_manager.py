@@ -46,22 +46,44 @@ class TweetHistory:
             if datetime.fromisoformat(tweet['timestamp']) > cutoff
         ]
 
-    def track_token(self, symbol: str) -> None:
-        """Track a token that was mentioned in a tweet"""
+    def track_token(self, symbol: str, price_data: dict = None) -> None:
+        """Track a token that was mentioned in a tweet
+        
+        Args:
+            symbol: Token symbol
+            price_data: Optional dict containing price info:
+                - current_price: Current token price
+                - entry_price: Entry price if available
+                - gain_percentage: Current gain/loss percentage
+        """
         try:
             current_time = datetime.utcnow().isoformat()
             
             # Initialize history for new tokens
             if symbol not in self.history:
                 self.history[symbol] = {
+                    'symbol': symbol,
                     'first_mention_date': current_time,
                     'last_mention_date': current_time,
-                    'mention_count': 1
+                    'mention_count': 1,
+                    'entry_price': price_data.get('entry_price', 0) if price_data else 0,
+                    'current_price': price_data.get('current_price', 0) if price_data else 0,
+                    'gain_percentage': price_data.get('gain_percentage', 0) if price_data else 0
                 }
             else:
                 # Update existing token history
-                self.history[symbol]['last_mention_date'] = current_time
-                self.history[symbol]['mention_count'] += 1
+                self.history[symbol].update({
+                    'last_mention_date': current_time,
+                    'mention_count': self.history[symbol]['mention_count'] + 1
+                })
+                
+                # Update price data if provided
+                if price_data:
+                    self.history[symbol].update({
+                        'current_price': price_data.get('current_price', self.history[symbol].get('current_price', 0)),
+                        'entry_price': price_data.get('entry_price', self.history[symbol].get('entry_price', 0)),
+                        'gain_percentage': price_data.get('gain_percentage', self.history[symbol].get('gain_percentage', 0))
+                    })
             
             # Save updated history
             self._save_history()

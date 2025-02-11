@@ -12,6 +12,47 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class BaseFormatter:
+    """Base class for tweet formatters with common error handling"""
+    
+    def _safe_get_float(self, data: Dict, key: str, default: float = 0.0) -> float:
+        """Safely get a float value from dict"""
+        try:
+            value = data.get(key, default)
+            return float(value) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+            
+    def _safe_get_date(self, data: Dict, key: str) -> Optional[datetime]:
+        """Safely get a datetime value from dict"""
+        try:
+            date_str = data.get(key)
+            if not date_str:
+                return None
+            return datetime.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            return None
+            
+    def _safe_get_str(self, data: Dict, key: str, default: str = '') -> str:
+        """Safely get a string value from dict"""
+        try:
+            value = data.get(key, default)
+            return str(value) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+            
+    def _safe_get_int(self, data: Dict, key: str, default: int = 0) -> int:
+        """Safely get an int value from dict"""
+        try:
+            value = data.get(key, default)
+            return int(value) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+            
+    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
+        """Base format_tweet method"""
+        raise NotImplementedError
+
 class TweetFormatters:
     """Formats different types of tweets with personality"""
     
@@ -1297,9 +1338,9 @@ class PredictionAccuracyFormatter:
 
         # Add top 3 winners with medals and their gains
         medals = ['🥇', '🥈', '🥉']
-        for (symbol, data), medal in zip(winners, medals):
+        for i, ((symbol, data), medal) in enumerate(zip(winners, medals)):
             gain = float(data.get('gain_percentage', 0))
-            tweet += f"\n{medal} ${symbol}: +{gain:.1f}% → +{float(data.get('peak_percentage', 0)):.1f}%"
+            tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
             
         # Add hashtags and token mentions
         tweet += "\n\n#AITrading #Crypto #DeFi $BTC $ETH"
@@ -1311,160 +1352,209 @@ class PredictionAccuracyFormatter:
             
         return tweet
 
-class SuccessRateFormatter:
+class SuccessRateFormatter(BaseFormatter):
     """Tracks weekly and all-time stats"""
     
     def format_tweet(self, history_data: Dict[str, Dict]) -> str:
         """Format tweet showing success rate and top performers"""
-        
-        # Get top 5 performers sorted by gain
-        performers = sorted(
-            history_data.items(),
-            key=lambda x: float(x[1].get('gain_percentage', 0)),
-            reverse=True
-        )[:5]
-        
-        # Calculate real stats from history data
-        gains = [float(token['gain_percentage']) for token in history_data.values()]
-        avg_gain = sum(gains) / len(gains) if gains else 0
-        best_gain = max(gains) if gains else 0
-        
-        # Calculate success rate from last 24h
-        tokens_24h = [
-            token for token in history_data.values() 
-            if (datetime.fromisoformat(token['first_mention_date']) > 
-                datetime.now() - timedelta(days=1))
-        ]
-        success_24h = sum(1 for token in tokens_24h if float(token['gain_percentage']) > 0)
-        total_24h = len(tokens_24h)
-        success_rate = (success_24h/total_24h*100) if total_24h > 0 else 0
-        
-        tweet = """📊 Daily Performance Update
+        try:
+            if not history_data:
+                logger.warning("No history data provided")
+                return None
+            
+            # Get top 5 performers sorted by gain, safely handling missing data
+            performers = []
+            for symbol, data in history_data.items():
+                try:
+                    # Skip if required fields are missing
+                    required_fields = ['first_mention_price', 'current_price', 'gain_percentage']
+                    if not all(k in data for k in required_fields):
+                        continue
+                        
+                    # Get values and validate - require all fields to be valid floats
+                    try:
+                        entry = float(str(data['first_mention_price']).replace(',', ''))
+                        current = float(str(data['current_price']).replace(',', ''))
+                        gain = float(str(data['gain_percentage']).replace(',', '').rstrip('%'))
+                    except (ValueError, TypeError, AttributeError):
+                        logger.warning(f"Invalid numeric data for {symbol}")
+                        continue
+                    
+                    if entry > 0 and current > 0:
+                        performers.append((symbol, entry, current, gain))
+                except Exception as e:
+                    logger.warning(f"Error processing performance for {symbol}: {e}")
+                    continue
+                    
+            if not performers:
+                logger.warning("No valid performances found")
+                return None
+                
+            # Sort by gain and take top performers
+            performers.sort(key=lambda x: x[3], reverse=True)
+            top_performances = performers[:3]
+            
+            # Build tweet
+            tweet = """📊 Daily Performance Update
 
 🏆 Top Performers:"""
-        
-        # Add top 5 performers with different emojis
-        emojis = ['💎', '👑', '⭐', '💫', '✨']
-        for i, ((symbol, data), emoji) in enumerate(zip(performers, emojis)):
-            gain = float(data.get('gain_percentage', 0))
-            tweet += f"\n{i+1}.{emoji} ${symbol} (+{gain:.1f}%)"
             
-        tweet += f"""
+            # Add top 5 performers with different emojis
+            emojis = ['💎', '👑', '⭐', '💫', '✨']
+            for i, ((symbol, entry, current, gain), emoji) in enumerate(zip(top_performances, emojis)):
+                tweet += f"\n{i+1}.{emoji} ${symbol} (+{gain:.1f}%)"
+            
+            # Only show success rate if we have data
+            if len(top_performances) > 0:
+                # Calculate stats
+                gains = [gain for _, _, _, gain in performers]
+                avg_gain = sum(gains) / len(gains) if gains else 0
+                best_gain = max(gains) if gains else 0
+                
+                tweet += f"""
 
 📈 Stats Today:
-• Success Rate: {success_rate:.0f}%
+• Success Rate: {len([g for g in gains if g > 0]) / len(gains) * 100:.0f}% ({len([g for g in gains if g > 0])}/{len(gains)})
 • Avg Gain: +{avg_gain:.1f}%
-• Best: +{best_gain:.1f}%
+• Best: +{best_gain:.1f}%"""
+            else:
+                tweet += f"""
 
-#Trading #Crypto #Gains $BTC $ETH"""
-        
-        return tweet
+📈 Stats Today:
+• Avg Gain: +{avg_gain:.1f}%
+• Best: +{best_gain:.1f}%"""
+            
+            tweet += "\n\n#Trading #Crypto #Gains $BTC $ETH"
+            
+            return tweet
+            
+        except Exception as e:
+            logger.error(f"Error formatting success rate tweet: {e}")
+            return None
 
-class PerformanceCompareFormatter:
+class PerformanceCompareFormatter(BaseFormatter):
     """Shows individual token performance"""
     
-    def format_tweet(self, token_data: Dict) -> str:
-        """Format tweet comparing entry vs current performance"""
-        symbol = token_data['symbol']
-        entry = float(token_data['first_mention_price'])
-        current = float(token_data['current_price'])
-        gain = float(token_data['gain_percentage'])
-        volume = float(token_data['current_volume'])
-        mcap = float(token_data['current_mcap'])
-        volume_mc_ratio = (volume / mcap) * 100 if mcap > 0 else 0
-        
-        # Get other tokens for special mentions
-        other_tokens = token_data.get('other_tokens', [])[:5]  # Get up to 5 other tokens
-        
-        tweet = f"""🤖 Performance: ${symbol}
-
-💰 Price Action:
-• Entry: ${entry:.6f}
-• Current: ${current:.6f}
-• Change: +{gain:.1f}%
-
-📈 Volume:
-• 24h: ${volume:,.0f}
-• MCap: ${mcap:,.0f}
-• V/MC: {volume_mc_ratio:.1f}%
-
-👥 Special mentions: ${' $'.join(other_tokens)}
-
-#Memecoin #BSC #100x $BNB $ETH"""
-        
-        return tweet
-
-class WinnersRecapFormatter:
-    """Lists top performing tokens"""
-    
     def format_tweet(self, history_data: Dict[str, Dict]) -> str:
-        """Format tweet showing top performers"""
+        """Format tweet comparing token performance"""
         try:
             if not history_data:
                 logger.warning("No history data provided")
                 return None
                 
-            # Get top performers sorted by gain, safely handling missing data
-            winners = []
+            # Process each token's performance
+            performances = []
             for symbol, data in history_data.items():
                 try:
-                    gain = float(data.get('gain_percentage', 0))
-                    winners.append((symbol, data, gain))
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Error processing gain for {symbol}: {e}")
+                    # Skip if required fields are missing
+                    required_fields = ['first_mention_price', 'current_price', 'gain_percentage']
+                    if not all(k in data for k in required_fields):
+                        continue
+                        
+                    # Get values and validate - require all fields to be valid floats
+                    try:
+                        entry = float(str(data['first_mention_price']).replace(',', ''))
+                        current = float(str(data['current_price']).replace(',', ''))
+                        gain = float(str(data['gain_percentage']).replace(',', '').rstrip('%'))
+                    except (ValueError, TypeError, AttributeError):
+                        logger.warning(f"Invalid numeric data for {symbol}")
+                        continue
+                    
+                    if entry > 0 and current > 0:
+                        performances.append((symbol, entry, current, gain))
+                except Exception as e:
+                    logger.warning(f"Error processing performance for {symbol}: {e}")
                     continue
                     
-            if not winners:
-                logger.warning("No valid winners found")
+            if not performances:
+                logger.warning("No valid performances found")
                 return None
                 
-            # Sort by gain and take top 7
-            winners.sort(key=lambda x: x[2], reverse=True)
-            winners = winners[:7]
+            # Sort by gain and take top performers
+            performances.sort(key=lambda x: x[3], reverse=True)
+            top_performances = performances[:3]
             
-            # Start building tweet
-            tweet = """🏆 Weekly Hall of Fame\n"""
+            # Build tweet
+            tweet = """📊 Performance Update\n"""
             
-            # Add winners with medal emojis
-            medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣']
+            # Add performance details
+            for i, (symbol, entry, current, gain) in enumerate(top_performances, 1):
+                tweet += f"\n${symbol}"
+                tweet += f"\nEntry: ${entry:.4f}"
+                tweet += f"\nCurrent: ${current:.4f}"
+                tweet += f"\nGain: {gain:+.1f}%"
+                if i < len(top_performances):
+                    tweet += "\n"
             
-            for i, (symbol, data, gain) in enumerate(winners):
-                medal = medals[i]
-                tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
+            tweet += "\n\n#Trading #Crypto #Gains"
+            return tweet
             
-            # Calculate success rate for tokens from last 7 days
-            try:
-                current_time = datetime.now()
-                week_ago = current_time - timedelta(days=7)
+        except Exception as e:
+            logger.error(f"Error formatting performance compare tweet: {e}")
+            return None
+
+class WinnersRecapFormatter(BaseFormatter):
+    """Generates weekly recap of top performing tokens"""
+    
+    def format_tweet(self, history_data: Dict[str, Dict]) -> str:
+        """Format tweet showing top performers from last 7 days"""
+        try:
+            if not history_data:
+                logger.warning("No history data provided")
+                return None
                 
-                recent_tokens = []
-                for data in history_data.values():
-                    try:
-                        mention_date = data.get('first_mention_date')
-                        if mention_date:
-                            mention_time = datetime.fromisoformat(mention_date)
-                            if mention_time > week_ago:
-                                recent_tokens.append(data)
-                    except (ValueError, TypeError) as e:
+            # Get tokens from last 7 days, safely handling dates
+            current_time = datetime.now()
+            week_ago = current_time - timedelta(days=7)
+            
+            weekly_tokens = []
+            for symbol, data in history_data.items():
+                try:
+                    mention_time = self._safe_get_date(data, 'first_mention_date')
+                    if not mention_time or mention_time <= week_ago:
                         continue
+                        
+                    gain = self._safe_get_float(data, 'gain_percentage')
+                    weekly_tokens.append((symbol, data, gain))
+                        
+                except Exception as e:
+                    logger.warning(f"Error processing token {symbol}: {e}")
+                    continue
+            
+            if not weekly_tokens:
+                logger.warning("No valid weekly tokens found")
+                return None
                 
-                if recent_tokens:
-                    profitable_tokens = [t for t in recent_tokens 
-                                      if float(t.get('gain_percentage', 0)) > 0]
-                    success_rate = (len(profitable_tokens) / len(recent_tokens)) * 100
-                    tweet += f"\n📊 Success Rate: {success_rate:.1f}% ({len(profitable_tokens)}/{len(recent_tokens)})"
-            except Exception as e:
-                logger.warning(f"Error calculating success rate: {e}")
+            # Sort by gain and get top 5
+            weekly_tokens.sort(key=lambda x: x[2], reverse=True)
+            top_tokens = weekly_tokens[:5]
             
-            # Add hashtags and token mentions
-            tweet += "\n\n#SocialFi #PEPE #Web3 $AVAX $BNB"
+            # Calculate stats
+            gains = [gain for _, _, gain in weekly_tokens]
+            avg_gain = sum(gains) / len(gains) if gains else 0
+            best_gain = max(gains) if gains else 0
+            success_count = sum(1 for g in gains if g > 0)
+            success_rate = (success_count / len(gains) * 100) if gains else 0
             
-            # Add additional token mentions (next 2 tokens)
-            if len(winners) > 7:
-                other_tokens = [w[0] for w in winners[7:9]]  # Get symbols from next 2
-                if other_tokens:
-                    tweet += f"\n${' $'.join(other_tokens)}"
-                    
+            # Build tweet
+            tweet = """🏆 Weekly Winners Recap
+            
+Top Performers:"""
+            
+            # Add top 5 performers with different emojis
+            emojis = ['💎', '👑', '⭐', '💫', '✨']
+            for i, ((symbol, _, gain), emoji) in enumerate(zip(top_tokens, emojis)):
+                tweet += f"\n{i+1}.{emoji} ${symbol} (+{gain:.1f}%)"
+            
+            tweet += f"""
+
+📈 Weekly Stats:
+• Success Rate: {success_rate:.0f}%
+• Avg Gain: +{avg_gain:.1f}%
+• Best: +{best_gain:.1f}%
+
+#Trading #Crypto #Gains $BTC $ETH"""
+            
             return tweet
             
         except Exception as e:
