@@ -6,6 +6,7 @@ import random
 import sys
 import os
 import json
+import logging
 
 class BasePerformanceFormatter:
     """Base class for performance formatters with common utilities."""
@@ -193,52 +194,85 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
         tags = hashtags + cashtags
         random.shuffle(tags)
         return ' '.join(tags[:count])
-    
+        
     def format_tweet(self, history_data: Dict) -> str:
         """Format tweet showing prediction accuracy"""
-        if not history_data or not history_data.get('tokens'):
-            return None
+        try:
+            if not history_data:
+                return None
+                
+            # Calculate real success rates from history
+            now = datetime.now()
             
-        # Calculate real success rates from history
-        now = datetime.now()
-        tokens = history_data['tokens']
-        
-        # Count successes (tokens with positive gain)
-        success_24h = sum(1 for token in tokens if float(token['gain_percentage']) > 0)
-        total_24h = len(tokens)
-        
-        # Get 7d data from performance analysis
-        perf_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'performance_analysis.json')
-        with open(perf_file, 'r') as f:
-            performance_data = json.load(f)
-        
-        success_7d = performance_data['summary']['tokens_with_gains']['7d']
-        total_7d = performance_data['summary']['total_tokens_tracked']
-        
-        # Calculate success rates
-        rate_24h = (success_24h/total_24h*100) if total_24h > 0 else 0
-        rate_7d = (success_7d/total_7d*100) if total_7d > 0 else 0
-        
-        # Get top winners (only positive gains)
-        winners = sorted(
-            [
-                (token['symbol'], float(token['gain_percentage']))
-                for token in tokens
+            # Handle both list and dict formats
+            if isinstance(history_data, dict) and 'tokens' not in history_data:
+                # Convert dict format to list format
+                tokens = [
+                    {
+                        'symbol': data['symbol'],
+                        'gain_percentage': self._calculate_gain(
+                            float(data.get('current_price', 0)),
+                            float(data.get('first_mention_price', 0))
+                        ),
+                        'first_mention_date': data.get('first_mention_date')
+                    }
+                    for symbol, data in history_data.items()
+                ]
+            else:
+                tokens = history_data['tokens']
+            
+            # Get 24h tokens
+            tokens_24h = [
+                token for token in tokens
+                if (datetime.fromisoformat(token['first_mention_date']) > 
+                    now - timedelta(days=1))
+            ]
+            
+            # Count successes (tokens with positive gain)
+            success_24h = sum(1 for token in tokens_24h if float(token['gain_percentage']) > 0)
+            total_24h = len(tokens_24h)
+            
+            # Get 7d data from performance analysis
+            try:
+                perf_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'performance_analysis.json')
+                with open(perf_file, 'r') as f:
+                    performance_data = json.load(f)
+                success_7d = performance_data['summary']['tokens_with_gains']['7d']
+                total_7d = performance_data['summary']['total_tokens_tracked']
+            except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                # Fallback to calculating from current data
+                tokens_7d = [
+                    token for token in tokens
+                    if (datetime.fromisoformat(token['first_mention_date']) > 
+                        now - timedelta(days=7))
+                ]
+                success_7d = sum(1 for token in tokens_7d if float(token['gain_percentage']) > 0)
+                total_7d = len(tokens_7d)
+            
+            # Calculate success rates
+            rate_24h = (success_24h/total_24h*100) if total_24h > 0 else 0
+            rate_7d = (success_7d/total_7d*100) if total_7d > 0 else 0
+            
+            # Get top winners (only positive gains)
+            winners = sorted(
+                [
+                    (token['symbol'], float(token['gain_percentage']))
+                    for token in tokens_24h
+                    if float(token['gain_percentage']) > 0
+                ],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            # Calculate average gain for successful predictions only
+            successful_gains = [
+                float(token['gain_percentage']) 
+                for token in tokens_24h 
                 if float(token['gain_percentage']) > 0
-            ],
-            key=lambda x: x[1],
-            reverse=True
-        )
-        
-        # Calculate average gain for successful predictions only
-        successful_gains = [
-            float(token['gain_percentage']) 
-            for token in tokens 
-            if float(token['gain_percentage']) > 0
-        ]
-        avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
-        
-        tweet = f"""🎯 Prediction Accuracy Update
+            ]
+            avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
+            
+            tweet = f"""🎯 Prediction Accuracy Update
 
 📊 Success Rates:
 • Last 24h: {rate_24h:.0f}% ({success_24h}/{total_24h} calls)
@@ -247,20 +281,24 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
 
 ✅ Recent Winners:"""
 
-        # Add up to 5 winners - medals for top 3, stars for 4th and 5th
-        medals = ['🥇', '🥈', '🥉', '⭐', '⭐']
-        for i, ((symbol, gain), medal) in enumerate(zip(winners[:5], medals)):
-            tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
+            # Add up to 5 winners - medals for top 3, stars for 4th and 5th
+            medals = ['🥇', '🥈', '🥉', '⭐', '⭐']
+            for i, ((symbol, gain), medal) in enumerate(zip(winners[:5], medals)):
+                tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
+                
+            # If no winners, show message
+            if not winners:
+                tweet += "\nNo winning trades in last 24h"
+                
+            # Get random tags
+            tags = self._get_random_tags(3)
+            tweet += f"\n\n{tags}"
             
-        # If no winners, show message
-        if not winners:
-            tweet += "\nNo winning trades in last 24h"
+            return tweet
             
-        # Get random tags
-        tags = self._get_random_tags(3)
-        tweet += f"\n\n{tags}"
-        
-        return tweet
+        except Exception as e:
+            logging.error(f"Error formatting prediction accuracy tweet: {e}")
+            return None
 
 class WinnersRecapFormatter(BasePerformanceFormatter):
     """Shows weekly winners with key stats."""
