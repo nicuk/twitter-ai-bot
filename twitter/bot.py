@@ -217,8 +217,7 @@ class AIGamingBot:
         schedule.clear()
         logger.info("Cleared existing schedule")
         
-        # === Trend Posts (7 per day) ===
-        schedule.every().day.at("00:00").do(self.post_trend)     # Midnight
+        # === Trend Posts (6 per day) ===
         schedule.every().day.at("01:00").do(self.post_trend)     # Early Asian
         schedule.every().day.at("05:00").do(self.post_trend)     # Mid Asian
         schedule.every().day.at("09:00").do(self.post_trend)     # Early EU
@@ -232,13 +231,14 @@ class AIGamingBot:
         schedule.every().day.at("15:00").do(self.post_volume)    # Early US
         schedule.every().day.at("19:00").do(self.post_volume)    # Mid US
 
-        # === Core A/B Format Posts (6 per day) ===
-        schedule.every().day.at("02:00").do(self.post_format_tweet)  # Early Asian
-        schedule.every().day.at("06:00").do(self.post_format_tweet)  # Mid Asian
-        schedule.every().day.at("10:00").do(self.post_format_tweet)  # Early EU
-        schedule.every().day.at("14:00").do(self.post_format_tweet)  # Mid EU
-        schedule.every().day.at("18:00").do(self.post_format_tweet)  # Early US
-        schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US
+        # === Core A/B Format Posts (7 per day) ===
+        schedule.every().day.at("00:00").do(self.post_format_tweet)  # Midnight
+        schedule.every().day.at("04:00").do(self.post_format_tweet)  # Mid Asian
+        schedule.every().day.at("08:00").do(self.post_format_tweet)  # Early EU
+        schedule.every().day.at("12:00").do(self.post_format_tweet)  # Mid EU
+        schedule.every().day.at("16:00").do(self.post_format_tweet)  # Early US
+        schedule.every().day.at("20:00").do(self.post_format_tweet)  # Mid US
+        schedule.every().day.at("23:00").do(self.post_format_tweet)  # Late US
 
     def _post_tweet(self, tweet):
         """Post a tweet with error handling and backup content"""
