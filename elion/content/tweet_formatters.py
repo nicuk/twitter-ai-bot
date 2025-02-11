@@ -1299,8 +1299,7 @@ class PredictionAccuracyFormatter:
         medals = ['🥇', '🥈', '🥉']
         for (symbol, data), medal in zip(winners, medals):
             gain = float(data.get('gain_percentage', 0))
-            peak = float(data.get('peak_percentage', 0))
-            tweet += f"\n{medal} ${symbol}: +{gain:.1f}% → +{peak:.1f}%"
+            tweet += f"\n{medal} ${symbol}: +{gain:.1f}% → +{float(data.get('peak_percentage', 0)):.1f}%"
             
         # Add hashtags and token mentions
         tweet += "\n\n#AITrading #Crypto #DeFi $BTC $ETH"
@@ -1400,45 +1399,77 @@ class WinnersRecapFormatter:
     
     def format_tweet(self, history_data: Dict[str, Dict]) -> str:
         """Format tweet showing top performers"""
-        # Get top 7 performers sorted by gain
-        winners = sorted(
-            history_data.items(),
-            key=lambda x: float(x[1].get('gain_percentage', 0)),
-            reverse=True
-        )[:7]
-        
-        # Calculate overall stats
-        all_tokens = [token for token in history_data.values() 
-                     if (datetime.fromisoformat(token['first_mention_date']) > 
-                         datetime.now() - timedelta(days=7))]
-        profitable_tokens = [token for token in all_tokens 
-                           if float(token.get('gain_percentage', 0)) > 0]
-        
-        total_calls = len(all_tokens)
-        profitable_calls = len(profitable_tokens)
-        
-        tweet = """🏆 Weekly Hall of Fame\n"""
-        
-        # Add winners with medal emojis
-        medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣']
-        
-        for i, ((symbol, data), medal) in enumerate(zip(winners, medals)):
-            gain = float(data.get('gain_percentage', 0))
-            tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
+        try:
+            if not history_data:
+                logger.warning("No history data provided")
+                return None
+                
+            # Get top performers sorted by gain, safely handling missing data
+            winners = []
+            for symbol, data in history_data.items():
+                try:
+                    gain = float(data.get('gain_percentage', 0))
+                    winners.append((symbol, data, gain))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error processing gain for {symbol}: {e}")
+                    continue
+                    
+            if not winners:
+                logger.warning("No valid winners found")
+                return None
+                
+            # Sort by gain and take top 7
+            winners.sort(key=lambda x: x[2], reverse=True)
+            winners = winners[:7]
             
-        if total_calls > 0:
-            success_rate = (profitable_calls / total_calls) * 100
-            tweet += f"\n📊 Success Rate: {success_rate:.1f}% ({profitable_calls}/{total_calls})"
-        
-        # Add hashtags and token mentions
-        tweet += "\n\n#SocialFi #PEPE #Web3 $AVAX $BNB"
-        
-        # Add additional token mentions (next 2 tokens)
-        other_tokens = [symbol for symbol, _ in winners[7:9]]
-        if other_tokens:
-            tweet += f"\n${' $'.join(other_tokens)}"
+            # Start building tweet
+            tweet = """🏆 Weekly Hall of Fame\n"""
             
-        return tweet
+            # Add winners with medal emojis
+            medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣']
+            
+            for i, (symbol, data, gain) in enumerate(winners):
+                medal = medals[i]
+                tweet += f"\n{i+1}.{medal} ${symbol} (+{gain:.1f}%)"
+            
+            # Calculate success rate for tokens from last 7 days
+            try:
+                current_time = datetime.now()
+                week_ago = current_time - timedelta(days=7)
+                
+                recent_tokens = []
+                for data in history_data.values():
+                    try:
+                        mention_date = data.get('first_mention_date')
+                        if mention_date:
+                            mention_time = datetime.fromisoformat(mention_date)
+                            if mention_time > week_ago:
+                                recent_tokens.append(data)
+                    except (ValueError, TypeError) as e:
+                        continue
+                
+                if recent_tokens:
+                    profitable_tokens = [t for t in recent_tokens 
+                                      if float(t.get('gain_percentage', 0)) > 0]
+                    success_rate = (len(profitable_tokens) / len(recent_tokens)) * 100
+                    tweet += f"\n📊 Success Rate: {success_rate:.1f}% ({len(profitable_tokens)}/{len(recent_tokens)})"
+            except Exception as e:
+                logger.warning(f"Error calculating success rate: {e}")
+            
+            # Add hashtags and token mentions
+            tweet += "\n\n#SocialFi #PEPE #Web3 $AVAX $BNB"
+            
+            # Add additional token mentions (next 2 tokens)
+            if len(winners) > 7:
+                other_tokens = [w[0] for w in winners[7:9]]  # Get symbols from next 2
+                if other_tokens:
+                    tweet += f"\n${' $'.join(other_tokens)}"
+                    
+            return tweet
+            
+        except Exception as e:
+            logger.error(f"Error formatting winners recap tweet: {e}")
+            return None
 
 # List of available formatters
 FORMATTERS = {

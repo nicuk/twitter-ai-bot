@@ -163,8 +163,6 @@ class AIGamingBot:
         self.max_retries = 3
         self.base_wait = 5  # Base wait time in minutes
         self.retry_count = 0
-        self.delayed_posts = []  # Queue for delayed posts
-        self.min_post_delay = 300  # Minimum 5 minutes between posts
         
         # Initialize core components
         self.api = TwitterAPI()
@@ -252,7 +250,6 @@ class AIGamingBot:
             response = self.api.create_tweet(tweet)
             if response:
                 logger.info(f"Posted tweet: {tweet}")
-                self.rate_limiter.update_post_time()  # Track successful post
                 return True
                 
         except tweepy.errors.TooManyRequests:
@@ -274,7 +271,6 @@ class AIGamingBot:
                     response = self.api.create_tweet(backup_tweet)
                     if response:
                         logger.info(f"Posted backup tweet: {backup_tweet}")
-                        self.rate_limiter.update_post_time()  # Track successful backup post
                         return True
                     
             except Exception as e:
@@ -514,68 +510,38 @@ class AIGamingBot:
             # Set up fresh schedule starting from next occurrence
             self._schedule_tweets()
             
+            # Track last post time
+            last_post_time = 0
+            min_post_delay = 300  # 5 minutes between posts
+            
             # Run continuously
             while True:
                 try:
                     current_time = time.time()
                     
-                    # First, try to process any delayed posts
-                    if self.delayed_posts and not self.rate_limiter.is_rate_limited():
-                        logger.info(f"Processing {len(self.delayed_posts)} delayed posts...")
+                    # Only process a job if enough time has passed since last post
+                    if current_time - last_post_time >= min_post_delay:
+                        # Get all pending jobs
+                        pending_jobs = [job for job in schedule.get_jobs() if job.should_run]
                         
-                        # Sort by original scheduled time
-                        self.delayed_posts.sort(key=lambda x: x['scheduled_time'])
-                        
-                        while self.delayed_posts:
-                            post = self.delayed_posts[0]
+                        if pending_jobs:
+                            # Sort jobs by their next run time
+                            pending_jobs.sort(key=lambda job: job.next_run)
                             
-                            # Ensure minimum delay between posts
-                            if current_time - self.rate_limiter.last_post_time < self.min_post_delay:
-                                break
-                                
+                            # Only run the earliest job
                             try:
-                                # Get fresh data for the post
-                                if post['type'] == 'trend':
-                                    self.post_trend()
-                                elif post['type'] == 'volume':
-                                    self.post_volume()
-                                elif post['type'] == 'format':
-                                    self.post_format_tweet()
-                                    
-                                # Remove from queue if successful
-                                self.delayed_posts.pop(0)
-                                
-                                # Wait minimum delay before next post
-                                time.sleep(self.min_post_delay)
+                                job = pending_jobs[0]
+                                logger.info(f"Running scheduled job: {job.job_func.__name__}")
+                                job.run()
+                                last_post_time = current_time
                                 
                             except tweepy.errors.TooManyRequests:
-                                # Still rate limited, try again later
-                                logger.warning("Still rate limited, will retry delayed posts later")
-                                break
+                                # Handle rate limit with proper cooldown
+                                self.rate_limiter.handle_rate_limit()
                             except Exception as e:
-                                logger.error(f"Error processing delayed post: {e}")
-                                self.delayed_posts.pop(0)  # Remove failed post
+                                logger.error(f"Error running scheduled job: {e}")
                     
-                    # Then process regular scheduled jobs
-                    try:
-                        schedule.run_pending()
-                    except tweepy.errors.TooManyRequests:
-                        # Get current job that failed
-                        current_job = schedule.get_jobs()[0] if schedule.get_jobs() else None
-                        if current_job:
-                            # Add to delayed posts queue
-                            self.delayed_posts.append({
-                                'type': current_job.job_func.__name__.replace('post_', ''),
-                                'scheduled_time': current_time
-                            })
-                            logger.info(f"Added {current_job.job_func.__name__} to delayed posts queue")
-                        
-                        # Handle rate limit with proper cooldown
-                        self.rate_limiter.handle_rate_limit()
-                    except Exception as e:
-                        logger.error(f"Error running scheduled jobs: {e}")
-                    
-                    time.sleep(60)
+                    time.sleep(60)  # Check every minute
                     
                 except Exception as e:
                     logger.error(f"Error in main loop: {e}")

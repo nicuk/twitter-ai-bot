@@ -12,6 +12,7 @@ class TweetHistory:
         """Initialize tweet history manager"""
         self.tweets = []
         self.max_history = 100  # Keep last 100 tweets
+        self.history = {}  # Initialize history dictionary
     
     def add_tweet(self, tweet_data: dict) -> None:
         """Add new tweet to history"""
@@ -44,3 +45,30 @@ class TweetHistory:
             tweet for tweet in self.tweets
             if datetime.fromisoformat(tweet['timestamp']) > cutoff
         ]
+
+    def track_token(self, symbol: str) -> None:
+        """Track a token that was mentioned in a tweet"""
+        try:
+            current_time = datetime.utcnow().isoformat()
+            
+            # Initialize history for new tokens
+            if symbol not in self.history:
+                self.history[symbol] = {
+                    'first_mention_date': current_time,
+                    'last_mention_date': current_time,
+                    'mention_count': 1
+                }
+            else:
+                # Update existing token history
+                self.history[symbol]['last_mention_date'] = current_time
+                self.history[symbol]['mention_count'] += 1
+            
+            # Save updated history
+            self._save_history()
+            
+        except Exception as e:
+            logger.error(f"Error tracking token {symbol}: {e}")
+
+    def _save_history(self) -> None:
+        # TO DO: implement saving history to a file or database
+        pass
