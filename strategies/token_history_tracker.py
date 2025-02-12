@@ -488,3 +488,35 @@ class TokenHistoryTracker:
             patterns['avg_time_to_peak'] /= patterns['total_successful']
             
         return patterns
+
+    def get_recent_performance(self) -> Dict:
+        """Get recent token performance data for tweet formatting"""
+        tokens = []
+        
+        for symbol, token in self.token_history.items():
+            # Calculate gain percentage
+            if token.first_mention_price > 0:
+                gain_percentage = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
+            else:
+                gain_percentage = 0
+            
+            # Add token data in the format expected by formatters
+            token_data = {
+                'symbol': symbol,
+                'first_mention_price': token.first_mention_price,
+                'current_price': token.current_price,
+                'volume_24h': token.current_volume,
+                'gain_percentage': gain_percentage,
+                'first_mention_date': token.first_mention_date.isoformat(),
+                'max_gain_7d': token.max_gain_percentage_7d,
+                'first_mention_mcap': token.first_mention_mcap,
+                'current_mcap': token.current_mcap
+            }
+            tokens.append(token_data)
+        
+        # Sort by gain percentage
+        tokens.sort(key=lambda x: x['gain_percentage'], reverse=True)
+        
+        return {
+            'tokens': tokens
+        }

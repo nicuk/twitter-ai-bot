@@ -312,27 +312,6 @@ class Elion:
         try:
             logger.info(f"Formatting tweet type: {tweet_type}")
             
-            # Get token history for performance formatters
-            history = self.token_monitor.history_tracker.get_all_token_history()
-            
-            # Convert TokenHistoricalData to dictionary
-            history_dict = {}
-            for symbol, token_data in history.items():
-                # Calculate gain percentage
-                gain_percentage = 0
-                if token_data.first_mention_price and token_data.first_mention_price > 0:
-                    gain_percentage = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100
-                
-                history_dict[symbol] = {
-                    'symbol': symbol,
-                    'current_price': token_data.current_price,
-                    'first_mention_price': token_data.first_mention_price,
-                    'gain_percentage': gain_percentage,
-                    'max_gain_percentage_7d': token_data.max_gain_percentage_7d,
-                    'volume_24h': token_data.current_volume,
-                    'first_mention_volume_24h': token_data.first_mention_volume_24h
-                }
-            
             # Handle performance formatters
             if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
                 formatter = self.formatters.get(tweet_type)
@@ -340,23 +319,21 @@ class Elion:
                     logger.warning(f"Formatter {tweet_type} not found")
                     return None
                     
-                if tweet_type == 'performance_compare':
-                    # For performance compare, we need a specific token
-                    if not market_data or 'token' not in market_data:
-                        logger.warning("No token data for performance compare")
-                        return None
-                    return formatter.format_tweet(market_data['token'])
-                else:
-                    # Other performance formatters use history data
-                    return formatter.format_tweet(history_dict)
+                # Use market_data directly if it's already in the correct format
+                if market_data and 'tokens' in market_data:
+                    return formatter.format_tweet(market_data)
+                
+                # Otherwise, get token history and format it
+                history = self.token_history.get_recent_performance()
+                return formatter.format_tweet(history)
             
             # Handle regular formatters
-            # template = self.tweet_formatters.get_template(tweet_type, variant)
-            # if not template:
-            #     logger.warning(f"No template found for {tweet_type}")
-            #     return None
+            template = self.tweet_formatters.get_template(tweet_type, variant)
+            if not template:
+                logger.warning(f"No template found for {tweet_type}")
+                return None
                 
-            # return template.format(**market_data)
+            return template.format(**market_data)
             
         except Exception as e:
             logger.error(f"Error formatting tweet: {e}")
