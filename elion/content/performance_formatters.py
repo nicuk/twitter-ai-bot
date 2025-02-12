@@ -99,34 +99,37 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             volume_24h = float(token.get('volume_24h', 0))
             mcap = float(token.get('current_mcap', 0))
             volume_mcap_ratio = (volume_24h / mcap * 100) if mcap > 0 else 0
-            
-            # Get special mentions (next 4 tokens by gain)
-            special_mentions = sorted(
-                [t for t in history_data['tokens'] if t['symbol'] != token['symbol']], 
-                key=lambda x: float(x.get('gain_percentage', 0)), 
-                reverse=True
-            )[:4]
-            
-            tweet = f"""🤖 Performance: ${token['symbol']}
+            gain_percentage = float(token.get('gain_percentage', 0))
+            max_gain_7d = float(token.get('max_gain_percentage_7d', 0))
+            first_mention_date = datetime.fromisoformat(token.get('first_mention_date'))
+            hours_since_mention = (datetime.now() - first_mention_date).total_seconds() / 3600
 
-💰 Price Action:
-• Entry: ${float(token.get('first_mention_price', 0)):.6f}
-• Current: ${float(token.get('current_price', 0)):.6f}
-• Change: +{float(token.get('gain_percentage', 0)):.2f}%
+            # Get similar tokens for special mentions
+            similar_tokens = [t for t in history_data['tokens'] if t['symbol'] != token['symbol']]
+            similar_tokens = sorted(similar_tokens, key=lambda x: float(x.get('gain_percentage', 0)), reverse=True)[:4]
+            special_mentions = [t['symbol'] for t in similar_tokens]
+
+            # Format tweet with more context and clearer language
+            tweet = f"""🎯 ${token['symbol']} Spotted {hours_since_mention:.1f}h ago!
+
+📈 Performance Update:
+• Spotted at: ${self._format_price(token['first_mention_price'])}
+• Current Price: ${self._format_price(token['current_price'])} ({self._format_percentage(gain_percentage)})
+• Best Gain: {self._format_percentage(max_gain_7d)} (7d high)
 
 📈 Volume & Market Cap:
-• 24h Vol: {volume_24h/1e6:.1f}M
-• MCap: {mcap/1e6:.1f}M
-• V/MC: +{volume_mcap_ratio:.2f}%
+• 24h Vol: {self._format_volume(volume_24h)}
+• MCap: {self._format_volume(mcap)}
+• V/MC: {self._format_percentage(volume_mcap_ratio)}
 
-👥 Special mentions: ${' $'.join([t['symbol'] for t in special_mentions])}
+👥 Special mentions: ${' $'.join(special_mentions)}
 
-#Memecoin #BSC #100x $BNB $ETH"""
+#Crypto #Gems #AltSeason"""
 
-            return tweet
-
+            return self.optimize_tweet_length(tweet, history_data, 'performance')
+            
         except Exception as e:
-            logging.error(f"Error formatting performance compare tweet: {e}")
+            logging.error(f"Error formatting performance tweet: {e}")
             return None
 
 class SuccessRateFormatter(BasePerformanceFormatter):
