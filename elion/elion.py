@@ -269,41 +269,30 @@ class Elion:
             # Get token history
             history = self.token_monitor.history_tracker.get_recent_performance()
             
-            # Get current time
-            now = datetime.now()
-            
-            # Select formatter based on time
-            hour = now.hour
-            if hour % 6 == 0:  # Every 6 hours
-                tweet = self.formatters['success_rate'].format_tweet(history)
-            elif hour % 4 == 0:  # Every 4 hours
-                tweet = self.formatters['prediction_accuracy'].format_tweet(history)
-            elif hour % 3 == 0:  # Every 3 hours
-                tweet = self.formatters['winners_recap'].format_tweet(history)
-            else:
-                # For other hours, rotate between first_hour, breakout, and performance
-                if volume_data and 'spikes' in volume_data and volume_data['spikes']:
-                    # Get latest spike token
-                    _, token = volume_data['spikes'][0]
+            # Check for volume spikes first
+            if volume_data and 'spikes' in volume_data and volume_data['spikes']:
+                # Get latest spike token
+                _, token = volume_data['spikes'][0]
+                
+                # Check how long ago token was first mentioned
+                symbol = token['symbol']
+                token_data = next((t for t in history['tokens'] if t['symbol'] == symbol), None)
+                if token_data:
+                    first_mention = datetime.fromisoformat(token_data['first_mention_date'])
+                    time_diff = datetime.now() - first_mention
                     
-                    # Check how long ago token was first mentioned
-                    symbol = token['symbol']
-                    if symbol in history:
-                        first_mention = datetime.fromisoformat(history[symbol]['first_mention_date'])
-                        time_diff = now - first_mention
-                        
-                        if time_diff < timedelta(hours=1):
-                            tweet = self.formatters['performance_compare'].format_tweet(token)
-                        elif time_diff < timedelta(hours=2):
-                            tweet = self.formatters['performance_compare'].format_tweet(token)
-                        else:
-                            tweet = self.formatters['performance_compare'].format_tweet(token)
+                    if time_diff < timedelta(hours=1):
+                        tweet = self.formatters['performance_compare'].format_tweet(token)
+                    elif time_diff < timedelta(hours=2):
+                        tweet = self.formatters['performance_compare'].format_tweet(token)
                     else:
-                        # New token, use breakout formatter
                         tweet = self.formatters['performance_compare'].format_tweet(token)
                 else:
-                    # No new tokens, use winners recap
-                    tweet = self.formatters['winners_recap'].format_tweet(history)
+                    # New token, use breakout formatter
+                    tweet = self.formatters['performance_compare'].format_tweet(token)
+            else:
+                # No new tokens, use winners recap
+                tweet = self.formatters['winners_recap'].format_tweet(history['tokens'])
             
             return tweet
             
@@ -329,7 +318,7 @@ class Elion:
                 
                 # Otherwise, get token history and format it
                 history = self.token_history.get_recent_performance()
-                return formatter.format_tweet(history)
+                return formatter.format_tweet(history['tokens'])
             
             # Handle regular formatters
             template = self.tweet_formatters.get_template(tweet_type, variant)
