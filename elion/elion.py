@@ -318,7 +318,8 @@ class Elion:
                 
                 # Otherwise, get token history and format it
                 history = self.token_history.get_recent_performance()
-                return formatter.format_tweet(history['tokens'])
+                return formatter.format_tweet(history)
+
             
             # Handle regular formatters
             template = self.tweet_formatters.get_template(tweet_type, variant)
