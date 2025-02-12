@@ -362,10 +362,25 @@ class TokenHistoryTracker:
             return 0.0
         return ((token.current_volume - token.first_mention_volume_24h) / token.first_mention_volume_24h) * 100
 
-    def get_all_token_history(self) -> Dict[str, TokenHistoricalData]:
-        """Get historical data for all tracked tokens"""
-        return self.token_history
-    
+    def get_all_token_history(self) -> Dict:
+        """Get historical data for all tracked tokens in the format expected by formatters"""
+        tokens_list = []
+        for token in self.token_history.values():
+            token_dict = {
+                'symbol': token.symbol,
+                'first_mention_date': token.first_mention_date.isoformat(),
+                'first_mention_price': token.first_mention_price,
+                'current_price': token.current_price,
+                'gain_percentage': ((token.current_price - token.first_mention_price) / token.first_mention_price * 100) if token.first_mention_price > 0 else 0,
+                'volume_24h': token.current_volume,
+                'first_mention_mcap': token.first_mention_mcap,
+                'current_mcap': token.current_mcap,
+                'volume_change_24h': ((token.current_volume - token.first_mention_volume_24h) / token.first_mention_volume_24h * 100) if token.first_mention_volume_24h > 0 else 0
+            }
+            tokens_list.append(token_dict)
+            
+        return {'tokens': tokens_list}
+
     def get_performance_stats(self) -> Dict:
         """Get performance statistics for all tracked tokens"""
         stats = {

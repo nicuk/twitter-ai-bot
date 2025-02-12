@@ -159,30 +159,27 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
                 mcap = float(token.get('current_mcap', 0))
                 volume_mcap_ratio = (volume_24h / mcap * 100) if mcap > 0 else 0
                 gain_percentage = float(token.get('gain_percentage', 0))
-                max_gain_7d = float(token.get('max_gain_7d', gain_percentage))  # Use max_gain_7d, fallback to current gain
-                first_mention_date = datetime.fromisoformat(token.get('first_mention_date'))
-                hours_since_mention = (datetime.now() - first_mention_date).total_seconds() / 3600
 
                 # Get similar tokens for special mentions (excluding recently tweeted ones)
                 similar_tokens = [t for t in tokens[1:5] if not self._is_recently_tweeted(t['symbol'])]
                 special_mentions = [t['symbol'] for t in similar_tokens]
 
-                # Format tweet with more context and clearer language
-                tweet = f"""🎯 ${token['symbol']} Spotted {hours_since_mention:.1f}h ago!
+                # Format tweet using our standardized format
+                tweet = f"""🤖 Performance: ${token['symbol']}
 
-📈 Performance Update:
-• Spotted at: ${self._format_price(token['first_mention_price'])}
-• Current Price: ${self._format_price(token['current_price'])} ({self._format_percentage(gain_percentage)})
-• Best Gain: {self._format_percentage(max_gain_7d)} (7d high)
+💰 Price Action:
+• Entry: ${self._format_price(token['first_mention_price'])}
+• Current: ${self._format_price(token['current_price'])}
+• Change: {self._format_percentage(gain_percentage)}
 
-📈 Volume & Market Cap:
-• 24h Vol: {self._format_volume(volume_24h)}
-• MCap: {self._format_volume(mcap)}
+📈 Volume:
+• 24h: {self._format_volume(volume_24h)}
+• Change: {self._format_percentage(token.get('volume_change_24h', 0))}
 • V/MC: {self._format_percentage(volume_mcap_ratio)}
 
 👥 Special mentions: ${' $'.join(special_mentions)}
 
-#Crypto #Gems #AltSeason"""
+#Memecoin #BSC #100x $BNB $ETH"""
 
                 # Save this token as recently tweeted
                 self._save_recent_token(token['symbol'])
@@ -284,101 +281,55 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
     def format_tweet(self, history_data: Dict) -> str:
         """Format tweet showing prediction accuracy"""
         try:
-            if not history_data:
+            if not history_data or not history_data.get('tokens'):
                 return None
                 
-            # Calculate real success rates from history
-            now = datetime.now()
+            tokens = history_data['tokens']
             
-            # Handle both list and dict formats
-            if isinstance(history_data, dict) and 'tokens' not in history_data:
-                # Convert dict format to list format
-                tokens = [
-                    {
-                        'symbol': data['symbol'],
-                        'gain_percentage': self._calculate_gain(
-                            float(data.get('current_price', 0)),
-                            float(data.get('first_mention_price', 0))
-                        ),
-                        'first_mention_date': data.get('first_mention_date'),
-                        'predicted_gain': data.get('predicted_gain', None)  # Get predicted gain if available
-                    }
-                    for symbol, data in history_data.items()
-                ]
-            else:
-                tokens = history_data['tokens']
-            
-            # Get 24h and 7d tokens that have predictions
-            tokens_24h = [
+            # Filter tokens that have predictions
+            tokens_with_predictions = [
                 token for token in tokens
-                if (datetime.fromisoformat(token['first_mention_date']) > 
-                    now - timedelta(days=1)) and
-                token.get('predicted_gain') is not None
+                if token.get('predicted_gain') is not None and token.get('actual_gain') is not None
             ]
             
-            tokens_7d = [
-                token for token in tokens
-                if (datetime.fromisoformat(token['first_mention_date']) > 
-                    now - timedelta(days=7)) and
-                token.get('predicted_gain') is not None
-            ]
-            
-            # Count successes (where actual gain >= predicted gain)
-            success_24h = sum(1 for token in tokens_24h 
-                            if float(token['gain_percentage']) >= float(token['predicted_gain']))
-            success_7d = sum(1 for token in tokens_7d 
-                            if float(token['gain_percentage']) >= float(token['predicted_gain']))
-            
+            if not tokens_with_predictions:
+                return None
+                
             # Calculate success rates
-            rate_24h = (success_24h/len(tokens_24h)*100) if tokens_24h else 0
-            rate_7d = (success_7d/len(tokens_7d)*100) if tokens_7d else 0
+            success_count = sum(1 for token in tokens_with_predictions 
+                              if float(token['actual_gain']) >= float(token['predicted_gain']))
+            total_count = len(tokens_with_predictions)
+            success_rate = (success_count / total_count * 100) if total_count > 0 else 0
             
             # Calculate average gain for successful predictions
             successful_gains = [
-                float(token['gain_percentage']) 
-                for token in tokens_24h + tokens_7d 
-                if float(token['gain_percentage']) >= float(token['predicted_gain'])
+                float(token['actual_gain']) 
+                for token in tokens_with_predictions 
+                if float(token['actual_gain']) >= float(token['predicted_gain'])
             ]
             avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
             
             # Start building tweet
-            tweet = """🎯 Prediction Accuracy Update
+            tweet = f"""🎯 Prediction Accuracy Update
 
 📊 Performance:
-• 24h: {:.0f}% ({}/{} calls)
-• 7d: {:.0f}% ({}/{} calls)
-• Average Win: +{:.1f}%
-• Total: {} predictions
+• 24h: {success_rate:.0f}% ({success_count}/{total_count} calls)
+• 7d: {success_rate:.0f}% ({success_count}/{total_count} calls)
+• Average Win: +{avg_gain:.1f}%
+• Total: {total_count} predictions
 
-✅ Recent Hits:""".format(
-                rate_24h, success_24h, len(tokens_24h),
-                rate_7d, success_7d, len(tokens_7d),
-                avg_gain,
-                len(tokens_24h) + len(tokens_7d)
-            )
-            
-            # Sort by predicted gain and show predicted vs actual for top 4
-            recent_hits = sorted(
-                [t for t in tokens_24h if float(t['gain_percentage']) >= float(t['predicted_gain'])],
-                key=lambda x: float(x['predicted_gain']),
-                reverse=True
-            )[:4]
-            
-            # If no hits, show message
-            if not recent_hits:
-                tweet += "\nNo successful predictions in last 24h"
-            else:
-                for token in recent_hits:
-                    predicted = float(token['predicted_gain'])
-                    actual = float(token['gain_percentage'])
-                    tweet += f"\n• ${token['symbol']}: +{predicted:.1f}% → +{actual:.1f}%"
-                
-            # Get random tags
-            tags = self._get_random_tags(3)
-            tweet += f"\n\n{tags}"
-            
+✅ Recent Hits:"""
+
+            # Add recent successful predictions
+            for token in tokens_with_predictions[:3]:
+                if float(token['actual_gain']) >= float(token['predicted_gain']):
+                    tweet += f"\n${token['symbol']}: +{token['predicted_gain']:.1f}% → +{token['actual_gain']:.1f}%"
+
+            # Add random tags
+            tweet += f"\n\n{self._get_random_tags()}"
+
             return tweet
-            
+
         except Exception as e:
             logging.error(f"Error formatting prediction accuracy tweet: {e}")
             return None
@@ -406,18 +357,6 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
             avg_gain = sum(float(t.get('gain_percentage', 0)) for t in tokens) / total_tokens if total_tokens > 0 else 0
             best_gain = max(float(t.get('gain_percentage', 0)) for t in tokens) if tokens else 0
 
-            # Debug stats
-            print("\nDebug - Winners:")
-            for token in tokens[:7]:
-                print(f"{token['symbol']}: {token['gain_percentage']}%")
-
-            print("\nDebug - Stats:")
-            print(f"Total tokens: {total_tokens}")
-            print(f"Winners: {winners}")
-            print(f"Success rate: {success_rate:.1f}%")
-            print(f"Avg gain: {avg_gain:.1f}%")
-            print(f"Best gain: {best_gain:.1f}%")
-
             # Format top performers with better icons
             top_performers = []
             for i, token in enumerate(tokens[:7]):
@@ -431,15 +370,15 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
                     icon = f"{i+1}️⃣"  # Number icon
                 
                 gain = float(token.get('gain_percentage', 0))
-                top_performers.append(f"{icon} ${token['symbol']} (+{gain:.1f}%)")
+                top_performers.append(f"{icon} ${token['symbol']}: +{gain:.1f}%")
 
             # Format tweet
-            tweet = f"""🏆 Weekly Hall of Fame
+            tweet = f"""🏆 Top Performers:
 
 {chr(10).join(top_performers)}
 
-📈 Weekly Stats:
-• Success Rate: {success_rate:.1f}% ({winners}/{total_tokens})
+📊 Overall: {winners}/{total_tokens} profitable
+• Success Rate: {success_rate:.1f}%
 • Avg Gain: +{avg_gain:.1f}%
 • Best: +{best_gain:.1f}%
 
