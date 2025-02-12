@@ -151,7 +151,7 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             mcap = float(token.get('current_mcap', 0))
             volume_mcap_ratio = (volume_24h / mcap * 100) if mcap > 0 else 0
             gain_percentage = float(token.get('gain_percentage', 0))
-            max_gain_7d = float(token.get('max_gain_percentage_7d', 0))
+            max_gain_7d = float(token.get('max_gain_percentage_7d', 0))  # Fixed key name
             first_mention_date = datetime.fromisoformat(token.get('first_mention_date'))
             hours_since_mention = (datetime.now() - first_mention_date).total_seconds() / 3600
 
