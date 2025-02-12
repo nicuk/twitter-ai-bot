@@ -219,11 +219,11 @@ class AIGamingBot:
         logger.info("Cleared existing schedule")
         
         # === Trend Posts (6 per day) ===
-        schedule.every().day.at("01:00").do(self.post_trend)     # Early Asian
+        schedule.every().day.at("01:30").do(self.post_trend)     # Early Asian
         schedule.every().day.at("05:00").do(self.post_trend)     # Mid Asian
         schedule.every().day.at("09:00").do(self.post_trend)     # Early EU
         schedule.every().day.at("13:00").do(self.post_trend)     # Mid EU
-        schedule.every().day.at("17:00").do(self.post_trend)     # Early US
+        schedule.every().day.at("17:30").do(self.post_trend)     # Early US
         schedule.every().day.at("21:00").do(self.post_trend)     # Mid US
 
         # === Volume Posts (4 per day) ===
@@ -233,11 +233,11 @@ class AIGamingBot:
         schedule.every().day.at("19:00").do(self.post_volume)    # Mid US
 
         # === Core A/B Format Posts (7 per day) ===
-        schedule.every().day.at("02:00").do(self.post_format_tweet)  # Early Asian (after trend)
+        schedule.every().day.at("02:30").do(self.post_format_tweet)  # Early Asian (after trend)
         schedule.every().day.at("04:00").do(self.post_format_tweet)  # Mid Asian
         schedule.every().day.at("08:00").do(self.post_format_tweet)  # Early EU
         schedule.every().day.at("12:00").do(self.post_format_tweet)  # Mid EU
-        schedule.every().day.at("16:00").do(self.post_format_tweet)  # Early US
+        schedule.every().day.at("16:30").do(self.post_format_tweet)  # Early US
         schedule.every().day.at("20:00").do(self.post_format_tweet)  # Mid US
         schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US (before trend)
 
@@ -350,18 +350,13 @@ class AIGamingBot:
             logger.error(f"Error posting AI mystique tweet: {e}")
             
     def post_performance(self):
-        """Post performance update, alternating between token and portfolio performance"""
+        """Post performance update for tokens"""
         try:
             # Get token performance data
             token_data = self.elion.token_history.get_recent_performance()
             
-            # Alternate between token and portfolio updates
-            if random.random() < 0.5:  # 50% chance for each type
-                # Token performance update
-                tweet = self.elion.format_tweet('performance_compare', token_data, variant='A')
-            else:
-                # Portfolio performance update - use token data as fallback
-                tweet = self.elion.format_tweet('performance_compare', token_data, variant='B')
+            # Format performance tweet
+            tweet = self.elion.format_tweet('performance_compare', token_data)
             
             # Post tweet with rate limiting
             self.rate_limiter.wait()

@@ -52,6 +52,47 @@ class BasePerformanceFormatter:
 class PerformanceCompareFormatter(BasePerformanceFormatter):
     """Formats tweets comparing token performance"""
     
+    def __init__(self):
+        super().__init__()
+        self.recent_tokens_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'recent_performance_tokens.json')
+        self.rotation_hours = 48  # Don't repeat tokens within this many hours
+    
+    def _get_recent_tokens(self) -> Dict[str, str]:
+        """Get recently tweeted tokens and their timestamps"""
+        if not os.path.exists(self.recent_tokens_file):
+            return {}
+        try:
+            with open(self.recent_tokens_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    
+    def _save_recent_token(self, symbol: str):
+        """Save token as recently tweeted"""
+        recent = self._get_recent_tokens()
+        recent[symbol] = datetime.now().isoformat()
+        
+        # Clean up old entries
+        cutoff = datetime.now() - timedelta(hours=self.rotation_hours)
+        recent = {
+            sym: ts for sym, ts in recent.items() 
+            if datetime.fromisoformat(ts) > cutoff
+        }
+        
+        os.makedirs(os.path.dirname(self.recent_tokens_file), exist_ok=True)
+        with open(self.recent_tokens_file, 'w') as f:
+            json.dump(recent, f, indent=2)
+    
+    def _is_recently_tweeted(self, symbol: str) -> bool:
+        """Check if token was recently tweeted about"""
+        recent = self._get_recent_tokens()
+        if symbol not in recent:
+            return False
+            
+        tweet_time = datetime.fromisoformat(recent[symbol])
+        hours_ago = (datetime.now() - tweet_time).total_seconds() / 3600
+        return hours_ago < self.rotation_hours
+
     def _format_price(self, price: float) -> str:
         """Format price with appropriate decimal places based on magnitude"""
         if price is None:
@@ -92,8 +133,18 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             if not history_data or not history_data.get('tokens'):
                 return None
 
-            # Get token with highest gain
-            token = max(history_data['tokens'], key=lambda x: float(x.get('gain_percentage', 0)))
+            # Sort tokens by gain and filter out recently tweeted ones
+            tokens = sorted(
+                [t for t in history_data['tokens'] if not self._is_recently_tweeted(t['symbol'])],
+                key=lambda x: float(x.get('gain_percentage', 0)),
+                reverse=True
+            )
+            
+            if not tokens:  # If all top tokens were recently tweeted
+                return None
+                
+            # Get token with highest gain that wasn't recently tweeted
+            token = tokens[0]
             
             # Format numbers
             volume_24h = float(token.get('volume_24h', 0))
@@ -104,9 +155,8 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             first_mention_date = datetime.fromisoformat(token.get('first_mention_date'))
             hours_since_mention = (datetime.now() - first_mention_date).total_seconds() / 3600
 
-            # Get similar tokens for special mentions
-            similar_tokens = [t for t in history_data['tokens'] if t['symbol'] != token['symbol']]
-            similar_tokens = sorted(similar_tokens, key=lambda x: float(x.get('gain_percentage', 0)), reverse=True)[:4]
+            # Get similar tokens for special mentions (excluding recently tweeted ones)
+            similar_tokens = [t for t in tokens[1:5] if not self._is_recently_tweeted(t['symbol'])]
             special_mentions = [t['symbol'] for t in similar_tokens]
 
             # Format tweet with more context and clearer language
@@ -125,6 +175,9 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
 👥 Special mentions: ${' $'.join(special_mentions)}
 
 #Crypto #Gems #AltSeason"""
+
+            # Save this token as recently tweeted
+            self._save_recent_token(token['symbol'])
 
             return self.optimize_tweet_length(tweet, history_data, 'performance')
             
