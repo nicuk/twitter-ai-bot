@@ -19,6 +19,7 @@ from elion.content.performance_formatters import (
     PredictionAccuracyFormatter,
     WinnersRecapFormatter
 )
+from elion.content.tweet_formatters import TweetFormatters
 from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
@@ -35,6 +36,9 @@ class Elion:
         
         # Initialize components
         self.personality = PersonalityManager()
+        
+        # Initialize tweet formatters
+        self.tweet_formatters = TweetFormatters()
         
         # Initialize formatters
         self.formatters = {
@@ -263,7 +267,7 @@ class Elion:
             trend_data = analysis.get('trend_data', {})
             
             # Get token history
-            history = self.token_monitor.history_tracker.get_all_token_history()
+            history = self.token_monitor.history_tracker.get_recent_performance()
             
             # Get current time
             now = datetime.now()

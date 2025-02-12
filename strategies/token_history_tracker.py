@@ -508,7 +508,7 @@ class TokenHistoryTracker:
                 'volume_24h': token.current_volume,
                 'gain_percentage': gain_percentage,
                 'first_mention_date': token.first_mention_date.isoformat(),
-                'max_gain_7d': token.max_gain_percentage_7d,
+                'max_gain_7d': token.max_gain_percentage_7d,  
                 'first_mention_mcap': token.first_mention_mcap,
                 'current_mcap': token.current_mcap
             }
