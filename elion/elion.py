@@ -23,6 +23,7 @@ from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
 from strategies.token_monitor import TokenMonitor  # Fixed import path
+from strategies.token_history_tracker import TokenHistoryTracker
 
 class Elion:
     """ELAI Agent for Crypto Twitter - Core functionality"""
@@ -53,6 +54,9 @@ class Elion:
         
         # Initialize token monitor
         self.token_monitor = TokenMonitor(api_key)
+        
+        # Initialize token history tracker
+        self.token_history = TokenHistoryTracker()
         
         # Initialize content generator with portfolio and LLM
         self.content = ContentGenerator(self.portfolio_tracker, self.llm)
