@@ -188,13 +188,13 @@ class AIGamingBot:
         
         # Map hours to specific formats for our 7 daily format posts
         hour_to_format = {
-            0: 'performance_compare',   # Midnight
+            2: 'performance_compare',   # Early Asian
             4: 'prediction_accuracy',   # Mid Asian
             8: 'success_rate',         # Early EU
             12: 'winners_recap',       # Mid EU
             16: 'performance_compare', # Early US
             20: 'prediction_accuracy', # Mid US
-            23: 'success_rate'         # Late US
+            22: 'success_rate'         # Late US
         }
         
         # Get format for current hour
@@ -233,13 +233,13 @@ class AIGamingBot:
         schedule.every().day.at("19:00").do(self.post_volume)    # Mid US
 
         # === Core A/B Format Posts (7 per day) ===
-        schedule.every().day.at("00:00").do(self.post_format_tweet)  # Midnight
+        schedule.every().day.at("02:00").do(self.post_format_tweet)  # Early Asian (after trend)
         schedule.every().day.at("04:00").do(self.post_format_tweet)  # Mid Asian
         schedule.every().day.at("08:00").do(self.post_format_tweet)  # Early EU
         schedule.every().day.at("12:00").do(self.post_format_tweet)  # Mid EU
         schedule.every().day.at("16:00").do(self.post_format_tweet)  # Early US
         schedule.every().day.at("20:00").do(self.post_format_tweet)  # Mid US
-        schedule.every().day.at("23:00").do(self.post_format_tweet)  # Late US
+        schedule.every().day.at("22:00").do(self.post_format_tweet)  # Late US (before trend)
 
     def _post_tweet(self, tweet):
         """Post a tweet with error handling and backup content"""
@@ -284,31 +284,49 @@ class AIGamingBot:
         try:
             logger.info("=== Starting Format Post ===")
             format_type = self._get_next_format()
+            logger.info(f"Formatting tweet type: {format_type}")
             
-            # Get appropriate data based on format type
+            # Get token history data from token monitor
+            history_data = self.elion.token_monitor.history_tracker.get_all_token_history()
+            if not history_data:
+                logger.warning("No token history data available")
+                return self._post_fallback_tweet()
+                
+            # For performance_compare, also get current market data
+            market_data = None
             if format_type == 'performance_compare':
-                # For performance compare, use token history data
-                token_data = self.elion.token_history.get_recent_performance()
-                if not token_data:
-                    logger.warning("No token history data available")
-                    return self._post_fallback_tweet()
-                data = token_data
-            else:
-                # For other formats, use market data
-                data = self.elion.get_market_data()
-                if not data:
-                    logger.warning("No market data available")
+                market_data = self.elion.get_market_data()
+                if not market_data:
+                    logger.warning("No market data available for performance compare")
                     return self._post_fallback_tweet()
             
-            # Generate tweet using format
-            tweet = self.elion.format_tweet(format_type, data)
+            # Format tweet using appropriate data
+            tweet = None
+            if format_type == 'performance_compare':
+                tweet = self.elion.format_tweet(format_type, market_data)
+            else:
+                # Convert history data to the format expected by formatters
+                formatted_data = {
+                    'tokens': [
+                        {
+                            'symbol': symbol,
+                            'gain_percentage': data.get('gain_percentage', 0),
+                            'first_mention_date': data.get('first_mention_date'),
+                            'volume_24h': data.get('current_volume', 0),
+                            'current_mcap': data.get('current_mcap', 0)
+                        }
+                        for symbol, data in history_data.items()
+                    ]
+                }
+                tweet = self.elion.format_tweet(format_type, formatted_data)
+                
             if not tweet:
                 logger.warning(f"Failed to format {format_type} tweet")
                 return self._post_fallback_tweet()
-            
-            # Post tweet
-            self._post_tweet(tweet)
                 
+            # Post the tweet
+            return self._post_tweet(tweet)
+            
         except Exception as e:
             logger.error(f"Error posting format tweet: {e}")
             return self._post_fallback_tweet()

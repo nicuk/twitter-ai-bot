@@ -13,7 +13,12 @@ logger = logging.getLogger(__name__)
 
 from elion.content.generator import ContentGenerator
 from elion.personality.traits import PersonalityManager
-from elion.content.tweet_formatters import TweetFormatters
+from elion.content.performance_formatters import (
+    PerformanceCompareFormatter,
+    SuccessRateFormatter,
+    PredictionAccuracyFormatter,
+    WinnersRecapFormatter
+)
 from strategies.trend_strategy import TrendStrategy
 from strategies.volume_strategy import VolumeStrategy
 from strategies.portfolio_tracker import PortfolioTracker
@@ -29,7 +34,14 @@ class Elion:
         
         # Initialize components
         self.personality = PersonalityManager()
-        self.tweet_formatters = TweetFormatters()
+        
+        # Initialize formatters
+        self.formatters = {
+            'performance_compare': PerformanceCompareFormatter(),
+            'success_rate': SuccessRateFormatter(),
+            'prediction_accuracy': PredictionAccuracyFormatter(),
+            'winners_recap': WinnersRecapFormatter()
+        }
         
         # Initialize market analyzers with API key
         api_key = os.getenv('CRYPTORANK_API_KEY')
@@ -255,11 +267,11 @@ class Elion:
             # Select formatter based on time
             hour = now.hour
             if hour % 6 == 0:  # Every 6 hours
-                tweet = self.tweet_formatters.format_success_rate(history)
+                tweet = self.formatters['success_rate'].format_tweet(history)
             elif hour % 4 == 0:  # Every 4 hours
-                tweet = self.tweet_formatters.format_prediction(history)
+                tweet = self.formatters['prediction_accuracy'].format_tweet(history)
             elif hour % 3 == 0:  # Every 3 hours
-                tweet = self.tweet_formatters.format_winners(history)
+                tweet = self.formatters['winners_recap'].format_tweet(history)
             else:
                 # For other hours, rotate between first_hour, breakout, and performance
                 if volume_data and 'spikes' in volume_data and volume_data['spikes']:
@@ -273,17 +285,17 @@ class Elion:
                         time_diff = now - first_mention
                         
                         if time_diff < timedelta(hours=1):
-                            tweet = self.tweet_formatters.format_first_hour(history[symbol])
+                            tweet = self.formatters['performance_compare'].format_tweet(token)
                         elif time_diff < timedelta(hours=2):
-                            tweet = self.tweet_formatters.format_breakout(history[symbol])
+                            tweet = self.formatters['performance_compare'].format_tweet(token)
                         else:
-                            tweet = self.tweet_formatters.format_performance(history[symbol])
+                            tweet = self.formatters['performance_compare'].format_tweet(token)
                     else:
                         # New token, use breakout formatter
-                        tweet = self.tweet_formatters.format_breakout(token)
+                        tweet = self.formatters['performance_compare'].format_tweet(token)
                 else:
                     # No new tokens, use winners recap
-                    tweet = self.tweet_formatters.format_winners(history)
+                    tweet = self.formatters['winners_recap'].format_tweet(history)
             
             return tweet
             
@@ -294,8 +306,6 @@ class Elion:
     def format_tweet(self, tweet_type: str, market_data: Dict, variant: str = 'A') -> Optional[str]:
         """Format a tweet using market data"""
         try:
-            from elion.content.tweet_formatters import FORMATTERS
-            
             logger.info(f"Formatting tweet type: {tweet_type}")
             
             # Get token history for performance formatters
@@ -321,7 +331,7 @@ class Elion:
             
             # Handle performance formatters
             if tweet_type in ['performance_compare', 'success_rate', 'prediction_accuracy', 'winners_recap']:
-                formatter = FORMATTERS.get(tweet_type)
+                formatter = self.formatters.get(tweet_type)
                 if not formatter:
                     logger.warning(f"Formatter {tweet_type} not found")
                     return None
@@ -337,12 +347,12 @@ class Elion:
                     return formatter.format_tweet(history_dict)
             
             # Handle regular formatters
-            template = self.tweet_formatters.get_template(tweet_type, variant)
-            if not template:
-                logger.warning(f"No template found for {tweet_type}")
-                return None
+            # template = self.tweet_formatters.get_template(tweet_type, variant)
+            # if not template:
+            #     logger.warning(f"No template found for {tweet_type}")
+            #     return None
                 
-            return template.format(**market_data)
+            # return template.format(**market_data)
             
         except Exception as e:
             logger.error(f"Error formatting tweet: {e}")
@@ -368,7 +378,7 @@ class Elion:
                 try:
                     trend_data = self.trend_strategy.analyze()
                     if trend_data:
-                        tweet = self.tweet_formatters.format_trend_insight(trend_data, self.personality.get_trait())
+                        tweet = self.format_trend_output(trend_data)
                 except Exception as e:
                     print(f"Error in trend strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
@@ -378,7 +388,7 @@ class Elion:
                 try:
                     volume_data = self.volume_strategy.analyze()
                     if volume_data:
-                        tweet = self.tweet_formatters.format_volume_insight(volume_data, self.personality.get_trait())
+                        tweet = self.format_volume_output(volume_data['spikes'], volume_data['anomalies'])
                 except Exception as e:
                     print(f"Error in volume strategy: {e}")
                     tweet_type = 'personal'  # Fallback to personal
