@@ -287,7 +287,7 @@ class AIGamingBot:
             logger.info(f"Formatting tweet type: {format_type}")
             
             # Get token history data from token monitor
-            history_data = self.elion.token_monitor.history_tracker.get_all_token_history()
+            history_data = self.elion.token_monitor.history_tracker.get_recent_performance()
             if not history_data:
                 logger.warning("No token history data available")
                 return self._post_fallback_tweet()
@@ -458,7 +458,7 @@ class AIGamingBot:
                 return self._post_fallback_tweet()
             
             # Format volume tweet using filtered data
-            history = self.elion.token_monitor.history_tracker.get_all_token_history()
+            history = self.elion.token_monitor.history_tracker.get_recent_performance()
             
             # Get the highest V/MC ratio token from spikes and anomalies
             all_tokens = []
