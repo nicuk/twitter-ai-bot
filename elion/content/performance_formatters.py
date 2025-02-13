@@ -57,7 +57,20 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
         self.test_mode = test_mode  # Add test mode flag
         self.recent_tokens_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'recent_performance_tokens.json')
         self.rotation_hours = 48  # Don't repeat tokens within this many hours
+        self.common_hashtags = [
+            '#Crypto', '#Gems', '#DeFi', '#BSC', '#Trading', '#CryptoGems',
+            '#Altcoins', '#100x', '#GemAlert', '#CryptoTrading'
+        ]
+        self.common_cashtags = ['$BTC', '$ETH', '$BNB', '$SOL', '$AVAX']
     
+    def _get_random_tags(self, count: int = 4) -> str:
+        """Get random mix of hashtags and cashtags"""
+        hashtags = random.sample(self.common_hashtags, min(2, count))
+        cashtags = random.sample(self.common_cashtags, min(2, count))
+        tags = hashtags + cashtags
+        random.shuffle(tags)
+        return ' '.join(tags[:count])
+        
     def _get_recent_tokens(self) -> Dict[str, str]:
         """Get recently tweeted tokens and their timestamps"""
         if not os.path.exists(self.recent_tokens_file):
@@ -135,58 +148,53 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
         """Format a performance comparison tweet"""
         try:
             if not history_data or not history_data.get('tokens'):
-                logging.error("No history data or tokens")
                 return None
-
-            # Sort tokens by gain and filter out recently tweeted ones
-            tokens = sorted(
-                [t for t in history_data['tokens'] if not self._is_recently_tweeted(t['symbol'])],
-                key=lambda x: float(x.get('gain_percentage', 0)),
-                reverse=True
-            )
-
-            if tokens:
-                token = tokens[0]
-                volume_24h = float(token.get('volume_24h', 0))
-                mcap = float(token.get('current_mcap', 0))
-                volume_mcap_ratio = (volume_24h / mcap * 100) if mcap > 0 else 0
-                gain_percentage = float(token.get('gain_percentage', 0))
-
-                # Get similar tokens for special mentions (excluding recently tweeted ones)
-                similar_tokens = [t for t in tokens[1:5] if not self._is_recently_tweeted(t['symbol'])]
-                special_mentions = [t['symbol'] for t in similar_tokens]
-
-                # Format tweet using our standardized format
-                tweet = f"""🤖 Performance: ${token['symbol']}
-
-💰 Price Action:
-• Entry: ${self._format_price(token['first_mention_price'])}
-• Current: ${self._format_price(token['current_price'])}
-• Change: {self._format_percentage(gain_percentage)}
-
-📈 Volume:
-• 24h: {self._format_volume(volume_24h)}
-• MCap: {self._format_volume(mcap)}
-• V/MC: {self._format_percentage(volume_mcap_ratio)}
-
-👥 Special mentions: ${' $'.join(special_mentions)}
-
-#Memecoin #BSC #100x $BNB $ETH"""
-
-                # Save this token as recently tweeted
-                self._save_recent_token(token['symbol'])
-
-                return self.optimize_tweet_length(tweet, history_data, 'performance')
-            else:
+                
+            # Get first token with required fields
+            token = None
+            for t in history_data['tokens']:
+                if isinstance(t, dict) and all(t.get(f) for f in ['symbol', 'first_mention_price', 'current_price', 'volume_24h', 'current_mcap']):
+                    token = t
+                    break
+                    
+            if not token:
                 logging.error("No available tokens after filtering")
                 return None
+
+            # Calculate time since first mention
+            first_mention = datetime.fromisoformat(token.get('first_mention_date'))
+            hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
+            
+            # Calculate metrics
+            gain_percentage = float(token.get('gain_percentage', 0))
+            max_gain = float(token.get('max_gain_7d', gain_percentage))
+            volume_mcap_ratio = (float(token.get('volume_24h', 0)) / float(token.get('current_mcap', 1)) * 100)
+
+            # Format tweet
+            tweet = f"""🎯 ${token.get('symbol')} Spotted {hours_ago:.1f}h ago!
+
+📈 Performance Update:
+• Spotted at: ${self._format_price(float(token.get('first_mention_price')))}
+• Current Price: ${self._format_price(float(token.get('current_price')))} (+{gain_percentage:.2f}%)
+• Best Gain: +{max_gain:.2f}% (7d high)
+
+📈 Volume & Market Cap:
+• 24h Vol: {self._format_volume(float(token.get('volume_24h')))}
+• MCap: {self._format_volume(float(token.get('current_mcap')))}
+• V/MC: +{volume_mcap_ratio:.2f}%"""
+
+            # Add special mentions if we have more tokens
+            other_tokens = [t.get('symbol') for t in history_data['tokens'][1:5] if isinstance(t, dict) and t.get('symbol')]
+            if other_tokens:
+                tweet += f"\n\n👥 Special mentions: ${' $'.join(other_tokens)}"
+
+            # Add dynamic hashtags
+            tweet += f"\n\n{self._get_random_tags()}"
+
+            return self.optimize_tweet_length(tweet, history_data, 'performance')
             
         except Exception as e:
             logging.error(f"Error formatting tweet data: {e}")
-            return None
-            
-        except Exception as e:
-            logging.error(f"Error formatting performance tweet: {e}")
             return None
 
 class SuccessRateFormatter(BasePerformanceFormatter):
@@ -232,9 +240,6 @@ class SuccessRateFormatter(BasePerformanceFormatter):
                 symbol = token.get('symbol', 'UNKNOWN')
                 top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
 
-            # Get next 4 tokens for special mentions
-            special_mentions = [t.get('symbol', '') for t in tokens[7:11]] if len(tokens) > 7 else []
-
             # Format tweet
             tweet = f"""📊 48h Performance Update
 
@@ -247,6 +252,7 @@ Top Performers:
 • Best: +{best_gain:.1f}%"""
 
             # Add special mentions if we have any
+            special_mentions = [t.get('symbol', '') for t in tokens[7:11]] if len(tokens) > 7 else []
             if special_mentions:
                 tweet += f"\n\n👥 Special mentions: ${' $'.join(special_mentions)}"
 
