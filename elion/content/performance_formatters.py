@@ -144,17 +144,9 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
                 key=lambda x: float(x.get('gain_percentage', 0)),
                 reverse=True
             )
-            
-            if not tokens:  # If all top tokens were recently tweeted
-                logging.error("No available tokens after filtering")
-                return None
-                
-            # Get token with highest gain that wasn't recently tweeted
-            token = tokens[0]
-            logging.info(f"Selected token: {token}")
-            
-            try:
-                # Format numbers
+
+            if tokens:
+                token = tokens[0]
                 volume_24h = float(token.get('volume_24h', 0))
                 mcap = float(token.get('current_mcap', 0))
                 volume_mcap_ratio = (volume_24h / mcap * 100) if mcap > 0 else 0
@@ -174,7 +166,7 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
 
 📈 Volume:
 • 24h: {self._format_volume(volume_24h)}
-• Change: {self._format_percentage(token.get('volume_change_24h', 0))}
+• MCap: {self._format_volume(mcap)}
 • V/MC: {self._format_percentage(volume_mcap_ratio)}
 
 👥 Special mentions: ${' $'.join(special_mentions)}
@@ -185,9 +177,13 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
                 self._save_recent_token(token['symbol'])
 
                 return self.optimize_tweet_length(tweet, history_data, 'performance')
-            except Exception as e:
-                logging.error(f"Error formatting tweet data: {e}")
+            else:
+                logging.error("No available tokens after filtering")
                 return None
+            
+        except Exception as e:
+            logging.error(f"Error formatting tweet data: {e}")
+            return None
             
         except Exception as e:
             logging.error(f"Error formatting performance tweet: {e}")
@@ -202,12 +198,16 @@ class SuccessRateFormatter(BasePerformanceFormatter):
             if not history_data or not history_data.get('tokens'):
                 return None
 
-            # Sort tokens by gain
+            # Filter out non-dict tokens and sort by gain
+            tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
             tokens = sorted(
-                history_data['tokens'],
+                tokens,
                 key=lambda x: float(x.get('gain_percentage', 0)),
                 reverse=True
             )
+
+            if not tokens:
+                return None
 
             # Calculate stats
             total_tokens = len(tokens)
@@ -229,10 +229,11 @@ class SuccessRateFormatter(BasePerformanceFormatter):
                     icon = f"{i+1}️⃣"  # Number icon
                 
                 gain = float(token.get('gain_percentage', 0))
-                top_performers.append(f"{icon} ${token['symbol']} (+{gain:.1f}%)")
+                symbol = token.get('symbol', 'UNKNOWN')
+                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
 
             # Get next 4 tokens for special mentions
-            special_mentions = [t['symbol'] for t in tokens[7:11]] if len(tokens) > 7 else []
+            special_mentions = [t.get('symbol', '') for t in tokens[7:11]] if len(tokens) > 7 else []
 
             # Format tweet
             tweet = f"""📊 48h Performance Update
@@ -259,7 +260,7 @@ Top Performers:
             return None
 
 class PredictionAccuracyFormatter(BasePerformanceFormatter):
-    """Shows overall prediction success rate"""
+    """Shows overall prediction success rate and tracks gains from entry to max"""
     
     def __init__(self):
         """Initialize with common hashtags and cashtags"""
@@ -270,7 +271,7 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
         ]
         self.common_cashtags = ['$BTC', '$ETH', '$BNB', '$SOL', '$XRP', '$DOGE', '$AVAX']
     
-    def _get_random_tags(self, count: int = 3) -> str:
+    def _get_random_tags(self, count: int = 4) -> str:
         """Get random mix of hashtags and cashtags"""
         hashtags = random.sample(self.common_hashtags, min(2, count))
         cashtags = random.sample(self.common_cashtags, min(2, count))
@@ -279,37 +280,37 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
         return ' '.join(tags[:count])
         
     def format_tweet(self, history_data: Dict) -> str:
-        """Format tweet showing prediction accuracy"""
+        """Format tweet showing prediction accuracy and gain progression"""
         try:
             if not history_data or not history_data.get('tokens'):
                 return None
                 
-            tokens = history_data['tokens']
+            # Filter out non-dict tokens
+            tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
             
-            # Filter tokens that have predictions
-            tokens_with_predictions = [
+            if not tokens:
+                return None
+            
+            # A token is a "prediction" if we mentioned it
+            # It's successful if it had positive gains
+            tokens_with_gains = [
                 token for token in tokens
-                if token.get('predicted_gain') is not None and token.get('actual_gain') is not None
+                if float(token.get('gain_percentage', 0)) > 0
             ]
             
-            if not tokens_with_predictions:
-                return None
-                
             # Calculate success rates
-            success_count = sum(1 for token in tokens_with_predictions 
-                              if float(token['actual_gain']) >= float(token['predicted_gain']))
-            total_count = len(tokens_with_predictions)
+            total_count = len(tokens)  # Total tokens we mentioned
+            success_count = len(tokens_with_gains)  # Tokens that went up
             success_rate = (success_count / total_count * 100) if total_count > 0 else 0
             
             # Calculate average gain for successful predictions
             successful_gains = [
-                float(token['actual_gain']) 
-                for token in tokens_with_predictions 
-                if float(token['actual_gain']) >= float(token['predicted_gain'])
+                float(token.get('gain_percentage', 0)) 
+                for token in tokens_with_gains
             ]
             avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
             
-            # Start building tweet
+            # Format tweet
             tweet = f"""🎯 Prediction Accuracy Update
 
 📊 Performance:
@@ -320,16 +321,19 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
 
 ✅ Recent Hits:"""
 
-            # Add recent successful predictions
-            for token in tokens_with_predictions[:3]:
-                if float(token['actual_gain']) >= float(token['predicted_gain']):
-                    tweet += f"\n${token['symbol']}: +{token['predicted_gain']:.1f}% → +{token['actual_gain']:.1f}%"
+            # Add top 3 successful predictions with medals
+            sorted_gains = sorted(tokens_with_gains, key=lambda x: float(x.get('gain_percentage', 0)), reverse=True)
+            medals = ['🥇', '🥈', '🥉']
+            for i, token in enumerate(sorted_gains[:3]):
+                current_gain = float(token.get('gain_percentage', 0))
+                max_gain = float(token.get('max_gain_7d', current_gain))
+                tweet += f"\n{medals[i]} ${token.get('symbol', 'UNKNOWN')}: +{current_gain:.1f}% → +{max_gain:.1f}%"
 
-            # Add random tags
+            # Add random mix of 4 hashtags/cashtags
             tweet += f"\n\n{self._get_random_tags()}"
-
-            return tweet
-
+            
+            return self.optimize_tweet_length(tweet, history_data, 'prediction')
+            
         except Exception as e:
             logging.error(f"Error formatting prediction accuracy tweet: {e}")
             return None
@@ -343,12 +347,16 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
             if not history_data or not history_data.get('tokens'):
                 return None
 
-            # Sort tokens by gain
+            # Filter out non-dict tokens and sort by gain
+            tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
             tokens = sorted(
-                history_data['tokens'],
+                tokens,
                 key=lambda x: float(x.get('gain_percentage', 0)),
                 reverse=True
             )
+
+            if not tokens:
+                return None
 
             # Calculate stats
             total_tokens = len(tokens)
@@ -370,7 +378,8 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
                     icon = f"{i+1}️⃣"  # Number icon
                 
                 gain = float(token.get('gain_percentage', 0))
-                top_performers.append(f"{icon} ${token['symbol']}: +{gain:.1f}%")
+                symbol = token.get('symbol', 'UNKNOWN')
+                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
 
             # Format tweet
             tweet = f"""🏆 Top Performers:
