@@ -150,16 +150,21 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             if not history_data or not history_data.get('tokens'):
                 return None
                 
-            # Get first token with required fields
+            # Get first token with required fields that hasn't been recently tweeted
             token = None
             for t in history_data['tokens']:
-                if isinstance(t, dict) and all(t.get(f) for f in ['symbol', 'first_mention_price', 'current_price', 'volume_24h', 'current_mcap']):
+                if (isinstance(t, dict) and 
+                    all(t.get(f) for f in ['symbol', 'first_mention_price', 'current_price', 'volume_24h', 'current_mcap']) and
+                    not self._is_recently_tweeted(t.get('symbol'))):
                     token = t
                     break
                     
             if not token:
                 logging.error("No available tokens after filtering")
                 return None
+
+            # Save this token as recently tweeted
+            self._save_recent_token(token.get('symbol'))
 
             # Calculate time since first mention
             first_mention = datetime.fromisoformat(token.get('first_mention_date'))
