@@ -309,13 +309,15 @@ class AIGamingBot:
                 formatted_data = {
                     'tokens': [
                         {
-                            'symbol': symbol,
-                            'gain_percentage': data.get('gain_percentage', 0),
-                            'first_mention_date': data.get('first_mention_date'),
-                            'volume_24h': data.get('current_volume', 0),
-                            'current_mcap': data.get('current_mcap', 0)
+                            'symbol': token.get('symbol'),
+                            'gain_percentage': token.get('gain_percentage', 0),
+                            'first_mention_date': token.get('first_mention_date'),
+                            'volume_24h': token.get('volume_24h', 0),
+                            'current_mcap': token.get('current_mcap', 0),
+                            'max_gain_7d': token.get('max_gain_7d', 0)
                         }
-                        for symbol, data in history_data.items()
+                        for token in history_data.get('tokens', [])
+                        if isinstance(token, dict)
                     ]
                 }
                 tweet = self.elion.format_tweet(format_type, formatted_data)
