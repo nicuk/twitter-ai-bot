@@ -213,6 +213,38 @@ class SuccessRateFormatter(BasePerformanceFormatter):
 
             # Filter out non-dict tokens and sort by gain
             tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
+            
+            # Smart filtering:
+            # 1. Keep tokens with positive gains regardless of time
+            # 2. Only filter out tokens that stayed negative for 24h+
+            filtered_tokens = []
+            for t in tokens:
+                gain_percentage = float(t.get('gain_percentage', 0))
+                max_gain = float(t.get('max_gain_7d', 0))
+                
+                # If token has positive gains now or hit good gains before, keep it
+                if gain_percentage > 0 or max_gain > 0:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For negative performing tokens, check if they've been negative for 24h+
+                first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
+                hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
+                
+                # Keep tokens under 24h even if negative (still have potential)
+                if hours_ago < 24:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For tokens over 24h, check if they had positive 24h performance
+                price_24h = float(t.get('price_24h_after', 0))
+                if price_24h > 0:
+                    gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                    # If it was positive at 24h mark, keep it
+                    if gain_24h > 0:
+                        filtered_tokens.append(t)
+            
+            tokens = filtered_tokens
             tokens = sorted(
                 tokens,
                 key=lambda x: float(x.get('gain_percentage', 0)),
@@ -360,6 +392,38 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
 
             # Filter out non-dict tokens and sort by gain
             tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
+            
+            # Smart filtering:
+            # 1. Keep tokens with positive gains regardless of time
+            # 2. Only filter out tokens that stayed negative for 24h+
+            filtered_tokens = []
+            for t in tokens:
+                gain_percentage = float(t.get('gain_percentage', 0))
+                max_gain = float(t.get('max_gain_7d', 0))
+                
+                # If token has positive gains now or hit good gains before, keep it
+                if gain_percentage > 0 or max_gain > 0:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For negative performing tokens, check if they've been negative for 24h+
+                first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
+                hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
+                
+                # Keep tokens under 24h even if negative (still have potential)
+                if hours_ago < 24:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For tokens over 24h, check if they had positive 24h performance
+                price_24h = float(t.get('price_24h_after', 0))
+                if price_24h > 0:
+                    gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                    # If it was positive at 24h mark, keep it
+                    if gain_24h > 0:
+                        filtered_tokens.append(t)
+            
+            tokens = filtered_tokens
             tokens = sorted(
                 tokens,
                 key=lambda x: float(x.get('gain_percentage', 0)),
