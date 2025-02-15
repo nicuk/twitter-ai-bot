@@ -109,67 +109,56 @@ def setup_routes(app: FastAPI):
         }
         
     @app.get("/token-history")
-    async def get_token_history(
-        days: Optional[int] = Query(None, description="Filter tokens by days since first mention"),
-        min_gain: Optional[float] = Query(None, description="Filter tokens by minimum gain percentage"),
-        max_tokens: Optional[int] = Query(100, description="Maximum number of tokens to return")
-    ) -> Dict:
-        """Get token history with optional filters"""
+    def get_token_history(days: Optional[int] = None, min_gain: Optional[float] = None, max_tokens: Optional[int] = 100):
+        """Get historical token data"""
         try:
-            tracker = TokenHistoryTracker()
-            history = tracker.get_all_token_history()
+            logger.info("Retrieving token history...")
+            token_history = TokenHistoryTracker()
+            history_data = token_history.get_recent_performance()
             
-            logger.info(f"Retrieved {len(history)} tokens from history")
+            logger.info(f"Retrieved {len(history_data['tokens'])} tokens from history")
             logger.info(f"Filters: days={days}, min_gain={min_gain}, max_tokens={max_tokens}")
             
-            # Apply filters
-            filtered_tokens = []
-            for token_data in history.values():
+            tokens = []
+            for token_data in history_data['tokens']:
                 try:
-                    if days and (datetime.now() - token_data.first_mention_date).days > days:
+                    # Apply filters
+                    if min_gain is not None and float(token_data['gain_percentage']) < min_gain:
                         continue
                         
-                    gain = ((token_data.current_price - token_data.first_mention_price) / token_data.first_mention_price) * 100 if token_data.first_mention_price > 0 else 0
-                    if min_gain and gain < min_gain:
-                        continue
-                        
-                    filtered_tokens.append({
-                        'symbol': token_data.symbol,
-                        'first_mention_date': token_data.first_mention_date.isoformat(),
-                        'first_mention_price': token_data.first_mention_price,
-                        'first_mention_mcap': token_data.first_mention_mcap,
-                        'current_price': token_data.current_price,
-                        'current_mcap': token_data.current_mcap,
-                        'gain_percentage': gain,
-                        'volume_24h': token_data.current_volume,
-                        'max_gain_7d': token_data.max_gain_percentage_7d
-                    })
+                    if days is not None:
+                        first_mention = datetime.fromisoformat(token_data['first_mention_date'].replace('Z', '+00:00'))
+                        if (datetime.now() - first_mention).days > days:
+                            continue
+                    
+                    # Data is already in correct format from get_recent_performance
+                    tokens.append(token_data)
+                    
                 except Exception as e:
-                    logger.error(f"Error processing token {token_data.symbol}: {e}")
+                    logger.error(f"Error processing token {token_data.get('symbol', 'UNKNOWN')}: {e}")
                     continue
             
-            # Sort by gain percentage and limit results
-            filtered_tokens.sort(key=lambda x: x['gain_percentage'], reverse=True)
-            filtered_tokens = filtered_tokens[:max_tokens]
+            # Sort by gain and limit results
+            tokens.sort(key=lambda x: float(x['gain_percentage']), reverse=True)
+            if max_tokens:
+                tokens = tokens[:max_tokens]
             
-            logger.info(f"Returning {len(filtered_tokens)} filtered tokens")
             return {
-                'total': len(filtered_tokens),
-                'tokens': filtered_tokens,
-                'success': True,
-                'message': f"Found {len(filtered_tokens)} tokens"
+                'total': len(tokens),
+                'tokens': tokens,
+                'success': True
             }
             
         except Exception as e:
-            logger.error(f"Error in get_token_history: {e}")
-            logger.exception("Full traceback:")
+            logger.error(f"Error in get_token_history: {str(e)}")
+            logger.error("Full traceback:", exc_info=True)
             return {
                 'total': 0,
                 'tokens': [],
                 'success': False,
                 'message': str(e)
             }
-        
+
     @app.get("/token-history/{symbol}")
     async def get_token_details(symbol: str) -> Dict:
         """Get detailed history for a specific token"""
