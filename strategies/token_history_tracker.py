@@ -311,29 +311,28 @@ class TokenHistoryTracker:
                         token_data.price_7d_after = price
                         token_data.volume_7d_after = volume
                     
-                    # Update max values (only within first 7 days)
-                    if time_diff <= timedelta(days=7):
-                        if price > token_data.max_price_7d:
-                            logger.info(f"[{symbol}] New max price: {price}")
-                            token_data.max_price_7d = price
-                            token_data.max_price_7d_date = current_time
-                            # Avoid division by zero for price gain calculation
-                            if token_data.first_mention_price > 0:
-                                token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
-                            else:
-                                token_data.max_gain_percentage_7d = 0
-                                logger.warning(f"[{symbol}] First mention price is 0, cannot calculate gain percentage")
-                        
-                        if volume > token_data.max_volume_7d:
-                            logger.info(f"[{symbol}] New max volume: {volume}")
-                            token_data.max_volume_7d = volume
-                            token_data.max_volume_7d_date = current_time
-                            # Avoid division by zero for volume increase calculation
-                            if token_data.first_mention_volume_24h > 0:
-                                token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
-                            else:
-                                token_data.max_volume_increase_7d = 0
-                                logger.warning(f"[{symbol}] First mention volume is 0, cannot calculate volume increase")
+                    # Update max values (now tracked beyond 7 days)
+                    if price > token_data.max_price_7d:
+                        logger.info(f"[{symbol}] New max price: {price}")
+                        token_data.max_price_7d = price
+                        token_data.max_price_7d_date = current_time
+                        # Avoid division by zero for price gain calculation
+                        if token_data.first_mention_price > 0:
+                            token_data.max_gain_percentage_7d = ((price - token_data.first_mention_price) / token_data.first_mention_price) * 100
+                        else:
+                            token_data.max_gain_percentage_7d = 0
+                            logger.warning(f"[{symbol}] First mention price is 0, cannot calculate gain percentage")
+                    
+                    if volume > token_data.max_volume_7d:
+                        logger.info(f"[{symbol}] New max volume: {volume}")
+                        token_data.max_volume_7d = volume
+                        token_data.max_volume_7d_date = current_time
+                        # Avoid division by zero for volume increase calculation
+                        if token_data.first_mention_volume_24h > 0:
+                            token_data.max_volume_increase_7d = ((volume - token_data.first_mention_volume_24h) / token_data.first_mention_volume_24h) * 100
+                        else:
+                            token_data.max_volume_increase_7d = 0
+                            logger.warning(f"[{symbol}] First mention volume is 0, cannot calculate volume increase")
                 
                 # Save changes to storage
                 self.save_history()
