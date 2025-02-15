@@ -153,9 +153,10 @@ def filter_tokens_by_trend(tokens: List[Dict], min_price_change: float = 5.0) ->
     for token in tokens:
         try:
             symbol = token.get('symbol', '')
+            price = float(token.get('price', 0))
             
-            # Skip stablecoins
-            if is_likely_stablecoin(symbol):
+            # Skip stablecoins (using both symbol and price check)
+            if is_likely_stablecoin(symbol, price):
                 print(f"Skipping stablecoin: {symbol}")
                 continue
                 
@@ -202,11 +203,11 @@ def process_tokens(tokens: List[Dict]) -> List[Dict]:
             formatted_tokens.append(formatted)
     return formatted_tokens
 
-def is_likely_stablecoin(symbol: str) -> bool:
-    """Check if token is likely a stablecoin based on symbol"""
+def is_likely_stablecoin(symbol: str, price: float = None) -> bool:
+    """Check if token is likely a stablecoin based on symbol and price"""
     # Common stablecoin identifiers
     stablecoin_patterns = [
-        'usd', 'usdt', 'usdc', 'dai', 'busd', 'tusd', 'susd', 'lusd', 'frax', 'ausd', 'cusd', 'ousd'
+        'usd', 'usdt', 'usdc', 'dai', 'busd', 'tusd', 'susd', 'lusd', 'frax', 'ausd', 'cusd', 'ousd', 'usds'
     ]
     
     # Convert symbol to lowercase
@@ -215,6 +216,9 @@ def is_likely_stablecoin(symbol: str) -> bool:
     # Check if symbol contains stablecoin pattern
     for pattern in stablecoin_patterns:
         if pattern in symbol:
+            # If price is provided, verify it's near $1 (within 20% range)
+            if price is not None:
+                return 0.8 <= price <= 1.2
             return True
             
     return False

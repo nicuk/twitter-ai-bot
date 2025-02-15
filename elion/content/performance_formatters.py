@@ -333,49 +333,84 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
             
             if not tokens:
                 return None
+                
+            # Apply smart filtering like SuccessRateFormatter:
+            filtered_tokens = []
+            for t in tokens:
+                gain_percentage = float(t.get('gain_percentage', 0))
+                max_gain = float(t.get('max_gain_7d', 0))
+                
+                # If token has positive gains now or hit good gains before, keep it
+                if gain_percentage > 0 or max_gain > 0:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For negative performing tokens, check if they've been negative for 24h+
+                first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
+                hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
+                
+                # Keep tokens under 24h even if negative (still have potential)
+                if hours_ago < 24:
+                    filtered_tokens.append(t)
+                    continue
+                    
+                # For tokens over 24h, check if they had positive 24h performance
+                price_24h = float(t.get('price_24h_after', 0))
+                if price_24h > 0:
+                    gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                    # If it was positive at 24h mark, keep it
+                    if gain_24h > 0:
+                        filtered_tokens.append(t)
             
-            # A token is a "prediction" if we mentioned it
-            # It's successful if it had positive gains
-            tokens_with_gains = [
-                token for token in tokens
-                if float(token.get('gain_percentage', 0)) > 0
-            ]
+            tokens = filtered_tokens
             
-            # Calculate success rates
-            total_count = len(tokens)  # Total tokens we mentioned
-            success_count = len(tokens_with_gains)  # Tokens that went up
+            # Sort by current gain percentage
+            tokens = sorted(
+                tokens,
+                key=lambda x: float(x.get('gain_percentage', 0)),
+                reverse=True
+            )
+            
+            # Calculate success rates using filtered tokens
+            total_count = len(tokens)
+            success_count = len([t for t in tokens if float(t.get('gain_percentage', 0)) > 0])
             success_rate = (success_count / total_count * 100) if total_count > 0 else 0
             
             # Calculate average gain for successful predictions
-            successful_gains = [
-                float(token.get('gain_percentage', 0)) 
-                for token in tokens_with_gains
-            ]
+            successful_gains = [float(t.get('gain_percentage', 0)) for t in tokens if float(t.get('gain_percentage', 0)) > 0]
             avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
             
-            # Format tweet
+            # Get top 3 winners for display
+            top_winners = tokens[:3]
+            
             tweet = f"""🎯 Prediction Accuracy Update
 
 📊 Performance:
 • 24h: {success_rate:.0f}% ({success_count}/{total_count} calls)
 • 7d: {success_rate:.0f}% ({success_count}/{total_count} calls)
 • Average Win: +{avg_gain:.1f}%
-• Total: {total_count} predictions
+• Total: {total_count} predictions"""
 
-✅ Recent Hits:"""
-
-            # Add top 3 successful predictions with medals
-            sorted_gains = sorted(tokens_with_gains, key=lambda x: float(x.get('gain_percentage', 0)), reverse=True)
-            medals = ['🥇', '🥈', '🥉']
-            for i, token in enumerate(sorted_gains[:3]):
-                current_gain = float(token.get('gain_percentage', 0))
-                max_gain = float(token.get('max_gain_7d', current_gain))
-                tweet += f"\n{medals[i]} ${token.get('symbol', 'UNKNOWN')}: +{current_gain:.1f}% → +{max_gain:.1f}%"
-
-            # Add random mix of 4 hashtags/cashtags
+            if top_winners:
+                tweet += "\n\n✅ Recent Hits:"
+                for i, token in enumerate(top_winners):
+                    symbol = token.get('symbol', '')
+                    current_gain = float(token.get('gain_percentage', 0))
+                    max_gain = float(token.get('max_gain_7d', 0))
+                    
+                    if i == 0:
+                        medal = "🥇"
+                    elif i == 1:
+                        medal = "🥈"
+                    else:
+                        medal = "🥉"
+                        
+                    tweet += f"\n{medal} ${symbol}: +{current_gain:.1f}% → +{max_gain:.1f}%"
+            
+            # Add random mix of hashtags
             tweet += f"\n\n{self._get_random_tags()}"
             
-            return self.optimize_tweet_length(tweet, history_data, 'prediction')
+            return tweet
             
         except Exception as e:
             logging.error(f"Error formatting prediction accuracy tweet: {e}")
@@ -457,7 +492,7 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
                 top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
 
             # Format tweet
-            tweet = f"""🏆 Top Performers:
+            tweet = f"""🏆 Weekly Hall of Fame:
 
 {chr(10).join(top_performers)}
 
@@ -543,36 +578,56 @@ class BreakoutValidationFormatter(BasePerformanceFormatter):
 def get_mock_data():
     """Get mock data for testing"""
     return {
-        'symbol': 'TEST',
-        'first_mention_price': 1.0,
-        'current_price': 1.25,
-        'first_mention_volume_24h': 1000000,
-        'volume_24h': 1500000,
-        'volume_mcap_ratio': 0.75,
-        'first_mention_date': '2024-01-01',
-        'similar_vmc_tokens': [
-            {'symbol': 'TKN1', 'volume_mcap_ratio': 0.72, 'price_change_24h': 15.5},
-            {'symbol': 'TKN2', 'volume_mcap_ratio': 0.78, 'price_change_24h': 8.2},
-            {'symbol': 'TKN3', 'volume_mcap_ratio': 0.71, 'price_change_24h': 12.3},
-            {'symbol': 'TKN4', 'volume_mcap_ratio': 0.76, 'price_change_24h': -5.1},
-            {'symbol': 'TKN5', 'volume_mcap_ratio': 0.79, 'price_change_24h': 3.2}
-        ]
+        'tokens': [{
+            'symbol': 'TEST',
+            'first_mention_price': 1.0,
+            'current_price': 1.25,
+            'first_mention_volume_24h': 1000000,
+            'volume_24h': 1500000,
+            'volume_mcap_ratio': 0.75,
+            'first_mention_date': '2024-01-01',
+            'current_mcap': 10000000,
+            'similar_vmc_tokens': [
+                {'symbol': 'TKN1', 'volume_mcap_ratio': 0.72, 'price_change_24h': 15.5},
+                {'symbol': 'TKN2', 'volume_mcap_ratio': 0.78, 'price_change_24h': 8.2},
+                {'symbol': 'TKN3', 'volume_mcap_ratio': 0.71, 'price_change_24h': 12.3},
+                {'symbol': 'TKN4', 'volume_mcap_ratio': 0.76, 'price_change_24h': -5.1},
+                {'symbol': 'TKN5', 'volume_mcap_ratio': 0.79, 'price_change_24h': 3.2}
+            ]
+        }]
     }
 
 def get_mock_history():
     """Get mock history data for testing"""
     return {
-        'success_rate': 78,
-        'avg_gain': 35,
-        'best_gain': 45,
-        'top_performers': [
-            {'symbol': 'TKN1', 'gain': 35.0},
-            {'symbol': 'TKN2', 'gain': 32.5},
-            {'symbol': 'TKN3', 'gain': 28.7},
-            {'symbol': 'TKN4', 'gain': 25.3},
-            {'symbol': 'TKN5', 'gain': 22.1},
-            {'symbol': 'TKN6', 'gain': 18.9},
-            {'symbol': 'TKN7', 'gain': 15.4}
+        'tokens': [
+            {
+                'symbol': 'TKN1',
+                'gain_percentage': 35.0,
+                'first_mention_price': 1.0,
+                'current_price': 1.35,
+                'first_mention_date': '2024-01-01',
+                'price_24h_after': 1.25,
+                'max_gain_7d': 45.0
+            },
+            {
+                'symbol': 'TKN2',
+                'gain_percentage': 32.5,
+                'first_mention_price': 2.0,
+                'current_price': 2.65,
+                'first_mention_date': '2024-01-02',
+                'price_24h_after': 2.45,
+                'max_gain_7d': 42.0
+            },
+            {
+                'symbol': 'TKN3',
+                'gain_percentage': 28.7,
+                'first_mention_price': 0.5,
+                'current_price': 0.64,
+                'first_mention_date': '2024-01-03',
+                'price_24h_after': 0.58,
+                'max_gain_7d': 38.0
+            }
         ]
     }
 
@@ -614,14 +669,28 @@ def test_performance_compare():
     print("\n=== Testing PerformanceCompareFormatter ===")
     formatter = PerformanceCompareFormatter(test_mode=True)  # Enable test mode
     tweet = formatter.format_tweet(get_mock_data())
-    print(f"\nTweet ({len(tweet)} chars):\n{tweet}")
+    if tweet:
+        try:
+            print(f"\nTweet ({len(tweet)} chars):")
+            print(tweet.encode('utf-8').decode('utf-8'))
+        except Exception as e:
+            print("Error printing tweet:", e)
+    else:
+        print("No tweet generated")
 
 def test_success_rate():
     """Test success rate formatter"""
     print("\n=== Testing SuccessRateFormatter ===")
     formatter = SuccessRateFormatter()
     tweet = formatter.format_tweet(get_mock_history())
-    print(f"\nTweet ({len(tweet)} chars):\n{tweet}")
+    if tweet:
+        try:
+            print(f"\nTweet ({len(tweet)} chars):")
+            print(tweet.encode('utf-8').decode('utf-8'))
+        except Exception as e:
+            print("Error printing tweet:", e)
+    else:
+        print("No tweet generated")
 
 def test_prediction_accuracy():
     """Test prediction accuracy formatter"""
@@ -632,8 +701,11 @@ def test_prediction_accuracy():
     mock_data = get_mock_prediction_data()
     tweet = formatter.format_tweet(mock_data)
     if tweet:
-        print(f"Tweet ({len(tweet)} chars):")
-        print(tweet)
+        try:
+            print(f"Tweet ({len(tweet)} chars):")
+            print(tweet.encode('utf-8').decode('utf-8'))
+        except Exception as e:
+            print("Error printing tweet:", e)
     else:
         print("Not enough successful predictions")
     
@@ -641,8 +713,11 @@ def test_prediction_accuracy():
     mock_data = get_mock_prediction_data_few_success()
     tweet = formatter.format_tweet(mock_data)
     if tweet:
-        print(f"Tweet ({len(tweet)} chars):")
-        print(tweet)
+        try:
+            print(f"Tweet ({len(tweet)} chars):")
+            print(tweet.encode('utf-8').decode('utf-8'))
+        except Exception as e:
+            print("Error printing tweet:", e)
     else:
         print("Not enough successful predictions")
 
@@ -651,9 +726,20 @@ def test_winners_recap():
     print("\n=== Testing WinnersRecapFormatter ===")
     formatter = WinnersRecapFormatter()
     tweet = formatter.format_tweet(get_mock_history())
-    print(f"\nTweet ({len(tweet)} chars):\n{tweet}")
+    if tweet:
+        try:
+            print(f"\nTweet ({len(tweet)} chars):")
+            print(tweet.encode('utf-8').decode('utf-8'))
+        except Exception as e:
+            print("Error printing tweet:", e)
+    else:
+        print("No tweet generated")
 
 if __name__ == "__main__":
+    # Set UTF-8 encoding for stdout
+    import sys, io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    
     # Run tests one by one
     test_performance_compare()
     test_success_rate()
