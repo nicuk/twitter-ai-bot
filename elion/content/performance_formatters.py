@@ -154,10 +154,18 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
             token = None
             for t in history_data['tokens']:
                 if (isinstance(t, dict) and 
-                    all(t.get(f) for f in ['symbol', 'first_mention_price', 'current_price', 'volume_24h', 'current_mcap']) and
-                    not self._is_recently_tweeted(t.get('symbol'))):
-                    token = t
-                    break
+                    all(t.get(f) for f in ['symbol', 'first_mention_price', 'current_price', 'volume_24h', 'current_mcap'])):
+                    
+                    # Check if token is too old (>7 days)
+                    first_mention = datetime.fromisoformat(t.get('first_mention_date'))
+                    hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
+                    if hours_ago > 168:  # 7 days * 24 hours
+                        continue
+                        
+                    # Check if token was recently tweeted about
+                    if not self._is_recently_tweeted(t.get('symbol')):
+                        token = t
+                        break
                     
             if not token:
                 logging.error("No available tokens after filtering")
