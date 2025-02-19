@@ -39,7 +39,7 @@ class CryptoRankAPI:
     def test_connection(self) -> None:
         """Test V2 API connection"""
         params = {
-            'limit': 500,
+            'limit': 1000,
             'category': None,
             'convert': 'USD',
             'status': 'active',
@@ -75,7 +75,7 @@ class CryptoRankAPI:
     def get_tokens(self):
         """Get tokens from CryptoRank API"""
         params = {
-            'limit': 500,
+            'limit': 1000,
             'category': None,
             'convert': 'USD',
             'status': 'active',

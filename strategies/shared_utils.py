@@ -223,7 +223,7 @@ def is_likely_stablecoin(symbol: str, price: float = None) -> bool:
             
     return False
 
-def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_first=0, limit=500) -> list:
+def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_first=0, limit=1000) -> list:
     """Fetch tokens from CryptoRank API with specified sorting"""
     global _token_cache, _last_fetch_time
     

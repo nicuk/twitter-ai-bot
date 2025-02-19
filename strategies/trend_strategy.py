@@ -32,7 +32,7 @@ class TrendStrategy:
         """Analyze current market trends"""
         try:
             # Get trending tokens
-            tokens = fetch_tokens(self.api_key, sort_by='priceChange24h', direction='DESC', limit=500)
+            tokens = fetch_tokens(self.api_key, sort_by='priceChange24h', direction='DESC', limit=1000)
             if not tokens:
                 print("No tokens found or error fetching tokens")
                 return {'signal': 'neutral', 'confidence': 0.0, 'trend_tokens': []}
