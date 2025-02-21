@@ -112,6 +112,9 @@ class TokenHistoryTracker:
     _initialized = False
     _lock = threading.Lock()
     
+    # Add excluded tokens
+    EXCLUDED_TOKENS = {'BNX'}  # Tokens to exclude from performance tracking
+    
     def __new__(cls):
         """Create singleton instance"""
         if cls._instance is None:
@@ -507,11 +510,26 @@ class TokenHistoryTracker:
     def get_recent_performance(self) -> Dict:
         """Get recent token performance data for tweet formatting"""
         tokens = []
+        current_time = datetime.now()
+        cutoff_time = current_time - timedelta(hours=48)  # Only show last 48 hours
         
         for symbol, token in self.token_history.items():
+            # Skip excluded tokens
+            if symbol in self.EXCLUDED_TOKENS:
+                continue
+                
+            # Skip tokens older than 48 hours
+            if token.first_mention_date < cutoff_time:
+                continue
+                
             # Calculate gain percentage
             if token.first_mention_price > 0:
                 gain_percentage = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
+                
+                # Skip tokens with unrealistic gains (>1000%)
+                if gain_percentage > 1000:
+                    logger.warning(f"Skipping {symbol} due to unrealistic gain: {gain_percentage:.1f}%")
+                    continue
             else:
                 gain_percentage = 0
             

@@ -366,56 +366,6 @@ class VolumeStrategy:
         self.llm = llm
         self.recent_tokens = set()  # Track recently posted tokens
         
-    def get_volume_insight(self, volume: float, mcap: float, price_change: float, symbol: str = None) -> str:
-        """Generate insight based on volume and price action"""
-        try:
-            if mcap == 0:
-                return "Insufficient market data 📊"
-                
-            vol_mcap_ratio = (float(volume) / float(mcap)) * 100
-            price_change = float(price_change)
-            
-            # Use LLM if available
-            if self.llm and symbol:
-                prompt = f"""You are ELAI, an AI crypto trading assistant focused on volume analysis.
-                Generate a short, insightful comment about this token's volume action:
-                
-                Token: {symbol}
-                Price Change: {price_change:+.1f}%
-                Volume: ${volume:,.0f}
-                Market Cap: ${mcap:,.0f}
-                Volume/MCap Ratio: {vol_mcap_ratio:.1f}%
-                
-                Your insight should be:
-                1. Focus on volume and what it means
-                2. Include relevant emojis
-                3. Under 100 characters
-                4. End with a relevant emoji
-                
-                Insight:"""
-                
-                try:
-                    response = self.llm.generate(prompt)
-                    if response:
-                        return response.strip()
-                except Exception as e:
-                    print(f"LLM error, falling back to template: {e}")
-            
-            # Fall back to template-based insights if no LLM
-            if price_change > 0:
-                if vol_mcap_ratio > 30:
-                    return "Strong breakout volume with price rise! 🚀"
-                else:
-                    return "Steady rise with decent volume 📈"
-            else:
-                if vol_mcap_ratio > 30:
-                    return "Heavy volume on dip - potential accumulation 👀"
-                else:
-                    return "Testing lower levels with interest 🎯"
-                    
-        except (ValueError, TypeError) as e:
-            return "Unable to analyze pattern 🤔"
-            
     def analyze(self) -> Dict:
         """Analyze volume patterns and return market data"""
         try:
