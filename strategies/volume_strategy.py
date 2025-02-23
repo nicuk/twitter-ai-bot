@@ -2,6 +2,7 @@
 
 import os
 import sys
+import codecs
 from pathlib import Path
 import requests
 import json
@@ -10,6 +11,11 @@ from dotenv import load_dotenv
 import datetime
 import time
 import logging
+
+# Set console encoding to UTF-8
+if sys.platform == 'win32':
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -98,7 +104,7 @@ def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_firs
     api = CryptoRankAPI(api_key)
     
     params = {
-        'limit': 500,
+        'limit': 1000,  # Increased from 500 to 1000 to analyze more tokens
         'category': None,
         'convert': 'USD',
         'status': 'active',
@@ -191,16 +197,19 @@ def is_valid_price_change(price_change: float) -> bool:
 
 def is_likely_stablecoin(token_info):
     """Check if token is likely a stablecoin based on price and name"""
-    price = token_info['price']
-    symbol = token_info['symbol'].upper()
-    name = token_info.get('name', '').upper()
-    
-    # Price near $1
-    if 0.95 <= price <= 1.05:
-        # Common stablecoin indicators in name/symbol
-        stablecoin_indicators = ['USD', 'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDD', 'FDUSD']
-        return any(indicator in symbol or indicator in name for indicator in stablecoin_indicators)
-    return False
+    try:
+        price = float(token_info['price'])
+        symbol = str(token_info['symbol']).upper()
+        name = str(token_info.get('name', '')).upper()
+        
+        # Price near $1
+        if 0.95 <= price <= 1.05:
+            # Common stablecoin indicators in name/symbol
+            stablecoin_indicators = ['USD', 'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDD', 'FDUSD']
+            return any(indicator in symbol or indicator in name for indicator in stablecoin_indicators)
+        return False
+    except (ValueError, TypeError, KeyError):
+        return False  # If we can't parse the price, assume it's not a stablecoin
 
 def analyze_volume_leaders(tokens, limit=5):
     """Analyze tokens with highest volume"""
@@ -276,29 +285,49 @@ def find_volume_spikes(tokens, limit=20):
     spikes = []
     seen_symbols = set()
     
+    print(f"\nAnalyzing {len(tokens)} tokens for volume spikes...")
+    
     for token in tokens:
         try:
-            token_info = format_token_info(token)
-            symbol = token_info['symbol']
+            # Skip stablecoins and low volume tokens
+            if is_likely_stablecoin(token):
+                continue
+                
+            volume = float(token['volume24h'])
+            mcap = float(token['marketCap'])
+            price = float(token['price'])
+            high = float(token.get('high24h', 0))
+            low = float(token.get('low24h', 0))
             
-            # Skip if already seen or likely stablecoin
-            if symbol in seen_symbols or is_likely_stablecoin(token_info):
+            # Calculate price change
+            if high > 0 and low > 0:
+                avg = (high + low) / 2
+                price_change = ((price - avg) / avg) * 100
+            else:
+                price_change = 0
+                
+            # Skip if invalid data
+            if volume <= 0 or mcap <= 0:
                 continue
                 
-            # Skip tokens with extreme price movements
-            if not is_valid_price_change(token_info['price_change']):
-                continue
+            # Calculate volume/mcap ratio
+            volume_mcap_ratio = (volume / mcap) * 100
+            
+            # Only include if significant volume and price movement
+            if volume_mcap_ratio > 10 and abs(price_change) > 5:
+                print(f"Found spike: {token['symbol']} - V/MC: {volume_mcap_ratio:.1f}%, Price Change: {price_change:.1f}%")
+                spikes.append((volume_mcap_ratio, token))
+                seen_symbols.add(token['symbol'])
+            else:
+                print(f"Filtered out: {token['symbol']} - V/MC: {volume_mcap_ratio:.1f}%, Price Change: {price_change:.1f}%")
                 
-            # Calculate volume spike score
-            spike_score = calculate_volume_score(token)
-            if spike_score >= 30:  # Lowered threshold from 40 to 30
-                spikes.append((spike_score, token_info))
-                seen_symbols.add(symbol)
         except Exception as e:
+            print(f"Error processing token: {str(e)}")
             continue
-    
-    # Sort by spike score
+            
+    # Sort by volume/mcap ratio
     spikes.sort(key=lambda x: x[0], reverse=True)
+    print(f"\nFound {len(spikes)} volume spikes total")
     return spikes[:limit]  # Return more potential spikes
 
 def calculate_volume_score(token: Dict) -> float:
@@ -378,7 +407,7 @@ class VolumeStrategy:
             # Find volume spikes and anomalies
             spikes = find_volume_spikes(tokens)
             anomalies = find_volume_anomalies(tokens)
-            
+    
             # Filter out recently posted tokens
             filtered_spikes = []
             for spike in spikes:
@@ -388,7 +417,7 @@ class VolumeStrategy:
                     self.recent_tokens.add(symbol)
                     if len(filtered_spikes) >= 4:  # Show up to 4 spikes
                         break
-        
+
             filtered_anomalies = []
             for anomaly in anomalies:
                 symbol = anomaly[1]['symbol']
@@ -397,7 +426,7 @@ class VolumeStrategy:
                     self.recent_tokens.add(symbol)
                     if len(filtered_anomalies) >= 1:  # Keep 1 anomaly to make total of 4
                         break
-            
+    
             # Reset token history if we're not finding new tokens
             if not filtered_spikes and not filtered_anomalies:
                 print("Resetting token history to allow rotation")
@@ -407,13 +436,63 @@ class VolumeStrategy:
             # Format data for tweet generation
             return {
                 'spikes': filtered_spikes,
-                'anomalies': filtered_anomalies,
-                'insight': get_elai_insight(tokens) if tokens else None
+                'anomalies': filtered_anomalies
             }
-
+        
         except Exception as e:
             print(f"Error analyzing volume: {str(e)}")
             return None
+
+    def format_twitter_output(self, spikes: list, anomalies: list, history: Dict = None) -> str:
+        """Format output for Twitter (max 280 chars)"""
+        tweet = ""
+        shown_symbols = set()  # Track which symbols we've shown
+        
+        # Helper function to format token info
+        def format_token_section(token, ratio, is_anomaly=False):
+            # Strip any $ from the symbol
+            symbol = token['symbol'].lstrip('$')
+            if symbol in shown_symbols:
+                return ""
+                
+            # Get price change
+            high = float(token.get('high24h', 0))
+            low = float(token.get('low24h', 0))
+            price = float(token['price'])
+            
+            if high > 0 and low > 0:
+                avg = (high + low) / 2
+                price_change = ((price - avg) / avg) * 100
+            else:
+                price_change = 0
+                
+            direction = "🟢" if price_change > 0 else "🔴"
+            volume = float(token.get('volume24h', token.get('volume', 0)))/1e6  # Convert to millions
+            movement = get_movement_description(price_change)
+            vol_mcap = ratio  # ratio is already a percentage
+            
+            section = f"{direction} ${symbol} DETECTED!\n"
+            section += f"💰 ${price:.4f} {movement}\n"
+            section += f"📊 Vol: ${volume:.1f}M\n"
+            section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
+            
+            return section
+        
+        # First add volume anomalies
+        for ratio, token in anomalies:
+            section = format_token_section(token, ratio, is_anomaly=True)
+            if section and len(tweet + section) < 280:
+                tweet += section
+                shown_symbols.add(token['symbol'])
+                
+        # Then add volume spikes
+        for ratio, token in spikes:
+            section = format_token_section(token, ratio)
+            if section and len(tweet + section) < 280:
+                tweet += section
+                shown_symbols.add(token['symbol'])
+        
+        return tweet.strip()
 
     def get_elai_insight(self, tokens) -> str:
         """Generate ELAI's insight based on the detected tokens"""
@@ -499,57 +578,6 @@ class VolumeStrategy:
         except Exception as e:
             print(f"Error generating insight: {e}")
             return "ELAI: Analyzing volume patterns... 🔄"
-
-    def format_twitter_output(self, spikes: list, anomalies: list, history: Dict = None) -> str:
-        """Format output for Twitter (max 280 chars)"""
-        tweet = ""
-        shown_symbols = set()  # Track which symbols we've shown
-        
-        # Helper function to format token info
-        def format_token_section(token, ratio, is_anomaly=False):
-            symbol = token['symbol']
-            if symbol in shown_symbols:
-                return ""
-                
-            direction = "🟢" if token['price_change'] > 0 else "🔴"
-            price = float(token['price'])
-            volume = float(token['volume'])/1e6  # Convert to millions
-            movement = get_movement_description(token['price_change'])
-            vol_mcap = ratio  # ratio is already a percentage, don't multiply by 100 again
-            
-            section = f"{direction} ${symbol} DETECTED!\n"
-            section += f"💰 ${price:.4f} {movement}\n"
-            section += f"📊 Vol: ${volume:.1f}M\n"
-            section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
-            
-            # Add historical performance if available
-            if history and symbol in history:
-                token_history = history[symbol]
-                if hasattr(token_history, 'max_gain_7d') and token_history.max_gain_7d:
-                    section += f"📈 7d High: +{token_history.max_gain_7d:.1f}%\n"
-            
-            return section
-        
-        # First add volume anomalies
-        for ratio, token in anomalies:
-            section = format_token_section(token, ratio, is_anomaly=True)
-            if section and len(tweet + section) < 280:
-                tweet += section
-                shown_symbols.add(token['symbol'])
-                
-        # Then add volume spikes
-        for ratio, token in spikes:
-            section = format_token_section(token, ratio)
-            if section and len(tweet + section) < 280:
-                tweet += section
-                shown_symbols.add(token['symbol'])
-                
-        # Add ELAI's insight at the bottom
-        insight = get_elai_insight(anomalies + spikes)
-        if len(tweet + "\n" + insight) < 280:
-            tweet += "\n" + insight
-            
-        return tweet.strip()
 
 def get_elai_message(change: float, volume_ratio: float) -> str:
     """Get ELAI's insight message based on price change and volume"""
