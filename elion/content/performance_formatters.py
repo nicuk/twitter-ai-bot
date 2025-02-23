@@ -213,6 +213,25 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
 class SuccessRateFormatter(BasePerformanceFormatter):
     """Shows overall performance metrics."""
 
+    def format_stats(self, total_tokens: int, successful_tokens: int, avg_gain: float, best_gain: float) -> str:
+        """Format the statistics section of the tweet"""
+        success_rate = (successful_tokens / total_tokens) * 100 if total_tokens > 0 else 0
+        
+        if success_rate < 50:
+            return (
+                "📊 Overall:\n"
+                f"• {successful_tokens} Verified Gems from {total_tokens}\n"
+                f"• Avg Gain: +{avg_gain:.1f}%\n"
+                f"• Best: +{best_gain:.1f}%"
+            )
+        else:
+            return (
+                "📊 Overall:\n"
+                f"• {successful_tokens}/{total_tokens} Winners\n"
+                f"• {success_rate:.0f}% Success Rate\n"
+                f"• Best: +{best_gain:.1f}%"
+            )
+
     def format_tweet(self, history_data: Dict) -> str:
         """Format success rate tweet"""
         try:
@@ -223,33 +242,38 @@ class SuccessRateFormatter(BasePerformanceFormatter):
             tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
             
             # Smart filtering:
-            # 1. Keep tokens with positive gains regardless of time
-            # 2. Only filter out tokens that stayed negative for 24h+
+            # 1. Only count as success if token hit target gain
+            # 2. Mark as failure if token stayed negative for 24h+
             filtered_tokens = []
+            success_threshold = 5.0  # Minimum % gain to count as success
+            
             for t in tokens:
                 gain_percentage = float(t.get('gain_percentage', 0))
                 max_gain = float(t.get('max_gain_7d', 0))
-                
-                # If token has positive gains now or hit good gains before, keep it
-                if gain_percentage > 0 or max_gain > 0:
-                    filtered_tokens.append(t)
-                    continue
-                    
-                # For negative performing tokens, check if they've been negative for 24h+
                 first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
                 hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
                 
-                # Keep tokens under 24h even if negative (still have potential)
-                if hours_ago < 24:
-                    filtered_tokens.append(t)
+                # Skip tokens older than 48h
+                if hours_ago > 48:
                     continue
                     
-                # For tokens over 24h, check if they had positive 24h performance
-                price_24h = float(t.get('price_24h_after', 0))
-                if price_24h > 0:
-                    gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
-                    # If it was positive at 24h mark, keep it
-                    if gain_24h > 0:
+                # For tokens under 24h:
+                if hours_ago < 24:
+                    # Count as success only if current gain > threshold
+                    if gain_percentage >= success_threshold:
+                        t['is_success'] = True
+                        filtered_tokens.append(t)
+                    # Keep tracking but not success yet
+                    else:
+                        t['is_success'] = False
+                        filtered_tokens.append(t)
+                # For tokens 24-48h old:
+                else:
+                    # Count as success if it hit threshold within first 24h
+                    price_24h = float(t.get('price_24h_after', 0))
+                    if price_24h > 0:
+                        gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                        t['is_success'] = gain_24h >= success_threshold
                         filtered_tokens.append(t)
             
             tokens = filtered_tokens
@@ -264,37 +288,35 @@ class SuccessRateFormatter(BasePerformanceFormatter):
 
             # Calculate stats
             total_tokens = len(tokens)
-            winners = len([t for t in tokens if float(t.get('gain_percentage', 0)) > 0])
-            success_rate = (winners / total_tokens * 100) if total_tokens > 0 else 0
-            avg_gain = sum(float(t.get('gain_percentage', 0)) for t in tokens) / total_tokens if total_tokens > 0 else 0
-            best_gain = max(float(t.get('gain_percentage', 0)) for t in tokens) if tokens else 0
+            winners = len([t for t in tokens if t.get('is_success', False)])
 
             # Format top performers with better icons
             top_performers = []
             for i, token in enumerate(tokens[:7]):
                 if i == 0:
                     icon = "🥇"  # Gold medal
-                elif i == 1:
-                    icon = "🥈"  # Silver medal
-                elif i == 2:
-                    icon = "🥉"  # Bronze medal
+                    suffix = " 🌙"  # Moon for top performer
+                elif i < 3:
+                    icon = "🥈" if i == 1 else "🥉"  # Silver/Bronze medal
+                    suffix = " 🚀"  # Rocket for 2nd/3rd place
                 else:
                     icon = f"{i+1}️⃣"  # Number icon
+                    suffix = ""  # No suffix for others
                 
                 gain = float(token.get('gain_percentage', 0))
                 symbol = token.get('symbol', 'UNKNOWN')
-                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
+                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%{suffix}")
+
+            # Format stats
+            stats = self.format_stats(total_tokens, winners, 0, 0)
 
             # Format tweet
-            tweet = f"""📊 48h Performance Update
+            tweet = f"""📊 48h Gem Highlights
 
-Top Performers:
+Top Movers:
 {chr(10).join(top_performers)}
 
-📈 48h Stats:
-• Success Rate: {success_rate:.1f}% ({winners}/{total_tokens})
-• Avg Gain: +{avg_gain:.1f}%
-• Best: +{best_gain:.1f}%"""
+{stats}"""
 
             # Add special mentions if we have any
             special_mentions = [t.get('symbol', '') for t in tokens[7:11]] if len(tokens) > 7 else []
@@ -344,30 +366,35 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
                 
             # Apply smart filtering like SuccessRateFormatter:
             filtered_tokens = []
+            success_threshold = 5.0  # Minimum % gain to count as success
+            
             for t in tokens:
                 gain_percentage = float(t.get('gain_percentage', 0))
                 max_gain = float(t.get('max_gain_7d', 0))
-                
-                # If token has positive gains now or hit good gains before, keep it
-                if gain_percentage > 0 or max_gain > 0:
-                    filtered_tokens.append(t)
-                    continue
-                    
-                # For negative performing tokens, check if they've been negative for 24h+
                 first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
                 hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
                 
-                # Keep tokens under 24h even if negative (still have potential)
-                if hours_ago < 24:
-                    filtered_tokens.append(t)
+                # Skip tokens older than 48h
+                if hours_ago > 48:
                     continue
                     
-                # For tokens over 24h, check if they had positive 24h performance
-                price_24h = float(t.get('price_24h_after', 0))
-                if price_24h > 0:
-                    gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
-                    # If it was positive at 24h mark, keep it
-                    if gain_24h > 0:
+                # For tokens under 24h:
+                if hours_ago < 24:
+                    # Count as success only if current gain > threshold
+                    if gain_percentage >= success_threshold:
+                        t['is_success'] = True
+                        filtered_tokens.append(t)
+                    # Keep tracking but not success yet
+                    else:
+                        t['is_success'] = False
+                        filtered_tokens.append(t)
+                # For tokens 24-48h old:
+                else:
+                    # Count as success if it hit threshold within first 24h
+                    price_24h = float(t.get('price_24h_after', 0))
+                    if price_24h > 0:
+                        gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                        t['is_success'] = gain_24h >= success_threshold
                         filtered_tokens.append(t)
             
             tokens = filtered_tokens
@@ -381,11 +408,11 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
             
             # Calculate success rates using filtered tokens
             total_count = len(tokens)
-            success_count = len([t for t in tokens if float(t.get('gain_percentage', 0)) > 0])
+            success_count = len([t for t in tokens if t.get('is_success', False)])
             success_rate = (success_count / total_count * 100) if total_count > 0 else 0
             
             # Calculate average gain for successful predictions
-            successful_gains = [float(t.get('gain_percentage', 0)) for t in tokens if float(t.get('gain_percentage', 0)) > 0]
+            successful_gains = [float(t.get('gain_percentage', 0)) for t in tokens if t.get('is_success', False)]
             avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
             
             # Get top 3 winners for display
@@ -427,6 +454,25 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
 class WinnersRecapFormatter(BasePerformanceFormatter):
     """Shows weekly winners and stats."""
 
+    def format_stats(self, total_tokens: int, successful_tokens: int, avg_gain: float, best_gain: float) -> str:
+        """Format the statistics section of the tweet"""
+        success_rate = (successful_tokens / total_tokens) * 100 if total_tokens > 0 else 0
+        
+        if success_rate < 50:
+            return (
+                "📊 Overall:\n"
+                f"• {successful_tokens} Verified Gems from {total_tokens}\n"
+                f"• Avg Gain: +{avg_gain:.1f}%\n"
+                f"• Best: +{best_gain:.1f}%"
+            )
+        else:
+            return (
+                "📊 Overall:\n"
+                f"• {successful_tokens}/{total_tokens} Winners\n"
+                f"• {success_rate:.0f}% Success Rate\n"
+                f"• Best: +{best_gain:.1f}%"
+            )
+
     def format_tweet(self, history_data: Dict) -> str:
         """Format a weekly winners recap tweet"""
         try:
@@ -436,40 +482,44 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
             # Filter out non-dict tokens and sort by gain
             tokens = [t for t in history_data['tokens'] if isinstance(t, dict)]
             
-            # Smart filtering:
-            # 1. Keep tokens with positive gains regardless of time
-            # 2. Only filter out tokens that stayed negative for 24h+
+            # Smart filtering for weekly stats:
+            # 1. Look at last 7 days of data
+            # 2. Count success if token hit target gain within 24h of mention
             filtered_tokens = []
+            success_threshold = 5.0  # Minimum % gain to count as success
+            
             for t in tokens:
                 gain_percentage = float(t.get('gain_percentage', 0))
                 max_gain = float(t.get('max_gain_7d', 0))
-                
-                # If token has positive gains now or hit good gains before, keep it
-                if gain_percentage > 0 or max_gain > 0:
-                    filtered_tokens.append(t)
-                    continue
-                    
-                # For negative performing tokens, check if they've been negative for 24h+
                 first_mention = datetime.fromisoformat(t.get('first_mention_date', ''))
                 hours_ago = (datetime.now() - first_mention).total_seconds() / 3600
                 
-                # Keep tokens under 24h even if negative (still have potential)
-                if hours_ago < 24:
-                    filtered_tokens.append(t)
+                print(f"Token: {t['symbol']}, Hours ago: {hours_ago}, Max gain: {max_gain}%")  # Debug
+                
+                # Only look at last 7 days
+                if hours_ago > 168:  # 7 days * 24 hours
+                    print(f"Skipping {t['symbol']} - too old ({hours_ago} hours)")  # Debug
                     continue
                     
-                # For tokens over 24h, check if they had positive 24h performance
+                # Check if token hit success threshold within 24h
                 price_24h = float(t.get('price_24h_after', 0))
                 if price_24h > 0:
                     gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
-                    # If it was positive at 24h mark, keep it
-                    if gain_24h > 0:
+                    t['is_success'] = gain_24h >= success_threshold
+                    print(f"{t['symbol']} 24h gain: {gain_24h}%, Success: {t['is_success']}")  # Debug
+                    filtered_tokens.append(t)
+                else:
+                    # If no 24h data yet, use current gain for new calls
+                    if hours_ago < 24:
+                        t['is_success'] = gain_percentage >= success_threshold
+                        print(f"{t['symbol']} current gain: {gain_percentage}%, Success: {t['is_success']}")  # Debug
                         filtered_tokens.append(t)
             
             tokens = filtered_tokens
+            # Sort by max 7d gain for hall of fame
             tokens = sorted(
                 tokens,
-                key=lambda x: float(x.get('gain_percentage', 0)),
+                key=lambda x: float(x.get('max_gain_7d', 0)),
                 reverse=True
             )
 
@@ -478,38 +528,48 @@ class WinnersRecapFormatter(BasePerformanceFormatter):
 
             # Calculate stats
             total_tokens = len(tokens)
-            winners = len([t for t in tokens if float(t.get('gain_percentage', 0)) > 0])
+            winners = len([t for t in tokens if t.get('is_success', False)])
             success_rate = (winners / total_tokens * 100) if total_tokens > 0 else 0
-            avg_gain = sum(float(t.get('gain_percentage', 0)) for t in tokens) / total_tokens if total_tokens > 0 else 0
-            best_gain = max(float(t.get('gain_percentage', 0)) for t in tokens) if tokens else 0
+            
+            # Calculate average gain using max 7d gains for winners
+            successful_gains = [float(t.get('max_gain_7d', 0)) for t in tokens if t.get('is_success', False)]
+            avg_gain = sum(successful_gains) / len(successful_gains) if successful_gains else 0
+            best_gain = max(float(t.get('max_gain_7d', 0)) for t in tokens) if tokens else 0
 
             # Format top performers with better icons
             top_performers = []
             for i, token in enumerate(tokens[:7]):
                 if i == 0:
                     icon = "🥇"  # Gold medal
-                elif i == 1:
-                    icon = "🥈"  # Silver medal
-                elif i == 2:
-                    icon = "🥉"  # Bronze medal
+                    suffix = " 🌙"  # Moon for top performer
+                elif i < 3:
+                    icon = "🥈" if i == 1 else "🥉"  # Silver/Bronze medal
+                    suffix = " 🚀"  # Rocket for 2nd/3rd place
                 else:
                     icon = f"{i+1}️⃣"  # Number icon
+                    suffix = ""
                 
-                gain = float(token.get('gain_percentage', 0))
+                gain = float(token.get('max_gain_7d', 0))  # Use max 7d gain for hall of fame
                 symbol = token.get('symbol', 'UNKNOWN')
-                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%")
+                top_performers.append(f"{icon} ${symbol}: +{gain:.1f}%{suffix}")
+            
+            # Format stats
+            stats = self.format_stats(total_tokens, winners, avg_gain, best_gain)
 
             # Format tweet
             tweet = f"""🏆 Weekly Hall of Fame:
 
 {chr(10).join(top_performers)}
 
-📊 Overall: {winners}/{total_tokens} profitable
-• Success Rate: {success_rate:.1f}%
-• Avg Gain: +{avg_gain:.1f}%
-• Best: +{best_gain:.1f}%
+{stats}"""
 
-#DeFi #Altcoins $SOL"""
+            # Add special mentions if we have any
+            special_mentions = [t.get('symbol', '') for t in tokens[7:11]] if len(tokens) > 7 else []
+            if special_mentions:
+                tweet += f"\n\n👥 Special mentions: ${' $'.join(special_mentions)}"
+
+            # Add hashtags
+            tweet += "\n\n#DeFi #Altcoins $SOL"
 
             return tweet
 
