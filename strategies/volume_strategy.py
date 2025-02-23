@@ -293,7 +293,7 @@ def find_volume_spikes(tokens, limit=20):
             if is_likely_stablecoin(token):
                 continue
                 
-            volume = float(token['volume24h'])
+            volume = float(token.get('volume', token.get('volume24h', 0)) or 0)
             mcap = float(token['marketCap'])
             price = float(token['price'])
             high = float(token.get('high24h', 0))
@@ -313,8 +313,16 @@ def find_volume_spikes(tokens, limit=20):
             # Calculate volume/mcap ratio
             volume_mcap_ratio = (volume / mcap) * 100
             
-            # Only include if significant volume and price movement
-            if volume_mcap_ratio > 10 and abs(price_change) > 5:
+            # Quality filters
+            min_volume = 100000  # $100k minimum volume
+            min_mcap = 500000    # $500k minimum market cap
+            min_vmc_ratio = 20   # 20% minimum volume/mcap ratio
+            
+            # Only include if passes all quality filters
+            if (volume_mcap_ratio > min_vmc_ratio and 
+                abs(price_change) > 5 and
+                volume >= min_volume and 
+                mcap >= min_mcap):
                 print(f"Found spike: {token['symbol']} - V/MC: {volume_mcap_ratio:.1f}%, Price Change: {price_change:.1f}%")
                 spikes.append((volume_mcap_ratio, token))
                 seen_symbols.add(token['symbol'])
@@ -509,7 +517,7 @@ class VolumeStrategy:
             for token in tokens:
                 try:
                     symbol = token[0]
-                    volume = float(token[1]['volume'])
+                    volume = float(token[1]['volume24h'])
                     change = float(token[1]['price_change'])
                     mcap = float(token[1].get('mcap', 0))
                     
@@ -599,7 +607,7 @@ def get_elai_insight(tokens) -> str:
     
     for token in tokens:
         try:
-            volume = float(token[1]['volume'])
+            volume = float(token[1]['volume24h'])
             change = float(token[1]['price_change'])
             total_volume += volume
             avg_change += change
