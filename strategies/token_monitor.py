@@ -22,29 +22,11 @@ class TokenMonitor:
         volume_data = self.volume_strategy.analyze()
         trend_data = self.trend_strategy.analyze()
         
-        # Track tokens from volume strategy
-        if volume_data and 'spikes' in volume_data:
-            for score, token in volume_data['spikes']:
-                formatted_token = {
-                    'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume24h': token['volume'],  # Volume strategy uses 'volume'
-                    'marketCap': token['mcap'],    # Volume strategy uses 'mcap'
-                    'priceChange24h': token.get('price_change', 0)
-                }
-                self.history_tracker.update_token(formatted_token)
+        # Track all tokens from volume strategy
+        if volume_data and 'all_tokens' in volume_data:
+            for token in volume_data['all_tokens']:
+                self.history_tracker.update_token(token)  # Token is already formatted correctly
                 
-        if volume_data and 'anomalies' in volume_data:
-            for score, token in volume_data['anomalies']:
-                formatted_token = {
-                    'symbol': token['symbol'],
-                    'price': token['price'],
-                    'volume24h': token['volume'],  # Volume strategy uses 'volume'
-                    'marketCap': token['mcap'],    # Volume strategy uses 'mcap'
-                    'priceChange24h': token.get('price_change', 0)
-                }
-                self.history_tracker.update_token(formatted_token)
-        
         # Track tokens from trend strategy
         if trend_data and 'trend_tokens' in trend_data:
             for token in trend_data['trend_tokens']:
