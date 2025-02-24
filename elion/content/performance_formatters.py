@@ -84,13 +84,14 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
     def _save_recent_token(self, symbol: str):
         """Save token as recently tweeted"""
         recent = self._get_recent_tokens()
-        recent[symbol] = datetime.now().isoformat()
+        # Use UTC timezone for consistency
+        recent[symbol] = datetime.now().astimezone().isoformat()
         
         # Clean up old entries
-        cutoff = datetime.now() - timedelta(hours=self.rotation_hours)
+        cutoff = datetime.now().astimezone() - timedelta(hours=self.rotation_hours)
         recent = {
             sym: ts for sym, ts in recent.items() 
-            if datetime.fromisoformat(ts) > cutoff
+            if datetime.fromisoformat(ts).astimezone() > cutoff
         }
         
         os.makedirs(os.path.dirname(self.recent_tokens_file), exist_ok=True)
@@ -106,8 +107,8 @@ class PerformanceCompareFormatter(BasePerformanceFormatter):
         if symbol not in recent:
             return False
             
-        tweet_time = datetime.fromisoformat(recent[symbol])
-        hours_ago = (datetime.now() - tweet_time).total_seconds() / 3600
+        tweet_time = datetime.fromisoformat(recent[symbol]).astimezone()
+        hours_ago = (datetime.now().astimezone() - tweet_time).total_seconds() / 3600
         return hours_ago < self.rotation_hours
 
     def _format_price(self, price: float) -> str:
@@ -257,26 +258,24 @@ class SuccessRateFormatter(BasePerformanceFormatter):
                 if hours_ago > 48:
                     continue
                     
-                # For tokens <24h old:
+                # For tokens under 24h:
                 if hours_ago < 24:
                     # Count as success only if current gain > threshold
                     if gain_percentage >= success_threshold:
                         t['is_success'] = True
+                        filtered_tokens.append(t)
+                    # Keep tracking but not success yet
                     else:
                         t['is_success'] = False
-                    filtered_tokens.append(t)
+                        filtered_tokens.append(t)
                 # For tokens 24-48h old:
                 else:
-                    # Use price_24h_after if available, otherwise use current price
+                    # Count as success if it hit threshold within first 24h
                     price_24h = float(t.get('price_24h_after', 0))
                     if price_24h > 0:
-                        # Use historical 24h price to determine success
                         gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
                         t['is_success'] = gain_24h >= success_threshold
-                    else:
-                        # No 24h price available, use current price
-                        t['is_success'] = gain_percentage >= success_threshold
-                    filtered_tokens.append(t)
+                        filtered_tokens.append(t)
             
             tokens = filtered_tokens
             tokens = sorted(
@@ -385,16 +384,19 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
                     # Count as success only if current gain > threshold
                     if gain_percentage >= success_threshold:
                         t['is_success'] = True
+                        filtered_tokens.append(t)
                     # Keep tracking but not success yet
                     else:
                         t['is_success'] = False
-                    filtered_tokens.append(t)
+                        filtered_tokens.append(t)
                 # For tokens 24-48h old:
                 else:
-                    # For older tokens, we'll count them as successful if they're currently above threshold
-                    # This ensures we show sustained gains rather than just quick pumps
-                    t['is_success'] = gain_percentage >= success_threshold
-                    filtered_tokens.append(t)
+                    # Count as success if it hit threshold within first 24h
+                    price_24h = float(t.get('price_24h_after', 0))
+                    if price_24h > 0:
+                        gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
+                        t['is_success'] = gain_24h >= success_threshold
+                        filtered_tokens.append(t)
             
             tokens = filtered_tokens
             

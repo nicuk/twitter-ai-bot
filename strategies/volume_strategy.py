@@ -32,15 +32,14 @@ class CryptoRankAPI:
     
     def __init__(self, api_key: Optional[str] = None):
         """Initialize API client"""
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv('CRYPTORANK_API_KEY')
+        logger.debug(f"API Key being used: {self.api_key}")  # Debug log
+        if not self.api_key:
+            raise ValueError("API key not provided and CRYPTORANK_API_KEY not found in environment")
+            
         self.base_url = 'https://api.cryptorank.io/v2'  # Using v2 API
         self.session = requests.Session()
-        
-        if not self.api_key:
-            print("\nCryptoRank API Status: Limited Mode")
-            print("- Market data features will be disabled")
-        else:
-            self.test_connection()
+        self.test_connection()
             
     def test_connection(self):
         """Test API connection"""
@@ -126,29 +125,23 @@ class CryptoRankAPI:
         data = response.json()
         return data.get('data', [])
 
-def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_first=0):
+def fetch_tokens(api_key: str = None, sort_by='volume24h', direction='DESC', print_first=0):
     """Fetch tokens from CryptoRank API with specified sorting"""
-    api = CryptoRankAPI(api_key)
-    
-    params = {
-        'limit': 1000,
-        'convert': 'USD',
-        'status': 'active',
-        'orderBy': sort_by,
-        'orderDirection': direction
-    }
-    
-    tokens = api.get_tokens()
-    if not tokens:
-        print("Failed to fetch tokens")
-        return []
+    api_key = api_key or os.getenv('CRYPTORANK_API_KEY')
+    if not api_key:
+        raise ValueError("API key not provided and CRYPTORANK_API_KEY not found in environment")
         
-    if print_first > 0:
-        print(f"\nFirst {print_first} tokens by {sort_by}:")
-        for token in tokens[:print_first]:
-            print(f"{token['symbol']}: {token.get('volume24h', 0)}")
+    try:
+        api = CryptoRankAPI(api_key)
+        tokens = api.get_tokens()
+        if not tokens:
+            print("Failed to fetch tokens")
+            return None
             
-    return tokens
+        return tokens
+    except Exception as e:
+        print(f"Error fetching tokens: {e}")
+        return None
 
 def get_price_change(token: Dict) -> tuple:
     """Get price change and amount from token data"""
@@ -165,20 +158,29 @@ def get_price_change(token: Dict) -> tuple:
 def format_token_info(token: Dict) -> Dict:
     """Format token information for consistent display"""
     try:
-        # Extract and format data for v2 API response
-        formatted = {
-            'symbol': token['symbol'],
-            'name': token['name'],
-            'price': float(token.get('price', 0)),
-            'volume24h': float(token.get('volume24h', 0)),
-            'marketCap': float(token.get('marketCap', 0)),
-            'priceChange24h': float(token.get('percentChange24h', 0))
+        # Extract basic info
+        symbol = token.get('symbol', '')
+        price = float(token.get('price', 0))
+        volume = float(token.get('volume24h', 0))
+        mcap = float(token.get('marketCap', 0))
+        price_change = float(token.get('priceChange24h', 0))
+        
+        # Skip invalid tokens
+        if not all([symbol, price, volume, mcap]):
+            return None
+            
+        # Format data
+        return {
+            'symbol': symbol,
+            'price': price,
+            'volume': volume,
+            'mcap': mcap,
+            'price_change': price_change,
+            'volume_mcap_ratio': (volume / mcap * 100) if mcap > 0 else 0
         }
         
-        return formatted
-        
-    except Exception as e:
-        print(f"Error formatting token {token.get('symbol', 'UNKNOWN')}: {e}")
+    except (ValueError, TypeError, KeyError) as e:
+        print(f"Error formatting token {token.get('symbol')}: {e}")
         return None
 
 def calculate_activity_score(volume: float, mcap: float, price_change: float) -> int:
@@ -195,12 +197,12 @@ def calculate_activity_score(volume: float, mcap: float, price_change: float) ->
 
 def print_token_details(token_info: Dict) -> None:
     """Print formatted token details"""
-    direction = "🟢" if token_info['priceChange24h'] > 0 else "🔴"
+    direction = "🟢" if token_info['price_change'] > 0 else "🔴"
     print(f"\n{direction} ${token_info['symbol']}")
-    print(f"Price: ${token_info['price']:.6f} ({token_info['priceChange24h']:+.1f}%)")
-    print(f"Volume: ${token_info['volume24h']/1e6:.1f}M")
-    print(f"MCap: ${token_info['marketCap']/1e6:.1f}M")
-    print(f"Activity Score: {calculate_activity_score(token_info['volume24h'], token_info['marketCap'], token_info['priceChange24h'])}/100")
+    print(f"Price: ${token_info['price']:.6f} ({token_info['price_change']:+.1f}%)")
+    print(f"Volume: ${token_info['volume']/1e6:.1f}M")
+    print(f"MCap: ${token_info['mcap']/1e6:.1f}M")
+    print(f"Activity Score: {calculate_activity_score(token_info['volume'], token_info['mcap'], token_info['price_change'])}/100")
 
 def is_valid_price_change(price_change: float) -> bool:
     """Check if price change is within reasonable bounds"""
@@ -268,8 +270,8 @@ def filter_tokens_by_volume(tokens, min_volume_mcap_ratio=0.1):
                 continue
                 
             # Calculate volume/mcap ratio
-            mcap = float(token_info['marketCap'])
-            volume = float(token_info['volume24h'])
+            mcap = float(token_info['mcap'])
+            volume = float(token_info['volume'])
             
             if mcap > 0:
                 ratio = (volume / mcap) * 100  # Convert to percentage
@@ -303,7 +305,7 @@ def find_volume_spikes(tokens, limit=20):
         # Filter out stablecoins and tokens with invalid price changes
         filtered_tokens = [
             token for token in formatted_tokens
-            if not is_likely_stablecoin(token) and is_valid_price_change(token['priceChange24h'])
+            if not is_likely_stablecoin(token) and is_valid_price_change(token['price_change'])
         ]
         
         # Calculate scores
@@ -311,8 +313,8 @@ def find_volume_spikes(tokens, limit=20):
         for token in filtered_tokens:
             try:
                 # Calculate volume/mcap ratio score (0-50 points)
-                volume = float(token['volume24h'])
-                mcap = float(token['marketCap'])
+                volume = float(token['volume'])
+                mcap = float(token['mcap'])
                 if mcap == 0:  # Skip if market cap is 0
                     continue
                     
@@ -320,7 +322,7 @@ def find_volume_spikes(tokens, limit=20):
                 ratio_score = min(50, ratio * 100)  # Cap at 50 points
                 
                 # Calculate price change score (0-50 points)
-                price_change = abs(float(token['priceChange24h']))
+                price_change = abs(float(token['price_change']))
                 price_score = min(50, price_change)  # Cap at 50 points
                 
                 # Calculate total score
@@ -420,17 +422,10 @@ class VolumeStrategy:
                 print("No tokens found or error fetching tokens")
                 return None
 
-            # Format all tokens
-            all_tokens = []
-            for token in tokens:
-                formatted = format_token_info(token)
-                if formatted:
-                    all_tokens.append(formatted)
-
             # Find volume spikes and anomalies
             spikes = find_volume_spikes(tokens)
             anomalies = find_volume_anomalies(tokens)
-    
+            
             # Filter out recently posted tokens
             filtered_spikes = []
             for spike in spikes:
@@ -440,7 +435,7 @@ class VolumeStrategy:
                     self.recent_tokens.add(symbol)
                     if len(filtered_spikes) >= 4:  # Show up to 4 spikes
                         break
-
+        
             filtered_anomalies = []
             for anomaly in anomalies:
                 symbol = anomaly[1]['symbol']
@@ -449,22 +444,18 @@ class VolumeStrategy:
                     self.recent_tokens.add(symbol)
                     if len(filtered_anomalies) >= 1:  # Keep 1 anomaly to make total of 4
                         break
-    
-            # Reset token history if we're not finding new tokens
-            if not filtered_spikes and not filtered_anomalies:
-                print("Resetting token history to allow rotation")
-                self.recent_tokens.clear()
-                return self.analyze()
             
-            # Format data for tweet generation and token history tracking
+            # Reset token history if we're not finding new tokens
+            if len(self.recent_tokens) > 100:
+                self.recent_tokens.clear()
+                
             return {
                 'spikes': filtered_spikes,
-                'anomalies': filtered_anomalies,
-                'all_tokens': all_tokens  # Add all formatted tokens
+                'anomalies': filtered_anomalies
             }
-        
+            
         except Exception as e:
-            print(f"Error analyzing volume: {str(e)}")
+            print(f"Error in volume analysis: {e}")
             return None
 
     def format_twitter_output(self, spikes: list, anomalies: list, history: Dict = None) -> str:
@@ -491,7 +482,7 @@ class VolumeStrategy:
                 price_change = 0
                 
             direction = "🟢" if price_change > 0 else "🔴"
-            volume = float(token.get('volume24h', token.get('volume', 0)))/1e6  # Convert to millions
+            volume = float(token.get('volume', token.get('volume24h', 0)))/1e6  # Convert to millions
             movement = get_movement_description(price_change)
             vol_mcap = ratio  # ratio is already a percentage
             
@@ -533,9 +524,9 @@ class VolumeStrategy:
             for token in tokens:
                 try:
                     symbol = token[0]
-                    volume = float(token[1]['volume24h'])
-                    change = float(token[1]['priceChange24h'])
-                    mcap = float(token[1].get('marketCap', 0))
+                    volume = float(token[1]['volume'])
+                    change = float(token[1]['price_change'])
+                    mcap = float(token[1].get('mcap', 0))
                     
                     total_volume += volume
                     avg_change += change
@@ -623,8 +614,8 @@ def get_elai_insight(tokens) -> str:
     
     for token in tokens:
         try:
-            volume = float(token[1]['volume24h'])
-            change = float(token[1]['priceChange24h'])
+            volume = float(token[1]['volume'])
+            change = float(token[1]['price_change'])
             total_volume += volume
             avg_change += change
             count += 1
