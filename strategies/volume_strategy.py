@@ -3,14 +3,14 @@
 import os
 import sys
 import codecs
-from pathlib import Path
-import requests
-import json
-from typing import Dict, Any, Optional
-from dotenv import load_dotenv
-import datetime
 import time
+import requests
 import logging
+from typing import Dict, List, Any, Optional
+from datetime import datetime, timedelta
+from pathlib import Path
+import json
+from dotenv import load_dotenv
 
 # Set console encoding to UTF-8
 if sys.platform == 'win32':
@@ -44,61 +44,109 @@ class CryptoRankAPI:
             
     def test_connection(self):
         """Test API connection"""
-        try:
-            response = self._make_request('currencies', {'limit': 1})
-            if response and 'data' in response:
-                print("✓ CryptoRank API connection successful")
-            else:
-                print("✗ CryptoRank API connection failed")
-        except Exception as e:
-            print(f"✗ CryptoRank API error: {e}")
-            
-    def _make_request(self, endpoint: str, params: Dict[str, Any] = None):
-        """Make HTTP request to API endpoint"""
-        if not params:
-            params = {}
-        params['api_key'] = self.api_key
+        params = {
+            'limit': 1000,
+            'convert': 'USD',
+            'status': 'active'
+        }
         
-        try:
-            url = f"{self.base_url}/{endpoint}"
-            response = self.session.get(url, params=params)
-            return response.json()
-        except Exception as e:
-            print(f"API request failed: {e}")
-            return {'error': str(e)}
+        print("\nTesting CryptoRank V2 API...")
+        response = self._make_request('currencies', params)
+        
+        if not response or response.status_code != 200:
+            print(f"Error testing API connection: {response.text if response else 'No response'}")
+            return
             
+        data = response.json()
+        if 'error' not in data:
+            print("✅ API connection successful")
+            data = data.get('data', [])
+            if data:
+                print(f"Found {len(data)} active currencies")
+                
+    def _make_request(self, endpoint: str, params: Dict[str, Any] = None) -> Optional[requests.Response]:
+        """Make API request with retries and error handling"""
+        if not self.api_key:
+            return None
+            
+        url = f"{self.base_url}/{endpoint}"
+        params = params or {}
+        headers = {'X-Api-Key': self.api_key}  # Use header instead of query param
+        
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, params=params, headers=headers, timeout=10)
+                
+                # Handle rate limits
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', retry_delay))
+                    print(f"Rate limited. Waiting {retry_after} seconds...")
+                    time.sleep(retry_after)
+                    continue
+                    
+                # Handle server errors
+                if response.status_code >= 500:
+                    if attempt < max_retries - 1:
+                        print(f"Server error {response.status_code}. Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        print(f"Failed after {max_retries} attempts. Server error: {response.status_code}")
+                        return None
+                        
+                return response
+                
+            except (requests.RequestException, ValueError) as e:
+                if attempt < max_retries - 1:
+                    print(f"Request failed: {str(e)}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                continue
+                
+        return None
+
     def get_tokens(self):
         """Get tokens from CryptoRank API"""
-        return self._make_request('currencies', {
+        params = {
             'limit': 1000,
-            'sort': 'volume24h',
-            'order': 'DESC'
-        })
+            'convert': 'USD',
+            'status': 'active',
+            'orderBy': 'volume24h',
+            'orderDirection': 'DESC'
+        }
+        
+        response = self._make_request('currencies', params)
+        
+        if not response or response.status_code != 200:
+            print(f"Error fetching tokens: {response.text if response else 'No response'}")
+            return None
+        
+        data = response.json()
+        return data.get('data', [])
 
 def fetch_tokens(api_key: str, sort_by='volume24h', direction='DESC', print_first=0):
     """Fetch tokens from CryptoRank API with specified sorting"""
     api = CryptoRankAPI(api_key)
     
     params = {
-        'limit': 1000,  # Increased from 500 to 1000 to analyze more tokens
-        'sort': sort_by,
-        'order': direction
+        'limit': 1000,
+        'convert': 'USD',
+        'status': 'active',
+        'orderBy': sort_by,
+        'orderDirection': direction
     }
     
-    response = api.get_tokens()
-    
-    if 'error' in response:
-        print(f"Error fetching tokens: {response['error']}")
-        return None
+    tokens = api.get_tokens()
+    if not tokens:
+        print("Failed to fetch tokens")
+        return []
         
-    tokens = response.get('data', [])
-    
     if print_first > 0:
-        print(f"\nFirst {print_first} tokens sorted by {sort_by}:")
+        print(f"\nFirst {print_first} tokens by {sort_by}:")
         for token in tokens[:print_first]:
-            token_info = format_token_info(token)
-            if token_info:  # Only print if formatting succeeded
-                print_token_details(token_info)
+            print(f"{token['symbol']}: {token.get('volume24h', 0)}")
             
     return tokens
 
