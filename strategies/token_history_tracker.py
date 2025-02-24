@@ -8,6 +8,7 @@ import os
 import logging
 import redis
 import threading
+from datetime import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +122,8 @@ class TokenHistoryTracker:
             cls._instance = super(TokenHistoryTracker, cls).__new__(cls)
         return cls._instance
         
-    def __init__(self):
-        """Initialize tracker with Redis storage if available, fallback to file"""
+    def __init__(self, redis_url: Optional[str] = None):
+        """Initialize token history tracker"""
         if TokenHistoryTracker._initialized:
             return
             
@@ -130,11 +131,10 @@ class TokenHistoryTracker:
         
         # Initialize storage
         self.token_history: Dict[str, TokenHistoricalData] = {}
+        self.stale_data_count = 0  # Track stale data occurrences
         self.using_redis = False
         
         # Try Redis first - use Railway's variable reference
-        redis_url = os.getenv('REDIS_URL')  # Railway format
-        logger.info(f"Redis URL found: {redis_url is not None}")
         if redis_url:
             try:
                 logger.info("Attempting to connect to Redis...")
@@ -288,6 +288,14 @@ class TokenHistoryTracker:
                         return
                     
                     # Update current values
+                    # Skip update if price hasn't changed - likely stale data
+                    if price == token_data.current_price:
+                        self.stale_data_count += 1
+                        if self.stale_data_count % 10 == 0:  # Log every 10th occurrence
+                            logger.warning(f"[{symbol}] High stale data count: {self.stale_data_count} occurrences")
+                        logger.warning(f"[{symbol}] Skipping update - price hasn't changed ({price})")
+                        return
+                        
                     token_data.current_price = price
                     token_data.current_volume = volume
                     token_data.current_mcap = mcap
@@ -378,7 +386,8 @@ class TokenHistoryTracker:
                 'volume_24h': token.current_volume,
                 'first_mention_mcap': token.first_mention_mcap,
                 'current_mcap': token.current_mcap,
-                'volume_change_24h': ((token.current_volume - token.first_mention_volume_24h) / token.first_mention_volume_24h * 100) if token.first_mention_volume_24h > 0 else 0
+                'volume_change_24h': ((token.current_volume - token.first_mention_volume_24h) / token.first_mention_volume_24h * 100) if token.first_mention_volume_24h > 0 else 0,
+                'price_24h_after': token.price_24h_after
             }
             tokens_list.append(token_dict)
             
@@ -507,32 +516,31 @@ class TokenHistoryTracker:
             
         return patterns
 
-    def get_recent_performance(self) -> Dict:
-        """Get recent token performance data for tweet formatting"""
+    def get_recent_performance(self, min_age_hours=0):
+        """Get performance data for tokens that were first mentioned more than min_age_hours ago."""
         tokens = []
-        current_time = datetime.now()
-        cutoff_time = current_time - timedelta(hours=48)  # Only show last 48 hours
+        current_time = datetime.now(timezone.utc)
         
         for symbol, token in self.token_history.items():
-            # Skip excluded tokens
-            if symbol in self.EXCLUDED_TOKENS:
-                continue
-                
-            # Skip tokens older than 48 hours
-            if token.first_mention_date < cutoff_time:
+            # Skip if token is too new
+            token_age = (current_time - token.first_mention_date).total_seconds() / 3600
+            if token_age < min_age_hours:
                 continue
                 
             # Calculate gain percentage
             if token.first_mention_price > 0:
                 gain_percentage = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
-                
-                # Skip tokens with unrealistic gains (>1000%)
-                if gain_percentage > 1000:
-                    logger.warning(f"Skipping {symbol} due to unrealistic gain: {gain_percentage:.1f}%")
-                    continue
             else:
                 gain_percentage = 0
-            
+                
+            # Skip tokens with negative gains - no point showing these
+            if gain_percentage < 0:
+                continue
+                
+            # Pass along price_24h_after - the formatter will use it for tokens >24h old
+            # and fall back to current_price for tokens <24h old
+            price_24h_after = token.price_24h_after
+                
             # Add token data in the format expected by formatters
             token_data = {
                 'symbol': symbol,
@@ -543,7 +551,8 @@ class TokenHistoryTracker:
                 'first_mention_date': token.first_mention_date.isoformat(),
                 'max_gain_7d': token.max_gain_percentage_7d,  
                 'first_mention_mcap': token.first_mention_mcap,
-                'current_mcap': token.current_mcap
+                'current_mcap': token.current_mcap,
+                'price_24h_after': price_24h_after
             }
             tokens.append(token_data)
         

@@ -257,24 +257,26 @@ class SuccessRateFormatter(BasePerformanceFormatter):
                 if hours_ago > 48:
                     continue
                     
-                # For tokens under 24h:
+                # For tokens <24h old:
                 if hours_ago < 24:
                     # Count as success only if current gain > threshold
                     if gain_percentage >= success_threshold:
                         t['is_success'] = True
-                        filtered_tokens.append(t)
-                    # Keep tracking but not success yet
                     else:
                         t['is_success'] = False
-                        filtered_tokens.append(t)
+                    filtered_tokens.append(t)
                 # For tokens 24-48h old:
                 else:
-                    # Count as success if it hit threshold within first 24h
+                    # Use price_24h_after if available, otherwise use current price
                     price_24h = float(t.get('price_24h_after', 0))
                     if price_24h > 0:
+                        # Use historical 24h price to determine success
                         gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
                         t['is_success'] = gain_24h >= success_threshold
-                        filtered_tokens.append(t)
+                    else:
+                        # No 24h price available, use current price
+                        t['is_success'] = gain_percentage >= success_threshold
+                    filtered_tokens.append(t)
             
             tokens = filtered_tokens
             tokens = sorted(
@@ -383,19 +385,16 @@ class PredictionAccuracyFormatter(BasePerformanceFormatter):
                     # Count as success only if current gain > threshold
                     if gain_percentage >= success_threshold:
                         t['is_success'] = True
-                        filtered_tokens.append(t)
                     # Keep tracking but not success yet
                     else:
                         t['is_success'] = False
-                        filtered_tokens.append(t)
+                    filtered_tokens.append(t)
                 # For tokens 24-48h old:
                 else:
-                    # Count as success if it hit threshold within first 24h
-                    price_24h = float(t.get('price_24h_after', 0))
-                    if price_24h > 0:
-                        gain_24h = ((price_24h - float(t.get('first_mention_price', 0))) / float(t.get('first_mention_price', 1)) * 100)
-                        t['is_success'] = gain_24h >= success_threshold
-                        filtered_tokens.append(t)
+                    # For older tokens, we'll count them as successful if they're currently above threshold
+                    # This ensures we show sustained gains rather than just quick pumps
+                    t['is_success'] = gain_percentage >= success_threshold
+                    filtered_tokens.append(t)
             
             tokens = filtered_tokens
             
