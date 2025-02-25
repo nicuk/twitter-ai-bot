@@ -312,29 +312,28 @@ def find_volume_spikes(tokens, limit=20):
         scored_tokens = []
         for token in filtered_tokens:
             try:
-                # Calculate volume/mcap ratio score (0-50 points)
+                # Calculate volume/mcap ratio
                 volume = float(token['volume'])
                 mcap = float(token['mcap'])
                 if mcap == 0:  # Skip if market cap is 0
                     continue
                     
-                ratio = volume / mcap
-                ratio_score = min(50, ratio * 100)  # Cap at 50 points
+                ratio = (volume / mcap) * 100  # Convert to percentage
                 
                 # Calculate price change score (0-50 points)
                 price_change = abs(float(token['price_change']))
                 price_score = min(50, price_change)  # Cap at 50 points
                 
                 # Calculate total score
-                total_score = ratio_score + price_score
+                total_score = ratio + price_score
                 
                 # Apply penalties
                 if price_change > 40:  # Extreme volatility penalty
                     total_score *= 0.7
-                if ratio < 0.1:  # Low volume penalty
+                if ratio < 10:  # Low volume penalty
                     total_score *= 0.8
                     
-                scored_tokens.append((total_score, token))
+                scored_tokens.append((ratio, token))  # Keep actual ratio for display
                 
             except Exception as e:
                 print(f"Error scoring token {token['symbol']}: {e}")
@@ -470,10 +469,10 @@ class VolumeStrategy:
             if symbol in shown_symbols:
                 return ""
                 
-            # Get price change
+            # Get price change using high/low data
+            price = float(token['price'])
             high = float(token.get('high24h', 0))
             low = float(token.get('low24h', 0))
-            price = float(token['price'])
             
             if high > 0 and low > 0:
                 avg = (high + low) / 2
@@ -658,14 +657,18 @@ def get_movement_description(change: float) -> str:
     """Get a descriptive term for the price movement"""
     if change > 30:
         return "🌙 Mooning"
-    elif change > 3:
+    elif change > 5:
         return "🚀 Surging"
+    elif change > 2:
+        return "📈 Rising"
     elif change < -30:
         return "🩸 Bleeding"
-    elif change < -3:
+    elif change < -5:
         return "📉 Dipping"
+    elif change < -2:
+        return "⚠️ Falling"
     else:
-        return "➡️ Stable"
+        return "↔️ Ranging"  # Changed from "Stable" to "Ranging" for more accuracy
 
 def test_volume_strategy():
     """Test the volume-based sorting strategy"""
