@@ -257,8 +257,9 @@ class TokenHistoryTracker:
                 # Extract values with detailed logging
                 try:
                     price = float(token.get('price', 0))
-                    volume = float(token.get('volume24h', 0))
-                    mcap = float(token.get('marketCap', 0))
+                    # Try API format first, fallback to strategy format
+                    volume = float(token.get('volume24h', token.get('volume', 0)))
+                    mcap = float(token.get('marketCap', token.get('mcap', 0)))
                     
                     # Log extracted values
                     logger.info(f"[{symbol}] Extracted values - price: {price}, volume: {volume}, mcap: {mcap}")
@@ -532,30 +533,63 @@ class TokenHistoryTracker:
         return patterns
 
     def get_recent_performance(self) -> Dict:
-        """Get recent token performance data for tweet formatting"""
+        """Get recent token performance data for tweet formatting using a smart selection system"""
         tokens = []
         current_time = datetime.now()
-        cutoff_time = current_time - timedelta(hours=48)  # Only show last 48 hours
+        
+        # Different time windows for different performance levels
+        very_recent = current_time - timedelta(hours=48)  # Last 48 hours
+        recent = current_time - timedelta(days=7)         # Last 7 days
         
         for symbol, token in self.token_history.items():
             # Skip excluded tokens
             if symbol in self.EXCLUDED_TOKENS:
                 continue
                 
-            # Skip tokens older than 48 hours
-            if token.first_mention_date < cutoff_time:
+            # Calculate gains from different reference points
+            if token.first_mention_price <= 0:
                 continue
                 
-            # Calculate gain percentage
-            if token.first_mention_price > 0:
-                gain_percentage = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
-                
-                # Skip tokens with unrealistic gains (>1000%)
-                if gain_percentage > 1000:
-                    logger.warning(f"Skipping {symbol} due to unrealistic gain: {gain_percentage:.1f}%")
-                    continue
-            else:
-                gain_percentage = 0
+            # Calculate gains from different timeframes
+            current_gain = ((token.current_price - token.first_mention_price) / token.first_mention_price) * 100
+            
+            # Calculate gains from local minimums if price dropped after mention
+            gains_to_consider = [current_gain]
+            
+            # If we have 24h data and price dropped, calculate gain from there
+            if token.price_24h_after > 0 and token.price_24h_after < token.first_mention_price:
+                gain_from_24h = ((token.current_price - token.price_24h_after) / token.price_24h_after) * 100
+                gains_to_consider.append(gain_from_24h)
+            
+            # If we have 48h data and price dropped, calculate gain from there
+            if token.price_48h_after > 0 and token.price_48h_after < token.first_mention_price:
+                gain_from_48h = ((token.current_price - token.price_48h_after) / token.price_48h_after) * 100
+                gains_to_consider.append(gain_from_48h)
+            
+            # Also consider the max gain achieved
+            if token.max_gain_percentage_7d > 0:
+                gains_to_consider.append(token.max_gain_percentage_7d)
+            
+            # Use the best gain achieved from any starting point
+            best_gain = max(gains_to_consider)
+            
+            # Skip tokens with unrealistic gains
+            if best_gain > 1000:
+                logger.warning(f"Skipping {symbol} due to unrealistic gain: {best_gain:.1f}%")
+                continue
+            
+            # Smart filtering based on time and performance:
+            # 1. Always include very recent tokens (< 48h) with any positive gain
+            # 2. Include recent tokens (< 7d) with good performance (> 10% gain)
+            # 3. Include exceptional performers (> 20% gain) from any time if they're still positive
+            should_include = (
+                (token.first_mention_date >= very_recent and best_gain > 0) or
+                (token.first_mention_date >= recent and best_gain > 10) or
+                (best_gain > 20 and current_gain > 0)  # Must still be up if older
+            )
+            
+            if not should_include:
+                continue
             
             # Add token data in the format expected by formatters
             token_data = {
@@ -563,16 +597,28 @@ class TokenHistoryTracker:
                 'first_mention_price': token.first_mention_price,
                 'current_price': token.current_price,
                 'volume_24h': token.current_volume,
-                'gain_percentage': gain_percentage,
+                'gain_percentage': current_gain,
                 'first_mention_date': token.first_mention_date.isoformat(),
-                'max_gain_7d': token.max_gain_percentage_7d,  
+                'max_gain_7d': best_gain,  # Use best gain instead of just 7d max
                 'first_mention_mcap': token.first_mention_mcap,
-                'current_mcap': token.current_mcap
+                'current_mcap': token.current_mcap,
+                # Add score for better sorting
+                '_score': (
+                    # Prioritize recent tokens
+                    (2.0 if token.first_mention_date >= very_recent else
+                     1.5 if token.first_mention_date >= recent else 1.0) *
+                    # Multiply by performance factor
+                    (best_gain / 10)  # Use best gain for scoring
+                )
             }
             tokens.append(token_data)
         
-        # Sort by gain percentage
-        tokens.sort(key=lambda x: x['gain_percentage'], reverse=True)
+        # Sort by our custom score instead of just gain percentage
+        tokens.sort(key=lambda x: x['_score'], reverse=True)
+        
+        # Remove the score before returning as it's not needed by formatters
+        for token in tokens:
+            del token['_score']
         
         return {
             'tokens': tokens
