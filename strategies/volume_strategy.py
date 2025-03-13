@@ -158,16 +158,35 @@ def get_price_change(token: Dict) -> tuple:
 def format_token_info(token: Dict) -> Dict:
     """Format token information for consistent display"""
     try:
-        # Extract basic info
+        # Extract basic info with fallbacks for both API and Strategy formats
         symbol = token.get('symbol', '')
         price = float(token.get('price', 0))
-        volume = float(token.get('volume24h', 0))
-        mcap = float(token.get('marketCap', 0))
-        price_change = float(token.get('priceChange24h', 0))
         
-        # Skip invalid tokens
-        if not all([symbol, price, volume, mcap]):
+        # Handle both API format and Strategy format
+        volume = float(token.get('volume24h', token.get('volume', 0)))
+        mcap = float(token.get('marketCap', token.get('mcap', 0)))
+        price_change = float(token.get('priceChange24h', token.get('price_change', 0)))
+        
+        # Skip invalid tokens - only require symbol and either volume or mcap
+        if not symbol or (volume <= 0 and mcap <= 0):
             return None
+            
+        # Ensure price is positive and properly formatted
+        if price <= 0 or price < 0.000001:  # Very small prices need special handling
+            # Try to get a more accurate price from the token data
+            if 'price' in token and token['price'] and float(token['price']) > 0:
+                price = float(token['price'])
+            else:
+                # If we still don't have a valid price, estimate it from mcap and supply
+                supply = float(token.get('circulatingSupply', token.get('supply', 0)))
+                if mcap > 0 and supply > 0:
+                    price = mcap / supply
+                else:
+                    price = 0.0001  # Set a small positive value as fallback
+            
+        # Ensure mcap is positive to avoid division by zero
+        if mcap <= 0:
+            mcap = volume * 10 if volume > 0 else 1000000  # Estimate mcap if missing
             
         # Format data
         return {
@@ -206,7 +225,7 @@ def print_token_details(token_info: Dict) -> None:
 
 def is_valid_price_change(price_change: float) -> bool:
     """Check if price change is within reasonable bounds"""
-    return -30 <= price_change <= 30  # Filter out extreme price movements
+    return -50 <= price_change <= 50  # More lenient filter (was -30 to 30)
 
 def is_likely_stablecoin(token_info):
     """Check if token is likely a stablecoin based on price and name"""
@@ -330,7 +349,7 @@ def find_volume_spikes(tokens, limit=20):
                 # Apply penalties
                 if price_change > 40:  # Extreme volatility penalty
                     total_score *= 0.7
-                if ratio < 10:  # Low volume penalty
+                if ratio < 5:  # Low volume penalty (was 10)
                     total_score *= 0.8
                     
                 scored_tokens.append((ratio, token))  # Keep actual ratio for display
@@ -445,7 +464,7 @@ class VolumeStrategy:
                         break
             
             # Reset token history if we're not finding new tokens
-            if len(self.recent_tokens) > 100:
+            if len(self.recent_tokens) > 50:  # Changed from 100 to 50
                 self.recent_tokens.clear()
                 
             return {
@@ -486,7 +505,17 @@ class VolumeStrategy:
             vol_mcap = ratio  # ratio is already a percentage
             
             section = f"{direction} ${symbol} DETECTED!\n"
-            section += f"💰 ${price:.4f} {movement}\n"
+            
+            # Format price with appropriate precision based on its value
+            if price < 0.0001:
+                section += f"💰 ${price:.8f} {movement}\n"  # Show more decimals for very small prices
+            elif price < 0.01:
+                section += f"💰 ${price:.6f} {movement}\n"  # Show 6 decimals for small prices
+            elif price < 1:
+                section += f"💰 ${price:.4f} {movement}\n"  # Show 4 decimals for medium prices
+            else:
+                section += f"💰 ${price:.2f} {movement}\n"  # Show 2 decimals for larger prices
+            
             section += f"📊 Vol: ${volume:.1f}M\n"
             section += f"🎯 V/MC: {vol_mcap:.1f}%\n"
             
